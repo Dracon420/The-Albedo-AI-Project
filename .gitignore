@@ -1,0 +1,46 @@
+# Environment & secrets
+.env
+.env.*
+*.env
+
+# ChromaDB vector database
+chroma/
+chroma_db/
+vectorstore/
+*.chroma
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Ollama model cache (large binaries)
+models/
+*.gguf
+*.bin
+
+# Faster-Whisper / Whisper model weights
+whisper_models/
+*.pt
+
+# Audio scratch files
+*.wav
+*.mp3
+*.ogg
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
