@@ -490,14 +490,17 @@ class InstallPage(Page):
         else:
             self._push("Creating virtual environment...", "info", 0.10)
             r = subprocess.run([py, "-m", "venv", str(VENV)],
-                               capture_output=True, text=True)
+                               capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
             if r.returncode != 0:
                 raise RuntimeError(f"venv creation failed:\n{r.stderr}")
             self._push("  .venv created.", "ok")
 
     def _step_build_tools(self) -> None:
         self._push("Upgrading pip / wheel / setuptools...", "info", 0.15)
-        self._stream_pip([str(VENV_PIP), "install", "--upgrade",
+        # Use 'python -m pip' instead of pip.exe to avoid the
+        # "To modify pip" warning when installed under Program Files.
+        self._stream_pip([str(VENV_PY), "-m", "pip", "install", "--upgrade",
                           "pip", "wheel", "setuptools",
                           "--no-cache-dir", "--quiet"])
         self._push("  Build tools up to date.", "ok")
@@ -506,8 +509,8 @@ class InstallPage(Page):
         self._push("Installing Python dependencies...", "info", 0.20)
         self._push("  (this takes 3-10 minutes on first run)", "info")
         req = ROOT / "requirements.txt"
-        self._stream_pip([str(VENV_PIP), "install", "-r", str(req),
-                          "--prefer-binary", "--no-cache-dir"],
+        self._stream_pip([str(VENV_PY), "-m", "pip", "install",
+                          "-r", str(req), "--prefer-binary", "--no-cache-dir"],
                          end_pct=0.75)
         self._push("  Dependencies installed.", "ok", 0.75)
 
@@ -516,7 +519,8 @@ class InstallPage(Page):
         try:
             r = subprocess.run(
                 [str(VENV_PY), "-m", "playwright", "install", "chromium"],
-                capture_output=True, text=True, timeout=120)
+                capture_output=True, text=True, timeout=120,
+                encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 self._push("  Playwright Chromium ready.", "ok")
             else:
@@ -530,7 +534,8 @@ class InstallPage(Page):
             r = subprocess.run(
                 [str(VENV_PY), "-c",
                  "import openwakeword; openwakeword.utils.download_models()"],
-                capture_output=True, text=True, timeout=120)
+                capture_output=True, text=True, timeout=120,
+                encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 self._push("  Wake word models ready.", "ok")
             else:
@@ -561,7 +566,8 @@ class InstallPage(Page):
         try:
             proc = subprocess.Popen(
                 ["ollama", "pull", "llama3.2:3b"],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace")
             for line in proc.stdout:
                 self._push(f"  {line.rstrip()}", "info")
             proc.wait()
@@ -581,7 +587,7 @@ class InstallPage(Page):
         try:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True)
+                text=True, encoding="utf-8", errors="replace")
             for line in proc.stdout:
                 stripped = line.strip()
                 if stripped:
@@ -625,7 +631,7 @@ class CompletePage(Page):
              "Common fixes: run as Administrator, ensure winget is available.",
              color=C_TEXT, justify="center").pack(pady=8)
         _btn(self._fail_frame, "Back",
-             lambda: self.wizard.go_page(2), width=10).pack(pady=12)
+             lambda: self.wizard.view_log(), width=10).pack(pady=12)
         _btn(self._fail_frame, "Exit",
              self.wizard.destroy, width=10).pack()
 
@@ -742,6 +748,17 @@ class SetupWizard(tk.Tk):
 
     def go_page(self, idx: int) -> None:
         self._show_page(idx)
+
+    def view_log(self) -> None:
+        """Show the install log page without re-triggering the install."""
+        for p in self._pages:
+            p.pack_forget()
+        self._page_idx = 2
+        self.install_page.pack(fill="both", expand=True)
+        self._step_lbl.configure(text="3 / 4")
+        self._back_btn.configure(state="disabled")
+        self._next_btn.configure(text="Installing...", state="disabled")
+        self._cancel_btn.configure(state="normal")
 
     def go_to_complete(self, success: bool) -> None:
         self._show_page(3)
