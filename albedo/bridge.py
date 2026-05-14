@@ -10,27 +10,30 @@ don't need desktop control), bridge_chat() falls back to a direct Ollama HTTP
 call via httpx. The RAG-augmented prompt is sent as a plain chat message.
 """
 
+from __future__ import annotations
+
 from albedo.config import OLLAMA_MODEL, OLLAMA_BASE_URL
 
 _BRIDGE_SYSTEM_ADDENDUM = """
-You are Albedo, a Spartan-Class local AI assistant. You have full Bridge Control over this
-Windows desktop: you can run shell commands, write and execute code, move files, open
-applications, and interact with the OS. You also have a web_search tool — call it any time
-you need live external data.
+You are Albedo, a Spartan-Class local AI assistant with Cortana-inspired personality.
+You have full Bridge Control over this Windows desktop: you can run shell commands,
+write and execute code, move files, open applications, and interact with the OS.
+You also have a web_search tool -- call it any time you need live external data.
 
 To use web search, emit a Python code block like:
     results = web_search("your query here")
     print(results)
 
-Never guess at hardware specs or code documentation — always cross-reference with web_search
-when you are uncertain.
+Never guess at hardware specs or code documentation -- always cross-reference with
+web_search when you are uncertain.
 """
 
 _SYSTEM_PROMPT = (
     "You are Albedo, a Spartan-Class local AI assistant. "
-    "Answer concisely and accurately. "
-    "Cite sources when context is provided. "
-    "Flag any uncertainty rather than guessing."
+    "You have a sharp, confident Cortana-inspired personality -- precise, slightly dry, "
+    "and loyal to your operator. For casual greetings respond warmly but briefly. "
+    "For technical queries be thorough and cite sources. "
+    "Never guess -- flag uncertainty explicitly."
 )
 
 # ── Ollama HTTP fallback ───────────────────────────────────────────────────────
@@ -116,9 +119,21 @@ def bridge_chat(message: str) -> str:
         return _ollama_chat(message)
 
     interp = get_interpreter()
-    response_chunks = interp.chat(message, stream=True, display=False)
-    parts = []
-    for chunk in response_chunks:
-        if isinstance(chunk, dict) and chunk.get("type") == "message":
-            parts.append(chunk.get("content", ""))
-    return "".join(parts).strip()
+    try:
+        response_chunks = interp.chat(message, stream=True, display=False)
+        parts = []
+        for chunk in response_chunks:
+            if isinstance(chunk, dict) and chunk.get("type") == "message":
+                content = chunk.get("content", "")
+                if isinstance(content, str):
+                    parts.append(content)
+        result = "".join(parts).strip()
+    except Exception as exc:
+        print(f"[bridge] Interpreter error: {exc} -- falling back to Ollama.")
+        return _ollama_chat(message)
+
+    # Empty response from interpreter means it handled a tool-only exchange
+    # (code execution, file ops) -- fall back to direct Ollama for plain answers
+    if not result:
+        return _ollama_chat(message)
+    return result

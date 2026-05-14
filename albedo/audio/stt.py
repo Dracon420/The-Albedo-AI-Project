@@ -11,6 +11,7 @@ RTX 2060 VRAM budget:
 The model is loaded once at first call and kept resident to avoid
 the ~2-second reload penalty on every query.
 """
+from __future__ import annotations
 
 import numpy as np
 from faster_whisper import WhisperModel

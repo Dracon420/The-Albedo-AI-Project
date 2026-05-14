@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import chromadb
 from chromadb.utils import embedding_functions
 from albedo.config import (

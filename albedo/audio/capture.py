@@ -5,6 +5,7 @@ Provides two modes:
   - stream_chunks()   : yields numpy int16 chunks for the wake word loop
   - record_utterance(): records until VAD silence gate and returns full array
 """
+from __future__ import annotations
 
 import threading
 import numpy as np

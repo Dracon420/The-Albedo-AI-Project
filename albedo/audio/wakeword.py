@@ -8,8 +8,9 @@ WAKEWORD_MODEL can be:
 To train a custom Cortana model:
   https://github.com/dscripka/openWakeWord#training-new-models
 The trained .onnx goes in a local models/ directory (gitignored), then set
-WAKEWORD_MODEL=C:\path\to\models\cortana.onnx in your .env.
+WAKEWORD_MODEL=C:/path/to/models/cortana.onnx in your .env.
 """
+from __future__ import annotations
 
 import os
 import sounddevice as sd

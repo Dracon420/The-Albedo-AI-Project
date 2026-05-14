@@ -9,8 +9,9 @@ Setup:
      Recommended for low latency: en_US-ryan-high  or  en_US-amy-medium
   3. Set PIPER_BINARY and PIPER_VOICE_MODEL in your .env
 
-Piper runs on CPU so it uses zero VRAM — keeps the RTX 2060 budget clean.
+Piper runs on CPU so it uses zero VRAM -- keeps the RTX 2060 budget clean.
 """
+from __future__ import annotations
 
 import subprocess
 import tempfile
