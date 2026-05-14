@@ -17,6 +17,7 @@ Fixes in this version:
 """
 from __future__ import annotations
 
+import json
 import math
 import queue
 import threading
@@ -39,7 +40,27 @@ except ImportError as _import_err:
     )
     raise SystemExit(1)
 
-ROOT = Path(__file__).parent
+ROOT          = Path(__file__).parent
+SETTINGS_PATH = ROOT / "settings.json"
+
+
+# ── Settings persistence ───────────────────────────────────────────────────
+
+def _load_settings() -> dict:
+    if SETTINGS_PATH.exists():
+        try:
+            return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+def _save_settings(data: dict) -> None:
+    try:
+        SETTINGS_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except Exception as exc:
+        print(f"[gui] Failed to save settings: {exc}")
+
 
 # ── Theme ──────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("Dark")
@@ -166,6 +187,125 @@ class SettingsDialog(ctk.CTkToplevel):
         threading.Thread(target=_run, daemon=True).start()
 
 
+# ── Hardware settings dialog ───────────────────────────────────────────────
+
+class HardwareSettingsDialog(ctk.CTkToplevel):
+    def __init__(self, parent: "AlbedoGUI") -> None:
+        super().__init__(parent)
+        self._parent = parent
+        self.title("ALBEDO  //  HARDWARE SETTINGS")
+        self.geometry("600x380")
+        self.resizable(False, False)
+        self.configure(fg_color=C_PANEL)
+        self.grab_set()
+        self.focus_set()
+        self._in_ids:    list[int] = []
+        self._out_ids:   list[int] = []
+        self._in_labels: list[str] = []
+        self._out_labels: list[str] = []
+        self._build()
+
+    def _build(self) -> None:
+        import sounddevice as sd
+
+        ctk.CTkLabel(self, text="HARDWARE SETTINGS",
+                     font=("Courier New", 15, "bold"),
+                     text_color=C_CYAN).pack(pady=(20, 4))
+        ctk.CTkLabel(self, text="Changes take effect on the next MIC press.",
+                     font=("Courier New", 10), text_color=C_MUTED).pack(pady=(0, 12))
+
+        try:
+            devices = sd.query_devices()
+        except Exception:
+            devices = []
+
+        for i, d in enumerate(devices):
+            if d["max_input_channels"] > 0:
+                self._in_ids.append(i)
+                self._in_labels.append(f"{d['name']} [{i}]")
+            if d["max_output_channels"] > 0:
+                self._out_ids.append(i)
+                self._out_labels.append(f"{d['name']} [{i}]")
+
+        settings = self._parent._settings
+
+        # ── Input device ──────────────────────────────────────────────────
+        fi = ctk.CTkFrame(self, fg_color="transparent")
+        fi.pack(fill="x", padx=24, pady=6)
+        ctk.CTkLabel(fi, text="INPUT  --  Microphone",
+                     font=("Courier New", 11), text_color=C_TEXT).pack(anchor="w")
+
+        saved_in = settings.get("audio_input_device")
+        in_default = (self._in_labels[self._in_ids.index(saved_in)]
+                      if saved_in is not None and saved_in in self._in_ids
+                      else (self._in_labels[0] if self._in_labels else "No devices"))
+        self._in_var = ctk.StringVar(value=in_default)
+
+        if self._in_labels:
+            ctk.CTkOptionMenu(fi, variable=self._in_var, values=self._in_labels,
+                              font=("Courier New", 11),
+                              fg_color=C_BG, text_color=C_TEXT,
+                              button_color=C_BORDER,
+                              button_hover_color=C_CYAN_DIM,
+                              dropdown_fg_color=C_BG,
+                              dropdown_text_color=C_TEXT).pack(fill="x", pady=(4, 0))
+        else:
+            ctk.CTkLabel(fi, text="No input devices found.",
+                         font=("Courier New", 11),
+                         text_color=C_DANGER).pack(anchor="w")
+
+        # ── Output device ─────────────────────────────────────────────────
+        fo = ctk.CTkFrame(self, fg_color="transparent")
+        fo.pack(fill="x", padx=24, pady=6)
+        ctk.CTkLabel(fo, text="OUTPUT  --  Speakers / HDMI",
+                     font=("Courier New", 11), text_color=C_TEXT).pack(anchor="w")
+
+        saved_out = settings.get("audio_output_device")
+        out_default = (self._out_labels[self._out_ids.index(saved_out)]
+                       if saved_out is not None and saved_out in self._out_ids
+                       else (self._out_labels[0] if self._out_labels else "No devices"))
+        self._out_var = ctk.StringVar(value=out_default)
+
+        if self._out_labels:
+            ctk.CTkOptionMenu(fo, variable=self._out_var, values=self._out_labels,
+                              font=("Courier New", 11),
+                              fg_color=C_BG, text_color=C_TEXT,
+                              button_color=C_BORDER,
+                              button_hover_color=C_CYAN_DIM,
+                              dropdown_fg_color=C_BG,
+                              dropdown_text_color=C_TEXT).pack(fill="x", pady=(4, 0))
+        else:
+            ctk.CTkLabel(fo, text="No output devices found.",
+                         font=("Courier New", 11),
+                         text_color=C_DANGER).pack(anchor="w")
+
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(pady=16)
+        ctk.CTkButton(btn_row, text="SAVE", width=130,
+                      font=("Courier New", 12, "bold"),
+                      command=self._save).pack(side="left", padx=10)
+
+        self._msg = ctk.CTkLabel(self, text="", font=("Courier New", 10),
+                                 text_color=C_MUTED)
+        self._msg.pack()
+
+    def _save(self) -> None:
+        in_label  = self._in_var.get()
+        out_label = self._out_var.get()
+
+        in_id  = (self._in_ids[self._in_labels.index(in_label)]
+                  if in_label in self._in_labels else None)
+        out_id = (self._out_ids[self._out_labels.index(out_label)]
+                  if out_label in self._out_labels else None)
+
+        self._parent._settings["audio_input_device"]  = in_id
+        self._parent._settings["audio_output_device"] = out_id
+        _save_settings(self._parent._settings)
+        self._parent._reset_audio_stream()
+        self._msg.configure(text="Saved. Active on next MIC press.",
+                            text_color=C_GREEN)
+
+
 # ── Main window ────────────────────────────────────────────────────────────
 
 class AlbedoGUI(ctk.CTk):
@@ -182,8 +322,10 @@ class AlbedoGUI(ctk.CTk):
         self._voice_stop   = threading.Event()
         self._audio_stream = None   # AudioStream, lazy-init
         self._settings_win = None
+        self._hardware_win = None
         self._pulse_phase  = 0.0
         self._icon_photo   = None   # ImageTk ref kept alive
+        self._settings     = _load_settings()
 
         self._build_ui()
         self._start_queue_poll()
@@ -251,10 +393,15 @@ class AlbedoGUI(ctk.CTk):
                                        command=self._handle_send)
         self._send_btn.pack(side="left", padx=4, pady=10)
 
-        ctk.CTkButton(row, text="SETTINGS", width=92, height=44,
+        ctk.CTkButton(row, text="SETTINGS", width=88, height=44,
                       font=("Courier New", 10, "bold"),
                       fg_color=C_BORDER, hover_color=C_CYAN_DIM,
-                      command=self._open_settings).pack(side="left", padx=(4, 10), pady=10)
+                      command=self._open_settings).pack(side="left", padx=4, pady=10)
+
+        ctk.CTkButton(row, text="HARDWARE", width=88, height=44,
+                      font=("Courier New", 10, "bold"),
+                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+                      command=self._open_hardware_settings).pack(side="left", padx=(4, 10), pady=10)
 
     # ── Icon loading ───────────────────────────────────────────────────────
 
@@ -413,7 +560,8 @@ class AlbedoGUI(ctk.CTk):
             )
 
             if self._audio_stream is None:
-                self._audio_stream = AudioStream()
+                in_dev = self._settings.get("audio_input_device")
+                self._audio_stream = AudioStream(device=in_dev)
                 self._audio_stream.start()
                 sd.sleep(150)  # let the stream stabilise before reading
 
@@ -486,7 +634,8 @@ class AlbedoGUI(ctk.CTk):
             # TTS runs on this background thread -- UI stays responsive
             try:
                 from albedo.audio.tts import speak
-                speak(response)
+                out_dev = self._settings.get("audio_output_device")
+                speak(response, device=out_dev)
             except Exception as tts_err:
                 print(f"[gui] TTS error: {tts_err}")
 
@@ -504,6 +653,22 @@ class AlbedoGUI(ctk.CTk):
             self._settings_win.focus()
             return
         self._settings_win = SettingsDialog(self)
+
+    def _open_hardware_settings(self) -> None:
+        if self._hardware_win and self._hardware_win.winfo_exists():
+            self._hardware_win.focus()
+            return
+        self._hardware_win = HardwareSettingsDialog(self)
+
+    def _reset_audio_stream(self) -> None:
+        """Stop and discard the current AudioStream so the next MIC press
+        re-opens it with the newly selected device."""
+        if self._audio_stream:
+            try:
+                self._audio_stream.stop()
+            except Exception:
+                pass
+            self._audio_stream = None
 
     # ── Cleanup ────────────────────────────────────────────────────────────
 

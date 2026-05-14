@@ -37,8 +37,11 @@ def _check_piper() -> bool:
     return _piper_available
 
 
-def speak(text: str) -> None:
-    """Synthesise text and play audio. Falls back to print if Piper is unavailable."""
+def speak(text: str, device: int | None = None) -> None:
+    """Synthesise text and play audio. Falls back to print if Piper is unavailable.
+
+    device: sounddevice output device index, or None for system default.
+    """
     text = text.strip()
     if not text:
         return
@@ -73,7 +76,7 @@ def speak(text: str) -> None:
             samples = int(len(audio) * AUDIO_SAMPLE_RATE / sr)
             audio = resample(audio, samples).astype(np.float32)
 
-        sd.play(audio, samplerate=AUDIO_SAMPLE_RATE, blocking=True)
+        sd.play(audio, samplerate=AUDIO_SAMPLE_RATE, blocking=True, device=device)
 
     finally:
         try:

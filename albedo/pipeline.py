@@ -42,7 +42,9 @@ def run(query: str, use_web: bool = False) -> str:
         verify_data = run_verify(query)
         return bridge_chat(verify_data["synthesis_prompt"])
 
-    rag_results = query_all(query)
+    # Skip RAG for very short inputs (greetings, single words) -- they have
+    # no useful embedding match and can cause n_results=0 crashes.
+    rag_results = {} if len(query) < 5 else query_all(query)
     web_results = web_search(query) if use_web else []
 
     prompt = _build_standard_prompt(query, rag_results, web_results)

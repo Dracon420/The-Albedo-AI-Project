@@ -24,10 +24,11 @@ _CHUNK_SAMPLES = int(AUDIO_SAMPLE_RATE * AUDIO_CHUNK_MS / 1000)  # 1280 @ 16kHz/
 class AudioStream:
     """Continuous microphone capture shared between wake word and recording modes."""
 
-    def __init__(self):
+    def __init__(self, device: int | None = None) -> None:
         self._queue: list[np.ndarray] = []
         self._lock = threading.Lock()
         self._stream: sd.InputStream | None = None
+        self._device = device  # None = sounddevice default
 
     def _callback(self, indata: np.ndarray, frames: int, time, status) -> None:
         audio = np.squeeze(indata.copy())
@@ -42,6 +43,7 @@ class AudioStream:
             dtype="float32",
             blocksize=_CHUNK_SAMPLES,
             callback=self._callback,
+            device=self._device,
         )
         self._stream.start()
 

@@ -9,7 +9,11 @@ from albedo.config import (
     RAG_TOP_K,
 )
 
-_ef = embedding_functions.DefaultEmbeddingFunction()
+# Force CPU so all 6 GB VRAM stays reserved for the Ollama LLM.
+_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+    model_name="all-MiniLM-L6-v2",
+    device="cpu",
+)
 _client: chromadb.PersistentClient | None = None
 
 
@@ -27,7 +31,12 @@ def _query_collection(collection_name: str, query: str, top_k: int) -> list[dict
     except Exception:
         return []
 
-    results = col.query(query_texts=[query], n_results=min(top_k, col.count()))
+    count = col.count()
+    if count == 0:
+        return []
+    # Always retrieve at least 3 chunks when available; never exceed what exists.
+    n_results = min(count, max(top_k, 3))
+    results = col.query(query_texts=[query], n_results=n_results)
     chunks = []
     for doc, meta, distance in zip(
         results["documents"][0],
