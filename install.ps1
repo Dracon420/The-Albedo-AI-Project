@@ -233,7 +233,67 @@ try {
 }
 
 # ============================================================================
-# Step 3 -- Virtual environment (created with the verified Python 3.12 binary)
+# Step 3 -- Ollama (check installed; auto-install via winget if missing)
+# ============================================================================
+
+Write-Step "Checking Ollama..."
+
+$ollamaInstalled = $false
+try {
+    $ollamaVer = (& ollama --version 2>&1).ToString().Trim()
+    if ($LASTEXITCODE -eq 0 -and $ollamaVer -ne "") {
+        $ollamaInstalled = $true
+        Write-OK "Ollama found: $ollamaVer"
+    }
+} catch {}
+
+if (-not $ollamaInstalled) {
+    Write-Warn "Ollama not found -- auto-installing via winget..."
+
+    $wingetOk = $false
+    try {
+        & where.exe winget 2>&1 | Out-Null
+        $wingetOk = ($LASTEXITCODE -eq 0)
+    } catch {}
+
+    if ($wingetOk) {
+        & winget install -e --id Ollama.Ollama --silent `
+            --accept-source-agreements --accept-package-agreements 2>&1
+
+        # -1978335189 = WINGET_INSTALLED_STATUS_ALREADY_INSTALLED (treat as success)
+        $wingetExitOk = ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq -1978335189)
+
+        if ($wingetExitOk) {
+            # Refresh PATH so the new ollama.exe is visible in this session
+            $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+                        [System.Environment]::GetEnvironmentVariable("PATH","User")
+            Start-Sleep -Seconds 2
+
+            try {
+                $ollamaVer = (& ollama --version 2>&1).ToString().Trim()
+                if ($LASTEXITCODE -eq 0) {
+                    $ollamaInstalled = $true
+                    Write-OK "Ollama installed: $ollamaVer"
+                }
+            } catch {}
+
+            if (-not $ollamaInstalled) {
+                Write-Warn "Ollama installed but not yet on PATH in this session."
+                Write-Info "Close and reopen this terminal, then re-run install.ps1 OR"
+                Write-Info "launch Ollama from the Start Menu first."
+            }
+        } else {
+            Write-Warn "winget install Ollama exited with code $LASTEXITCODE."
+            Write-Info "Install manually from: https://ollama.com/download/windows"
+        }
+    } else {
+        Write-Warn "winget not available -- cannot auto-install Ollama."
+        Write-Info "Download from: https://ollama.com/download/windows"
+    }
+}
+
+# ============================================================================
+# Step 4 -- Virtual environment (created with the verified Python 3.12 binary)
 # ============================================================================
 
 Write-Step "Setting up Python 3.12 virtual environment..."
@@ -500,7 +560,31 @@ Set-Content -Path $envPath -Value $envContent -Encoding UTF8
 Write-OK ".env written to $envPath"
 
 # ============================================================================
-# Step 14 -- Initial ChromaDB index (guarded)
+# Step 14 -- Pull Ollama model
+# ============================================================================
+
+Write-Host ""
+$doPull = Ask-YesNo "  Pull Ollama model now? ($ollamaModel -- may take several minutes)" $true
+
+if ($doPull) {
+    Write-Step "Pulling $ollamaModel from Ollama registry..."
+    Write-Info "(Download size varies: 2-5 GB depending on model)"
+
+    # Ollama pull does not require 'ollama serve' to be running.
+    & ollama pull $ollamaModel
+    if ($LASTEXITCODE -eq 0) {
+        Write-OK "$ollamaModel ready"
+    } else {
+        Write-Warn "ollama pull exited with code $LASTEXITCODE."
+        Write-Info "Retry manually: ollama pull $ollamaModel"
+        Write-Info "Make sure Ollama is installed and 'ollama serve' is running."
+    }
+} else {
+    Write-Warn "Skipped -- run 'ollama pull $ollamaModel' before launching Albedo."
+}
+
+# ============================================================================
+# Step 15 -- Initial ChromaDB index (guarded)
 # ============================================================================
 
 Write-Host ""
@@ -524,6 +608,41 @@ if ($doIndex) {
     }
 } else {
     Write-Warn "Skipped -- run 'python main.py --index' when ready."
+}
+
+# ============================================================================
+# Step 16 -- Desktop shortcut
+# ============================================================================
+
+Write-Step "Creating desktop shortcut..."
+
+$launcherPath = Join-Path $PSScriptRoot "Launch-Albedo.ps1"
+$desktopPath  = [System.Environment]::GetFolderPath("Desktop")
+$shortcutPath = Join-Path $desktopPath "Albedo.lnk"
+
+if (-not (Test-Path $launcherPath)) {
+    Write-Warn "Launch-Albedo.ps1 not found -- skipping shortcut creation."
+    Write-Info "Ensure Launch-Albedo.ps1 is in the same folder as install.ps1."
+} else {
+    try {
+        $shell    = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+
+        $shortcut.TargetPath       = "powershell.exe"
+        $shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Normal -File `"$launcherPath`""
+        $shortcut.WorkingDirectory = $PSScriptRoot
+        $shortcut.Description      = "Launch Albedo -- Spartan-Class Local AI"
+        $shortcut.IconLocation     = "powershell.exe,0"
+
+        $shortcut.Save()
+        [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
+
+        Write-OK "Desktop shortcut created: $shortcutPath"
+        Write-Info "Double-click 'Albedo' on your desktop to launch."
+    } catch {
+        Write-Warn "Could not create shortcut: $_"
+        Write-Info "Run Launch-Albedo.ps1 directly to start Albedo."
+    }
 }
 
 # ============================================================================
