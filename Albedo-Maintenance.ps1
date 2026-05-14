@@ -61,14 +61,19 @@ function Invoke-Update {
         return
     }
 
+    # Close any running Albedo GUI window before touching pip cache
+    Get-Process -Name "pythonw" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 1
+
     Write-Step "Upgrading pip, wheel, and setuptools..."
-    & $venvPython -m pip install --upgrade pip wheel setuptools --quiet
+    & $venvPython -m pip install --upgrade pip wheel setuptools --no-cache-dir --quiet
     Write-OK "Build tools upgraded."
 
     Write-Host ""
     Write-Step "Upgrading Python dependencies..."
+    # --no-cache-dir prevents Errno 13 Permission denied on locked wheel cache files
     & $venvPip install -r (Join-Path $projectRoot "requirements.txt") `
-        --upgrade --prefer-binary --quiet
+        --upgrade --prefer-binary --no-cache-dir --quiet
 
     if ($LASTEXITCODE -eq 0) {
         Write-OK "All packages up to date."
