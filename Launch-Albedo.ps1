@@ -32,13 +32,19 @@ if (-not (Test-Path $python)) {
         Write-Host "  Launching it now to finish installation..." -ForegroundColor Yellow
         Write-Host ""
 
-        $pyExe = (Get-Command "py" -ErrorAction SilentlyContinue)
-        if ($pyExe) {
-            & py -3.12 $setupScript
+        # Use pyw (windowless Python) so there is no console window to
+        # accidentally close, which would kill the wizard mid-install.
+        $pywExe = (Get-Command "pyw" -ErrorAction SilentlyContinue)
+        if ($pywExe) {
+            Start-Process -FilePath "pyw" `
+                          -ArgumentList "-3.12 `"$setupScript`"" `
+                          -Wait
         } else {
-            $pyDirect = (Get-Command "python" -ErrorAction SilentlyContinue)
-            if ($pyDirect) {
-                & python $setupScript
+            $pythonwExe = (Get-Command "pythonw" -ErrorAction SilentlyContinue)
+            if ($pythonwExe) {
+                Start-Process -FilePath "pythonw" `
+                              -ArgumentList "`"$setupScript`"" `
+                              -Wait
             } else {
                 Write-Host "  [X] Python not found on PATH." -ForegroundColor Red
                 Write-Host "      Install Python 3.12 then re-run this shortcut." -ForegroundColor Gray
@@ -75,11 +81,17 @@ if ($LASTEXITCODE -ne 0) {
 
     $setupScript = Join-Path $projectRoot "setup_utility.py"
     if (Test-Path $setupScript) {
-        $pyExe = (Get-Command "py" -ErrorAction SilentlyContinue)
-        if ($pyExe) {
-            & py -3.12 $setupScript
+        $pywExe = (Get-Command "pyw" -ErrorAction SilentlyContinue)
+        if ($pywExe) {
+            Start-Process -FilePath "pyw" `
+                          -ArgumentList "-3.12 `"$setupScript`"" `
+                          -Wait
         } else {
-            & $python $setupScript
+            $pythonw = $python -replace "python\.exe$", "pythonw.exe"
+            $fwExe = if (Test-Path $pythonw) { $pythonw } else { $python }
+            Start-Process -FilePath $fwExe `
+                          -ArgumentList "`"$setupScript`"" `
+                          -Wait
         }
     } else {
         Write-Host "  [X] setup_utility.py not found." -ForegroundColor Red

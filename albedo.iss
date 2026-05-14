@@ -111,7 +111,7 @@ Name: "{autodesktop}\{#AppFullName}";   Filename: "{sys}\WindowsPowerShell\v1.0\
 ;   NOT nowait      -- installer waits for the wizard to exit before closing;
 ;                      nowait was the original bug (wizard was killed on exit)
 Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-  Parameters: "-ExecutionPolicy Bypass -NoProfile -WindowStyle Normal -Command ""py -3.12 '{app}\setup_utility.py'"""; \
+  Parameters: "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -Command ""py -3.12 '{app}\setup_utility.py'"""; \
   WorkingDir: "{app}"; \
   Description: "Run Albedo Setup Wizard (install Python packages, configure .env, pull AI model)"; \
   Flags: postinstall runasoriginaluser; \
