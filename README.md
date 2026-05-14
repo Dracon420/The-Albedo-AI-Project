@@ -226,6 +226,60 @@ docker compose up               # Run Ollama + ChromaDB as Docker services
 
 ---
 
+## Optional: Albedo Mobile HUD
+
+A React Native client that gives you a Spartan HUD on your phone — full voice recording, TTS playback, and text chat over your Tailscale private network. No ports exposed to the internet.
+
+### Prerequisites
+
+- **Expo Go** installed on your iOS or Android device ([iOS](https://apps.apple.com/app/expo-go/id982107779) · [Android](https://play.google.com/store/apps/details?id=host.exp.exponent))
+- **Tailscale** running on both your phone and the desktop running `server.py`, both joined to the same tailnet ([tailscale.com/download](https://tailscale.com/download))
+
+### Configuration
+
+Find your desktop's Tailscale IP in a terminal on your PC:
+
+```powershell
+tailscale ip -4
+```
+
+Open `albedo-mobile/src/api/client.ts` and replace the placeholder on line 6:
+
+```typescript
+// Before
+export const SERVER_BASE = 'http://YOUR_TAILSCALE_IP:8000';
+
+// After (example)
+export const SERVER_BASE = 'http://100.64.0.1:8000';
+```
+
+### Launch Sequence
+
+**Step 1 — Start the Bridge.** In a terminal at the project root, activate the FastAPI server:
+
+```powershell
+python server.py
+```
+
+You should see `Starting Albedo Bridge on 0.0.0.0:8000`. Leave this terminal open.
+
+**Step 2 — Start the App.** Open a second terminal, navigate to the mobile folder, and launch the Expo bundler:
+
+```powershell
+cd albedo-mobile
+npx expo start
+```
+
+### Initialization
+
+A QR code will appear in the terminal. Open **Expo Go** on your phone and scan it. The Albedo Spartan HUD will initialize on your device within a few seconds.
+
+The header will show a **BRIDGE** chip in cyan once the app successfully reaches `server.py` over Tailscale, confirming the secure tunnel is live. You can then issue voice and text commands remotely — Albedo processes everything locally on your desktop and streams the response back to the HUD.
+
+> **Silent Protocol:** tap the `AUDIO` chip in the header to suppress TTS playback and receive text-only responses. Useful in quiet environments.
+
+---
+
 ## Stack Reference
 
 | Layer | Technology |
