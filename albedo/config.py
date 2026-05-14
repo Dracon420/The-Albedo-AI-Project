@@ -14,6 +14,14 @@ OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 WEB_SEARCH_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
 
+# Indexer memory controls — tuned for 16 GB RAM.
+# Chunks are added to ChromaDB in batches; IDs are checked in pages.
+# Lower INDEXER_BATCH_SIZE if you see OOM during indexing (minimum: 10).
+INDEXER_BATCH_SIZE = int(os.getenv("INDEXER_BATCH_SIZE", "50"))
+INDEXER_ID_PAGE_SIZE = int(os.getenv("INDEXER_ID_PAGE_SIZE", "1000"))
+# Max bytes read per file — files over this limit are chunked via streaming.
+INDEXER_MAX_FILE_BYTES = int(os.getenv("INDEXER_MAX_FILE_BYTES", str(10 * 1024 * 1024)))  # 10 MB
+
 # File extensions indexed per collection
 CHAOTIC_3D_EXTENSIONS = {".gcode", ".cfg", ".ini", ".json", ".txt", ".md", ".xml"}
 EXOTIC_OS_EXTENSIONS = {".py", ".sh", ".txt", ".md", ".log", ".json", ".yaml", ".yml", ".toml"}

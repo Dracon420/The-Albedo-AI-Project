@@ -1,5 +1,5 @@
 chromadb>=0.5.0
-duckduckgo-search>=6.0.0
+ddgs>=1.0.0
 open-interpreter>=0.3.17
 python-dotenv>=1.0.0
 sentence-transformers>=3.0.0

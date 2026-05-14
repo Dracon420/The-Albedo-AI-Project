@@ -1,11 +1,10 @@
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from albedo.config import WEB_SEARCH_MAX_RESULTS
 
 
 def web_search(query: str, max_results: int = WEB_SEARCH_MAX_RESULTS) -> list[dict]:
     """Return DuckDuckGo results as [{title, url, snippet}]."""
-    with DDGS() as ddgs:
-        raw = ddgs.text(query, max_results=max_results)
+    raw = DDGS().text(query, max_results=max_results)
     return [
         {"title": r.get("title", ""), "url": r.get("href", ""), "snippet": r.get("body", "")}
         for r in (raw or [])
