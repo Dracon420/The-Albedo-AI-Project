@@ -141,13 +141,10 @@ begin
   if not PythonFound then
   begin
     MsgBox(
-      'Python 3.12 is required but was not found on this system.' + #13#10 +
-      #13#10 +
+      'Python 3.12 is required but was not found on this system.' + #13#10 + #13#10 +
       'Please install Python 3.12 before running this installer:' + #13#10 +
-      '  winget install Python.Python.3.12' + #13#10 +
-      #13#10 +
-      'Or download from: https://www.python.org/downloads/release/python-3120/' + #13#10 +
-      #13#10 +
+      '  winget install Python.Python.3.12' + #13#10 + #13#10 +
+      'Or download from: https://www.python.org/downloads/release/python-3120/' + #13#10 + #13#10 +
       'The installer will now exit.',
       mbCriticalError, MB_OK);
     Result := False;
