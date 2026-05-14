@@ -5,10 +5,12 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts, ShareTechMono_400Regular } from '@expo-google-fonts/share-tech-mono';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 
 import { HUDBackground } from './src/components/HUDBackground';
 import { CentralOrb } from './src/components/CentralOrb';
@@ -26,6 +28,7 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<VoiceStatus>('standby');
   const [isMuted, setIsMuted] = useState(false);
+  const [isSilent, setIsSilent] = useState(false);
   const [inputMode, setInputMode] = useState<InputMode>('voice');
   const [draftText, setDraftText] = useState('');
 
@@ -40,18 +43,28 @@ export default function App() {
   const handleMicPress = useCallback(() => {
     if (isMuted) return;
 
+    // Pressing mic while in keyboard mode: slide input away, return to voice
+    if (inputMode === 'keyboard') {
+      setInputMode('voice');
+      setStatus('standby');
+      return;
+    }
+
     if (status === 'listening') {
-      // Stop recording — in production this triggers STT + pipeline
       setStatus('processing');
       setTimeout(() => {
         pushMessage('user', '[voice input]');
-        pushMessage('albedo', 'Voice pipeline is online. Connect server.py over Tailscale to process real queries.');
+        if (!isSilent) {
+          pushMessage('albedo', 'Voice pipeline online. Connect server.py over Tailscale to process real queries.');
+        } else {
+          pushMessage('albedo', '[SILENT PROTOCOL] Response suppressed. Audio playback disabled.');
+        }
         setStatus('standby');
       }, 1200);
     } else if (status === 'standby') {
       setStatus('listening');
     }
-  }, [status, isMuted, pushMessage]);
+  }, [status, isMuted, inputMode, isSilent, pushMessage]);
 
   // ── Keyboard send ───────────────────────────────────────────────────────────
   const handleSendText = useCallback(() => {
@@ -61,7 +74,6 @@ export default function App() {
     setDraftText('');
     setStatus('processing');
 
-    // Stub response — replace with fetch() to /api/chat on your Tailscale IP
     setTimeout(() => {
       pushMessage(
         'albedo',
@@ -75,6 +87,10 @@ export default function App() {
     setIsMuted((m) => !m);
     if (status === 'listening') setStatus('standby');
   }, [status]);
+
+  const handleSilentToggle = useCallback(() => {
+    setIsSilent((s) => !s);
+  }, []);
 
   const handleInputModeToggle = useCallback(() => {
     setInputMode((m) => (m === 'voice' ? 'keyboard' : 'voice'));
@@ -96,7 +112,34 @@ export default function App() {
           {/* ── Header ──────────────────────────────────────────────── */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>ALBEDO</Text>
-            <Text style={styles.headerSub}>SPARTAN-CLASS · HYBRID RAG</Text>
+
+            <View style={styles.headerMeta}>
+              <Text style={styles.headerSub}>SPARTAN-CLASS · HYBRID RAG</Text>
+
+              {/* Silent Protocol chip */}
+              <TouchableOpacity
+                onPress={handleSilentToggle}
+                style={[styles.silentChip, isSilent && styles.silentChipActive]}
+                activeOpacity={0.7}
+                accessibilityLabel={isSilent ? 'Disable Silent Protocol' : 'Enable Silent Protocol'}
+              >
+                <MaterialCommunityIcons
+                  name={isSilent ? 'volume-off' : 'volume-high'}
+                  size={10}
+                  color={isSilent ? Colors.cyan : Colors.textMuted}
+                />
+                <Text style={[styles.silentLabel, isSilent && styles.silentLabelActive]}>
+                  {isSilent ? 'SILENT' : 'AUDIO'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Active silent protocol banner */}
+            {isSilent && (
+              <View style={styles.silentBanner}>
+                <Text style={styles.silentBannerText}>◉  SILENT PROTOCOL ENGAGED</Text>
+              </View>
+            )}
           </View>
 
           {/* ── Central orb ─────────────────────────────────────────── */}
@@ -113,10 +156,12 @@ export default function App() {
           <ControlBar
             status={status}
             isMuted={isMuted}
+            isSilent={isSilent}
             inputMode={inputMode}
             draftText={draftText}
             onMicPress={handleMicPress}
             onMuteToggle={handleMuteToggle}
+            onSilentToggle={handleSilentToggle}
             onInputModeToggle={handleInputModeToggle}
             onDraftChange={setDraftText}
             onSendText={handleSendText}
@@ -149,12 +194,59 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.xxl,
     color: Colors.cyan,
     letterSpacing: Typography.tracking.widest,
+    textShadowColor: Colors.cyanGlowStrong,
+    textShadowOffset: { width: 0, height: 0 },
+    textShadowRadius: 12,
+  },
+  headerMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
   },
   headerSub: {
     fontFamily: Typography.fontMono,
     fontSize: Typography.sizes.hud,
     color: Colors.textMuted,
     letterSpacing: Typography.tracking.wider,
+  },
+  silentChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: 'rgba(10, 15, 44, 0.6)',
+  },
+  silentChipActive: {
+    borderColor: Colors.cyanDim,
+    backgroundColor: 'rgba(0, 153, 187, 0.15)',
+  },
+  silentLabel: {
+    fontFamily: Typography.fontMono,
+    fontSize: 9,
+    color: Colors.textMuted,
+    letterSpacing: 2,
+  },
+  silentLabelActive: {
+    color: Colors.cyan,
+  },
+  silentBanner: {
+    borderWidth: 1,
+    borderColor: Colors.cyanDim,
+    backgroundColor: 'rgba(0, 153, 187, 0.1)',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: 4,
+    borderRadius: 4,
+    marginTop: Spacing.xs,
+  },
+  silentBannerText: {
+    fontFamily: Typography.fontMono,
+    fontSize: Typography.sizes.hud,
+    color: Colors.cyanDim,
+    letterSpacing: Typography.tracking.wide,
   },
   orbSection: {
     alignItems: 'center',
