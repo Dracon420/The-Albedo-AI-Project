@@ -1,6 +1,16 @@
-from interpreter import interpreter
+"""
+Bridge Control — Open Interpreter + Ollama + Windows desktop access.
+
+When open-interpreter is installed (full local CLI/voice mode), bridge_chat()
+uses it for OS-level Bridge Control with web_search injected into the
+execution kernel.
+
+When open-interpreter is NOT installed (e.g. server / Docker deployments that
+don't need desktop control), bridge_chat() falls back to a direct Ollama HTTP
+call via httpx. The RAG-augmented prompt is sent as a plain chat message.
+"""
+
 from albedo.config import OLLAMA_MODEL, OLLAMA_BASE_URL
-from albedo.web.search import web_search, format_web_results
 
 _BRIDGE_SYSTEM_ADDENDUM = """
 You are Albedo, a Spartan-Class local AI assistant. You have full Bridge Control over this
@@ -16,40 +26,95 @@ Never guess at hardware specs or code documentation — always cross-reference w
 when you are uncertain.
 """
 
+_SYSTEM_PROMPT = (
+    "You are Albedo, a Spartan-Class local AI assistant. "
+    "Answer concisely and accurately. "
+    "Cite sources when context is provided. "
+    "Flag any uncertainty rather than guessing."
+)
 
-def _build_interpreter() -> interpreter:
+# ── Ollama HTTP fallback ───────────────────────────────────────────────────────
+
+def _ollama_chat(message: str) -> str:
+    """Direct Ollama /api/chat call — no open-interpreter dependency."""
+    import httpx, json
+
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": message},
+        ],
+        "stream": False,
+    }
+    try:
+        response = httpx.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            timeout=120.0,
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"].strip()
+    except httpx.ConnectError:
+        return "[Albedo] Ollama is not running. Start it with: ollama serve"
+    except Exception as exc:
+        return f"[Albedo] Error contacting Ollama: {exc}"
+
+
+# ── Open Interpreter (Bridge Control) ────────────────────────────────────────
+
+_interpreter_instance = None
+_use_interpreter: bool | None = None
+
+
+def _interpreter_available() -> bool:
+    global _use_interpreter
+    if _use_interpreter is None:
+        try:
+            import interpreter as _oi  # noqa: F401
+            _use_interpreter = True
+        except ImportError:
+            print("[bridge] open-interpreter not installed — using direct Ollama fallback.")
+            _use_interpreter = False
+    return _use_interpreter
+
+
+def _build_interpreter():
+    from interpreter import interpreter
     interpreter.llm.model = f"ollama/{OLLAMA_MODEL}"
     interpreter.llm.api_base = OLLAMA_BASE_URL
     interpreter.llm.supports_functions = False
-
     interpreter.os = True
     interpreter.auto_run = True
     interpreter.force_task_completion = True
-
     interpreter.system_message += _BRIDGE_SYSTEM_ADDENDUM
-
-    # Inject web_search into the interpreter's execution namespace so that
-    # any code block it generates can call it directly.
-    interpreter.computer.run("python", "pass")  # warm up the kernel
+    interpreter.computer.run("python", "pass")
     interpreter.computer.run(
         "python",
         "from albedo.web.search import web_search, format_web_results",
     )
-
     return interpreter
 
 
-_instance: interpreter | None = None
+def get_interpreter():
+    global _interpreter_instance
+    if _interpreter_instance is None:
+        _interpreter_instance = _build_interpreter()
+    return _interpreter_instance
 
 
-def get_interpreter() -> interpreter:
-    global _instance
-    if _instance is None:
-        _instance = _build_interpreter()
-    return _instance
-
+# ── Public API ────────────────────────────────────────────────────────────────
 
 def bridge_chat(message: str) -> str:
+    """
+    Send an augmented prompt to the LLM.
+
+    Uses Open Interpreter (Bridge Control) when available.
+    Falls back to a direct Ollama HTTP call otherwise.
+    """
+    if not _interpreter_available():
+        return _ollama_chat(message)
+
     interp = get_interpreter()
     response_chunks = interp.chat(message, stream=True, display=False)
     parts = []

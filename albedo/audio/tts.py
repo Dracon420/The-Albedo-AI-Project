@@ -79,3 +79,35 @@ def speak(text: str) -> None:
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def synthesize_to_bytes(text: str) -> bytes | None:
+    """
+    Run Piper and return the raw WAV file as bytes.
+    Used by the FastAPI server so the mobile client can play audio remotely.
+    Returns None if Piper is not installed.
+    """
+    text = text.strip()
+    if not text or not _check_piper():
+        return None
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+        tmp_path = tmp.name
+
+    try:
+        result = subprocess.run(
+            [PIPER_BINARY, "--model", PIPER_VOICE_MODEL, "--output_file", tmp_path],
+            input=text.encode("utf-8"),
+            capture_output=True,
+            timeout=15,
+        )
+        if result.returncode != 0:
+            print(f"[tts] Piper error: {result.stderr.decode()}")
+            return None
+        with open(tmp_path, "rb") as fh:
+            return fh.read()
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
