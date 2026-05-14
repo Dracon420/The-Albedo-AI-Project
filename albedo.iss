@@ -28,7 +28,10 @@ AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}
 AppUpdatesURL={#AppURL}
 
-; Default to per-user installation under Program Files; user can change
+; Force 64-bit install path (C:\Program Files\Albedo, not the x86 folder)
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+
 DefaultDirName={autopf}\{#AppName}
 DefaultGroupName={#AppFullName}
 AllowNoIcons=yes
@@ -99,15 +102,20 @@ Name: "{group}\{cm:UninstallProgram,{#AppFullName}}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\{#AppFullName}";   Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Normal -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Tasks: desktopicon; Comment: "Launch Albedo Spartan-Class AI"
 
 [Run]
-; After files are copied, run the Python setup wizard so pip / .env / Ollama
-; are configured without the user touching a terminal.
+; Run the setup wizard after files are copied.
 ;
-; py.exe (the Python Launcher) is verified to exist by the [Code] section
-; before we ever reach this step.
-Filename: "py.exe"; Parameters: "-3.12 ""{app}\setup_utility.py"""; \
+; Key flags:
+;   postinstall     -- shows as a checkbox on the Finish page (pre-checked)
+;   runasoriginaluser -- runs as the logged-in user, not the elevated admin
+;                        context, so py.exe is found on the user's PATH
+;   NOT nowait      -- installer waits for the wizard to exit before closing;
+;                      nowait was the original bug (wizard was killed on exit)
+Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
+  Parameters: "-ExecutionPolicy Bypass -NoProfile -WindowStyle Normal -Command ""py -3.12 '{app}\setup_utility.py'"""; \
   WorkingDir: "{app}"; \
-  Description: "Run Albedo Setup Wizard (configure Python env, Ollama, .env)"; \
-  Flags: postinstall nowait; StatusMsg: "Launching Albedo Setup Wizard..."
+  Description: "Run Albedo Setup Wizard (install Python packages, configure .env, pull AI model)"; \
+  Flags: postinstall runasoriginaluser; \
+  StatusMsg: "Launching Albedo Setup Wizard..."
 
 [UninstallRun]
 ; On uninstall: kill the GUI window, then remove the .lnk

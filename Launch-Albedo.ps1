@@ -20,12 +20,36 @@ $mainPy      = Join-Path $projectRoot "main.py"
 
 if (-not (Test-Path $python)) {
     Write-Host ""
-    Write-Host "  [X] Virtual environment not found at:" -ForegroundColor Red
-    Write-Host "      $python" -ForegroundColor Gray
+    Write-Host "  [X] Virtual environment not found." -ForegroundColor Red
+    Write-Host "      Expected: $python" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "  Run install.ps1 first to set up Albedo." -ForegroundColor Yellow
-    Write-Host ""
-    Read-Host "  Press Enter to exit"
+
+    # If setup_utility.py is present, offer to run it now rather than
+    # leaving the user stranded at an error prompt.
+    $setupScript = Join-Path $projectRoot "setup_utility.py"
+    if (Test-Path $setupScript) {
+        Write-Host "  The Albedo Setup Wizard was not completed." -ForegroundColor Yellow
+        Write-Host "  Launching it now to finish installation..." -ForegroundColor Yellow
+        Write-Host ""
+
+        $pyExe = (Get-Command "py" -ErrorAction SilentlyContinue)
+        if ($pyExe) {
+            & py -3.12 $setupScript
+        } else {
+            $pyDirect = (Get-Command "python" -ErrorAction SilentlyContinue)
+            if ($pyDirect) {
+                & python $setupScript
+            } else {
+                Write-Host "  [X] Python not found on PATH." -ForegroundColor Red
+                Write-Host "      Install Python 3.12 then re-run this shortcut." -ForegroundColor Gray
+                Read-Host "  Press Enter to exit"
+            }
+        }
+    } else {
+        Write-Host "  Run setup_utility.py or install.ps1 to complete setup." -ForegroundColor Yellow
+        Write-Host ""
+        Read-Host "  Press Enter to exit"
+    }
     exit 1
 }
 
