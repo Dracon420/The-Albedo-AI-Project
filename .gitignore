@@ -45,3 +45,9 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# React Native / Expo
+albedo-mobile/node_modules/
+albedo-mobile/.expo/
+albedo-mobile/android/
+albedo-mobile/ios/
