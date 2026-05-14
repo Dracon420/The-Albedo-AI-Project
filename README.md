@@ -358,6 +358,10 @@ Restart Albedo. It will now respond only to your voice saying "Cortana".
 
 The installer creates a permanent **Albedo** shortcut on your Windows desktop and a `Launch-Albedo.ps1` script in the project root. Both are configured at install time — no manual editing required.
 
+### Custom desktop icon (optional)
+
+Place a file named **`albedo_icon.ico`** in the project root directory **before** running `install.ps1`. The installer will automatically apply it to the desktop shortcut. If the file is absent, the shortcut falls back to the default PowerShell icon. You can replace the icon at any time by placing `albedo_icon.ico` in the project root and re-running `install.ps1`.
+
 ### How it works
 
 Double-click the **Albedo** desktop shortcut. PowerShell runs `Launch-Albedo.ps1`, which:
@@ -386,6 +390,49 @@ python main.py --voice --web    # Voice mode with live web search always on
 python main.py --index          # Re-index knowledge base
 python main.py --web "query"    # One-shot web-augmented query
 ```
+
+---
+
+## Maintenance & Uninstallation
+
+`Albedo-Maintenance.ps1` is a text-based utility for keeping Albedo up to date and for clean removal. It does not touch system-level dependencies (Python, Ollama, Piper).
+
+### Running the utility
+
+```powershell
+# From an Admin PowerShell in the project directory:
+Set-ExecutionPolicy Bypass -Scope Process
+.\Albedo-Maintenance.ps1
+```
+
+You will be presented with a menu:
+
+```
+[1]  Update Albedo
+[2]  Uninstall Albedo
+[3]  Exit
+```
+
+### Option 1 — Update Albedo
+
+Runs the following in sequence:
+
+1. `git pull` — fetches and merges the latest code from GitHub
+2. Upgrades `pip`, `wheel`, and `setuptools` inside `.venv`
+3. Runs `pip install -r requirements.txt --upgrade --prefer-binary` to bring all packages current
+
+Restart Albedo after an update to apply the new code.
+
+### Option 2 — Uninstall Albedo
+
+Removes the following after typing `CONFIRM` at the prompt:
+
+- **`.venv`** — the Python virtual environment
+- **`Albedo` desktop shortcut** — the `.lnk` file on your Desktop
+
+You will then be asked separately whether to wipe **`./chroma_db`** (your local knowledge base). Answering `n` preserves all indexed data so it can be re-used if you reinstall.
+
+> Python, Ollama, and Piper are **not** removed. Uninstall those independently via **Settings → Apps** if needed.
 
 ---
 

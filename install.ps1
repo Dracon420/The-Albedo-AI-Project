@@ -632,7 +632,14 @@ if (-not (Test-Path $launcherPath)) {
         $shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Normal -File `"$launcherPath`""
         $shortcut.WorkingDirectory = $PSScriptRoot
         $shortcut.Description      = "Launch Albedo -- Spartan-Class Local AI"
-        $shortcut.IconLocation     = "powershell.exe,0"
+
+        $icoPath = Join-Path $PSScriptRoot "albedo_icon.ico"
+        if (Test-Path $icoPath) {
+            $shortcut.IconLocation = "$icoPath,0"
+            Write-Info "Custom icon applied: albedo_icon.ico"
+        } else {
+            $shortcut.IconLocation = "powershell.exe,0"
+        }
 
         $shortcut.Save()
         [System.Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null
