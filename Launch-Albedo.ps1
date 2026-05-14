@@ -63,6 +63,33 @@ if (-not (Test-Path $mainPy)) {
 }
 
 # ============================================================================
+# Package health check -- redirect to wizard if customtkinter is missing
+# ============================================================================
+
+& $python -c "import customtkinter" 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "  [!]  Required packages are not installed in the virtual environment." -ForegroundColor Yellow
+    Write-Host "       Launching Setup Wizard to complete installation..." -ForegroundColor Yellow
+    Write-Host ""
+
+    $setupScript = Join-Path $projectRoot "setup_utility.py"
+    if (Test-Path $setupScript) {
+        $pyExe = (Get-Command "py" -ErrorAction SilentlyContinue)
+        if ($pyExe) {
+            & py -3.12 $setupScript
+        } else {
+            & $python $setupScript
+        }
+    } else {
+        Write-Host "  [X] setup_utility.py not found." -ForegroundColor Red
+        Write-Host "      Re-run the installer or run: pip install -r requirements.txt" -ForegroundColor Gray
+        Read-Host "  Press Enter to exit"
+    }
+    exit 1
+}
+
+# ============================================================================
 # Ollama -- start silently in background if not already running
 # ============================================================================
 

@@ -1,12 +1,13 @@
 """
 setup_utility.py  --  Albedo First-Run Setup Wizard
 
-Self-contained deployment GUI. Runs before the albedo package is
-installed, so nothing from albedo.* is imported at module level.
+Stdlib-only: runs with any Python 3.8+ before the venv is created.
+No third-party imports at all. Uses only tkinter, tkinter.ttk,
+tkinter.scrolledtext, and tkinter.filedialog.
 
 Pages:
   1  System Check  -- Python 3.12, Ollama, Git
-  2  Directories   -- install root, RAG knowledge-base folders
+  2  Directories   -- RAG knowledge-base folders, Piper, wake word
   3  Installing    -- live pip output + progress bar
   4  Complete      -- launch shortcut / exit
 
@@ -25,47 +26,51 @@ import threading
 from pathlib import Path
 from datetime import datetime
 import tkinter as tk
-from tkinter import filedialog
+from tkinter import filedialog, scrolledtext, ttk
 
-import customtkinter as ctk
+# ---------------------------------------------------------------------------
+# Colors / fonts
+# ---------------------------------------------------------------------------
 
-# ── Theme ──────────────────────────────────────────────────────────────────
-ctk.set_appearance_mode("Dark")
-ctk.set_default_color_theme("blue")
+C_BG     = "#0A0F2C"
+C_PANEL  = "#0E1330"
+C_CYAN   = "#00F5FF"
+C_DIM    = "#0099BB"
+C_BORDER = "#1A2050"
+C_TEXT   = "#C8D4E8"
+C_MUTED  = "#3A4570"
+C_GREEN  = "#00CC66"
+C_WARN   = "#FFAA00"
+C_DANGER = "#FF3A5C"
+C_BTN    = "#1A3060"
 
-C_BG      = "#0A0F2C"
-C_PANEL   = "#0E1330"
-C_CYAN    = "#00F5FF"
-C_DIM     = "#0099BB"
-C_BORDER  = "#1A2050"
-C_TEXT    = "#C8D4E8"
-C_MUTED   = "#3A4570"
-C_GREEN   = "#00CC66"
-C_WARN    = "#FFAA00"
-C_DANGER  = "#FF3A5C"
+FONT_MONO   = ("Courier New", 11)
+FONT_BOLD   = ("Courier New", 11, "bold")
+FONT_TITLE  = ("Courier New", 14, "bold")
+FONT_HEADER = ("Courier New", 17, "bold")
+FONT_SMALL  = ("Courier New", 10)
 
-ROOT = Path(__file__).parent
-VENV = ROOT / ".venv"
+ROOT     = Path(__file__).parent
+VENV     = ROOT / ".venv"
 VENV_PY  = VENV / "Scripts" / "python.exe"
 VENV_PIP = VENV / "Scripts" / "pip.exe"
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Backend helpers
+# ---------------------------------------------------------------------------
 
-def _run(cmd: list[str], **kw) -> subprocess.CompletedProcess:
+def _run(cmd: list, **kw) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, capture_output=True, text=True, timeout=30, **kw)
 
 
 def _find_python312() -> str | None:
-    """Return the path to a Python 3.12.x executable, or None."""
-    # Try the Python Launcher first (most reliable on Windows)
     try:
         r = _run(["py", "-3.12", "-c", "import sys; print(sys.executable)"])
         if r.returncode == 0:
             return r.stdout.strip()
     except FileNotFoundError:
         pass
-    # Try explicit names
     for name in ("python3.12", "python"):
         exe = shutil.which(name)
         if exe:
@@ -82,27 +87,19 @@ def _find_python312() -> str | None:
 
 def _check_ollama() -> bool:
     try:
-        r = _run(["ollama", "--version"])
-        return r.returncode == 0
+        return _run(["ollama", "--version"]).returncode == 0
     except FileNotFoundError:
         return False
 
 
 def _check_git() -> bool:
     try:
-        r = _run(["git", "--version"])
-        return r.returncode == 0
+        return _run(["git", "--version"]).returncode == 0
     except FileNotFoundError:
         return False
 
 
 def _kill_locked_processes() -> None:
-    """
-    Kill pythonw.exe processes that may hold pip cache file locks.
-    Avoids killing python.exe (would kill this process) or all Python.
-    Only targets GUI (pythonw) instances -- those are the ones holding
-    the Albedo Mission Control window open during an update.
-    """
     for name in ("pythonw.exe",):
         try:
             subprocess.run(["taskkill", "/F", "/IM", name],
@@ -115,25 +112,21 @@ def _write_env(chaotic: str, exotic: str, piper_bin: str,
                piper_voice: str, wakeword: str) -> None:
     env_path = ROOT / ".env"
     example  = ROOT / ".env.example"
-    if example.exists():
-        lines = example.read_text(encoding="utf-8").splitlines()
-    else:
-        lines = []
+    lines = (example.read_text(encoding="utf-8").splitlines()
+             if example.exists() else [])
     overrides = {
-        "CHAOTIC_3D_PATH": chaotic,
-        "EXOTIC_OS_PATH":  exotic,
-        "PIPER_BINARY":    piper_bin,
-        "PIPER_VOICE_MODEL": piper_voice,
-        "WAKEWORD_MODEL":  wakeword,
-        "OLLAMA_MODEL":    "llama3.2:3b",
-        "WHISPER_MODEL_SIZE": "small",
-        "WHISPER_DEVICE":  "cuda",
+        "CHAOTIC_3D_PATH":      chaotic,
+        "EXOTIC_OS_PATH":       exotic,
+        "PIPER_BINARY":         piper_bin,
+        "PIPER_VOICE_MODEL":    piper_voice,
+        "WAKEWORD_MODEL":       wakeword,
+        "OLLAMA_MODEL":         "llama3.2:3b",
+        "WHISPER_MODEL_SIZE":   "small",
+        "WHISPER_DEVICE":       "cuda",
         "WHISPER_COMPUTE_TYPE": "int8_float16",
     }
     result: list[str] = [
-        f"# Generated by setup_utility.py -- {datetime.now():%Y-%m-%d %H:%M}",
-        "",
-    ]
+        f"# Generated by setup_utility.py -- {datetime.now():%Y-%m-%d %H:%M}", ""]
     written: set[str] = set()
     for line in lines:
         k = line.split("=")[0].strip().lstrip("#").strip()
@@ -151,7 +144,7 @@ def _write_env(chaotic: str, exotic: str, piper_bin: str,
 def _create_shortcut(install_root: Path) -> None:
     launcher = install_root / "Launch-Albedo.ps1"
     desktop  = Path(os.path.expandvars("%USERPROFILE%")) / "Desktop"
-    lnk_path = desktop / "Albedo.lnk"
+    lnk_path = desktop / "Albedo Mission Control.lnk"
     ico_path = install_root / "albedo_icon.ico"
 
     if lnk_path.exists():
@@ -170,11 +163,8 @@ def _create_shortcut(install_root: Path) -> None:
                                      else "powershell.exe,0")
         shortcut.Save()
     except Exception:
-        # win32com not available yet -- fall back to PowerShell
         try:
             ps = (
-                f'$s=$([System.Runtime.InteropServices.RuntimeEnvironment]::'
-                f'GetRuntimeDirectory()); '
                 f'$ws=New-Object -ComObject WScript.Shell; '
                 f'$lnk=$ws.CreateShortcut("{lnk_path}"); '
                 f'$lnk.TargetPath="powershell.exe"; '
@@ -190,73 +180,83 @@ def _create_shortcut(install_root: Path) -> None:
             pass
 
 
-# ── UI helpers ─────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Widget factory helpers
+# ---------------------------------------------------------------------------
 
-def _label(parent, text, size=12, color=C_TEXT, bold=False, **kw):
-    font = ("Courier New", size, "bold" if bold else "normal")
-    return ctk.CTkLabel(parent, text=text, font=font, text_color=color, **kw)
-
-
-def _check_row(parent, label: str, ok: bool | None) -> ctk.CTkLabel:
-    """Return the status label so callers can update it later."""
-    row = ctk.CTkFrame(parent, fg_color="transparent")
-    row.pack(fill="x", padx=24, pady=4)
-    _label(row, f"  {label}", size=12).pack(side="left")
-    if ok is None:
-        status_text, color = "CHECKING...", C_MUTED
-    elif ok:
-        status_text, color = "OK", C_GREEN
-    else:
-        status_text, color = "MISSING", C_DANGER
-    lbl = _label(row, status_text, color=color, size=12)
-    lbl.pack(side="right", padx=8)
-    return lbl
+def _lbl(parent: tk.Widget, text: str, size: int = 11, color: str = C_TEXT,
+         bold: bool = False, bg: str = C_BG, **kw) -> tk.Label:
+    weight = "bold" if bold else "normal"
+    return tk.Label(parent, text=text, fg=color, bg=bg,
+                    font=("Courier New", size, weight), **kw)
 
 
-# ── Pages ──────────────────────────────────────────────────────────────────
+def _btn(parent: tk.Widget, text: str, command,
+         bg: str = C_BTN, fg: str = C_TEXT,
+         width: int | None = None, **kw) -> tk.Button:
+    b = tk.Button(parent, text=text, command=command,
+                  bg=bg, fg=fg,
+                  activebackground=C_DIM, activeforeground=C_TEXT,
+                  relief="flat", cursor="hand2", font=FONT_BOLD,
+                  padx=10, pady=5, **kw)
+    if width is not None:
+        b.configure(width=width)
+    return b
 
-class Page(ctk.CTkFrame):
-    def __init__(self, parent, wizard: "SetupWizard"):
-        super().__init__(parent, fg_color=C_BG)
+
+# ---------------------------------------------------------------------------
+# Pages
+# ---------------------------------------------------------------------------
+
+class Page(tk.Frame):
+    def __init__(self, parent: tk.Widget, wizard: "SetupWizard") -> None:
+        super().__init__(parent, bg=C_BG)
         self.wizard = wizard
 
     def on_enter(self) -> None:
         pass
 
 
+# ── Page 1: System Check ────────────────────────────────────────────────────
+
 class SystemCheckPage(Page):
-    def __init__(self, parent, wizard: "SetupWizard"):
+    def __init__(self, parent: tk.Widget, wizard: "SetupWizard") -> None:
         super().__init__(parent, wizard)
         self._results: dict[str, bool | None] = {
             "Python 3.12": None, "Ollama": None, "Git": None,
         }
-        self._labels: dict[str, ctk.CTkLabel] = {}
+        self._labels: dict[str, tk.Label] = {}
         self._build()
 
     def _build(self) -> None:
-        _label(self, "STEP 1  --  SYSTEM CHECK", size=14, bold=True,
-               color=C_CYAN).pack(pady=(24, 4))
-        _label(self, "Verifying required dependencies before installation.",
-               color=C_MUTED).pack(pady=(0, 16))
+        _lbl(self, "STEP 1  --  SYSTEM CHECK",
+             size=14, bold=True, color=C_CYAN).pack(pady=(24, 4))
+        _lbl(self, "Verifying required dependencies before installation.",
+             color=C_MUTED).pack(pady=(0, 16))
 
-        box = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8)
+        box = tk.Frame(self, bg=C_PANEL, bd=0)
         box.pack(fill="x", padx=24, pady=8)
 
         for name in self._results:
-            self._labels[name] = _check_row(box, name, None)
+            row = tk.Frame(box, bg=C_PANEL)
+            row.pack(fill="x", padx=16, pady=6)
+            _lbl(row, f"  {name}", bg=C_PANEL).pack(side="left")
+            lbl = _lbl(row, "CHECKING...", color=C_MUTED, bg=C_PANEL)
+            lbl.pack(side="right", padx=8)
+            self._labels[name] = lbl
 
-        self._fix_btn = ctk.CTkButton(
-            self, text="FIX MISSING DEPENDENCIES", width=260,
-            font=("Courier New", 12, "bold"),
-            fg_color=C_WARN, hover_color="#CC8800", text_color="#000000",
-            command=self._fix)
+        self._fix_btn = _btn(self, "FIX MISSING DEPENDENCIES",
+                             self._fix, bg=C_WARN, fg="#000000", width=28)
         self._fix_btn.pack(pady=12)
         self._fix_btn.configure(state="disabled")
 
-        self._note = _label(self, "", color=C_MUTED, size=10)
+        self._note = _lbl(self, "", color=C_MUTED, size=10)
         self._note.pack(pady=4)
 
     def on_enter(self) -> None:
+        for name, lbl in self._labels.items():
+            lbl.configure(text="CHECKING...", fg=C_MUTED)
+        self.wizard.set_next_enabled(False)
         threading.Thread(target=self._run_checks, daemon=True).start()
 
     def _run_checks(self) -> None:
@@ -270,22 +270,24 @@ class SystemCheckPage(Page):
             color = C_GREEN if ok else C_DANGER
             text  = "OK" if ok else "MISSING"
             self.after(0, lambda lbl=self._labels[name], t=text, c=color:
-                       lbl.configure(text=t, text_color=c))
+                       lbl.configure(text=t, fg=c))
 
         all_ok = all(checks.values())
-        any_missing = not all_ok
         self.after(0, lambda: self._fix_btn.configure(
-            state="normal" if any_missing else "disabled"))
+            state="disabled" if all_ok else "normal"))
         self.after(0, lambda: self.wizard.set_next_enabled(all_ok))
         if all_ok:
             self.after(0, lambda: self._note.configure(
                 text="All dependencies found. Click NEXT to continue.",
-                text_color=C_GREEN))
+                fg=C_GREEN))
+        else:
+            self.after(0, lambda: self._note.configure(
+                text="Click FIX to auto-install missing tools, or install manually.",
+                fg=C_WARN))
 
     def _fix(self) -> None:
         self._fix_btn.configure(state="disabled", text="Installing...")
-        self._note.configure(text="Installing missing tools via winget...",
-                             text_color=C_WARN)
+        self._note.configure(text="Installing missing tools via winget...", fg=C_WARN)
 
         def _run() -> None:
             if not self._results.get("Ollama"):
@@ -297,12 +299,10 @@ class SystemCheckPage(Page):
                         timeout=120)
                 except Exception:
                     pass
-            # Python 3.12 install if missing
             if not self._results.get("Python 3.12"):
                 try:
                     subprocess.run(
-                        ["winget", "install",
-                         "Python.Python.3.12",
+                        ["winget", "install", "Python.Python.3.12",
                          "--accept-source-agreements",
                          "--accept-package-agreements", "--silent"],
                         timeout=180)
@@ -315,114 +315,120 @@ class SystemCheckPage(Page):
         threading.Thread(target=_run, daemon=True).start()
 
 
+# ── Page 2: Directory Selection ─────────────────────────────────────────────
+
 class DirectoryPage(Page):
-    def __init__(self, parent, wizard: "SetupWizard"):
+    def __init__(self, parent: tk.Widget, wizard: "SetupWizard") -> None:
         super().__init__(parent, wizard)
+        self._3d_var    = tk.StringVar(value="")
+        self._os_var    = tk.StringVar(value="")
+        self._piper_var = tk.StringVar(value=r"C:\piper\piper.exe")
+        self._voice_var = tk.StringVar(
+            value=r"C:\piper\voices\en_US-kristin-medium.onnx")
+        self._wake_var  = tk.StringVar(value="hey_jarvis")
         self._build()
 
     def _build(self) -> None:
-        _label(self, "STEP 2  --  DIRECTORY SELECTION", size=14, bold=True,
-               color=C_CYAN).pack(pady=(24, 4))
-        _label(self, "Choose your knowledge-base source folders.",
-               color=C_MUTED).pack(pady=(0, 16))
+        _lbl(self, "STEP 2  --  DIRECTORY SELECTION",
+             size=14, bold=True, color=C_CYAN).pack(pady=(24, 4))
+        _lbl(self, "Choose your knowledge-base source folders.",
+             color=C_MUTED).pack(pady=(0, 12))
 
-        box = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8)
-        box.pack(fill="x", padx=24, pady=8)
-
-        self._3d_var   = ctk.StringVar(value="")
-        self._os_var   = ctk.StringVar(value="")
-        self._piper_var = ctk.StringVar(value=r"C:\piper\piper.exe")
-        self._voice_var = ctk.StringVar(
-            value=r"C:\piper\voices\en_US-kristin-medium.onnx")
-        self._wake_var  = ctk.StringVar(value="hey_jarvis")
+        box = tk.Frame(self, bg=C_PANEL, bd=0)
+        box.pack(fill="x", padx=24, pady=4)
 
         self._dir_row(box, "Chaotic 3D Folder  (STL / gcode / slicer)",
-                      self._3d_var)
+                      self._3d_var, is_dir=True)
         self._dir_row(box, "Exotic OS Folder   (Python / logs / reptile records)",
-                      self._os_var)
+                      self._os_var, is_dir=True)
 
-        sep = ctk.CTkFrame(box, height=1, fg_color=C_BORDER)
-        sep.pack(fill="x", padx=16, pady=8)
+        tk.Frame(box, height=1, bg=C_BORDER).pack(fill="x", padx=16, pady=8)
 
         self._path_row(box, "Piper binary path", self._piper_var)
         self._path_row(box, "Voice model (.onnx)", self._voice_var)
-        self._path_row(box, "Wake word model",     self._wake_var)
+        self._path_row(box, "Wake word model", self._wake_var)
 
-        _label(self,
-               "Leave 3D / OS folders blank to configure later via SETTINGS.",
-               color=C_MUTED, size=10).pack(pady=(8, 0))
+        _lbl(self,
+             "Leave 3D / OS folders blank to configure later via SETTINGS.",
+             color=C_MUTED, size=10).pack(pady=(8, 0))
 
-    def _dir_row(self, parent, label: str, var: ctk.StringVar) -> None:
-        row = ctk.CTkFrame(parent, fg_color="transparent")
+    def _dir_row(self, parent: tk.Widget, label: str,
+                 var: tk.StringVar, is_dir: bool = False) -> None:
+        row = tk.Frame(parent, bg=C_PANEL)
         row.pack(fill="x", padx=16, pady=4)
-        _label(row, label, size=11).pack(anchor="w")
-        inner = ctk.CTkFrame(row, fg_color="transparent")
+        _lbl(row, label, size=10, bg=C_PANEL).pack(anchor="w")
+        inner = tk.Frame(row, bg=C_PANEL)
         inner.pack(fill="x")
-        ctk.CTkEntry(inner, textvariable=var, fg_color=C_BG,
-                     border_color=C_BORDER, text_color=C_TEXT,
-                     font=("Courier New", 11), height=34).pack(
-            side="left", fill="x", expand=True, padx=(0, 4))
-        ctk.CTkButton(inner, text="BROWSE", width=80, height=34,
-                      font=("Courier New", 10), fg_color=C_BORDER,
-                      hover_color=C_DIM,
-                      command=lambda v=var: v.set(
-                          filedialog.askdirectory() or v.get()
-                      )).pack(side="left")
+        tk.Entry(inner, textvariable=var, bg=C_BG, fg=C_TEXT,
+                 insertbackground=C_CYAN, relief="flat", bd=2,
+                 font=FONT_SMALL).pack(side="left", fill="x",
+                                       expand=True, padx=(0, 4))
+        if is_dir:
+            cmd = lambda v=var: v.set(filedialog.askdirectory() or v.get())
+        else:
+            cmd = lambda v=var: v.set(filedialog.askopenfilename() or v.get())
+        _btn(inner, "BROWSE", cmd, width=8).pack(side="left")
 
-    def _path_row(self, parent, label: str, var: ctk.StringVar) -> None:
-        row = ctk.CTkFrame(parent, fg_color="transparent")
+    def _path_row(self, parent: tk.Widget, label: str,
+                  var: tk.StringVar) -> None:
+        row = tk.Frame(parent, bg=C_PANEL)
         row.pack(fill="x", padx=16, pady=4)
-        _label(row, label, size=11).pack(anchor="w")
-        ctk.CTkEntry(row, textvariable=var, fg_color=C_BG,
-                     border_color=C_BORDER, text_color=C_TEXT,
-                     font=("Courier New", 11), height=34).pack(fill="x")
+        _lbl(row, label, size=10, bg=C_PANEL).pack(anchor="w")
+        tk.Entry(row, textvariable=var, bg=C_BG, fg=C_TEXT,
+                 insertbackground=C_CYAN, relief="flat", bd=2,
+                 font=FONT_SMALL).pack(fill="x")
 
     def get_values(self) -> dict[str, str]:
         return {
-            "chaotic":    self._3d_var.get().strip(),
-            "exotic":     self._os_var.get().strip(),
-            "piper_bin":  self._piper_var.get().strip(),
+            "chaotic":     self._3d_var.get().strip(),
+            "exotic":      self._os_var.get().strip(),
+            "piper_bin":   self._piper_var.get().strip(),
             "piper_voice": self._voice_var.get().strip(),
-            "wakeword":   self._wake_var.get().strip(),
+            "wakeword":    self._wake_var.get().strip(),
         }
 
 
+# ── Page 3: Installing ───────────────────────────────────────────────────────
+
 class InstallPage(Page):
-    def __init__(self, parent, wizard: "SetupWizard"):
+    def __init__(self, parent: tk.Widget, wizard: "SetupWizard") -> None:
         super().__init__(parent, wizard)
         self._q: queue.Queue = queue.Queue()
+        self._polling = False
         self._build()
 
     def _build(self) -> None:
-        _label(self, "STEP 3  --  INSTALLING", size=14, bold=True,
-               color=C_CYAN).pack(pady=(24, 4))
+        _lbl(self, "STEP 3  --  INSTALLING",
+             size=14, bold=True, color=C_CYAN).pack(pady=(24, 4))
 
-        self._status = _label(self, "Ready.", color=C_MUTED)
+        self._status = _lbl(self, "Ready.", color=C_MUTED)
         self._status.pack(pady=(0, 8))
 
-        self._bar = ctk.CTkProgressBar(self, progress_color=C_CYAN,
-                                       fg_color=C_BORDER, height=16)
+        self._bar = ttk.Progressbar(self,
+                                    style="Albedo.Horizontal.TProgressbar",
+                                    mode="determinate", maximum=100)
         self._bar.pack(fill="x", padx=24, pady=(0, 12))
-        self._bar.set(0)
 
-        log_frame = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8)
+        log_frame = tk.Frame(self, bg=C_PANEL, bd=0)
         log_frame.pack(fill="both", expand=True, padx=24, pady=(0, 12))
 
-        self._log = ctk.CTkTextbox(log_frame, font=("Courier New", 10),
-                                   fg_color=C_PANEL, text_color=C_TEXT,
-                                   wrap="word", state="disabled",
-                                   border_width=0)
+        self._log = scrolledtext.ScrolledText(
+            log_frame, bg=C_PANEL, fg=C_TEXT,
+            font=FONT_SMALL, relief="flat", state="disabled",
+            wrap="word", insertbackground=C_CYAN)
         self._log.pack(fill="both", expand=True, padx=4, pady=4)
-        self._log._textbox.tag_config("ok",   foreground=C_GREEN)
-        self._log._textbox.tag_config("err",  foreground=C_DANGER)
-        self._log._textbox.tag_config("info", foreground=C_MUTED)
+        self._log.tag_config("ok",   foreground=C_GREEN)
+        self._log.tag_config("err",  foreground=C_DANGER)
+        self._log.tag_config("info", foreground=C_TEXT)
 
     def on_enter(self) -> None:
         dirs = self.wizard.dir_page.get_values()
         self.wizard.set_next_enabled(False)
-        self._bar.set(0)
+        self._bar["value"] = 0
+        if not self._polling:
+            self._polling = True
+            self.after(50, self._poll)
         threading.Thread(target=self._install, args=(dirs,), daemon=True).start()
-        self.after(50, self._poll)
 
     def _poll(self) -> None:
         try:
@@ -430,28 +436,29 @@ class InstallPage(Page):
                 msg, tag, pct = self._q.get_nowait()
                 self._append(msg, tag)
                 if pct is not None:
-                    self._bar.set(pct)
-                    self._status.configure(text=msg[:60])
+                    self._bar["value"] = pct * 100
+                    if msg.strip():
+                        self._status.configure(text=msg[:60])
         except queue.Empty:
             pass
         self.after(50, self._poll)
 
-    def _push(self, msg: str, tag: str = "info", pct: float | None = None) -> None:
+    def _push(self, msg: str, tag: str = "info",
+              pct: float | None = None) -> None:
         self._q.put((msg, tag, pct))
 
     def _append(self, text: str, tag: str = "info") -> None:
-        tb = self._log._textbox
         self._log.configure(state="normal")
-        tb.insert("end", text.rstrip() + "\n", tag)
+        self._log.insert("end", text.rstrip() + "\n", tag)
         self._log.configure(state="disabled")
-        tb.see("end")
+        self._log.see("end")
 
-    # ── Installation sequence ──────────────────────────────────────────────
+    # ── Installation steps ────────────────────────────────────────────────
 
     def _install(self, dirs: dict[str, str]) -> None:
         try:
             self._step_kill_locked()
-            py312 = self._step_venv()
+            self._step_venv()
             self._step_build_tools()
             self._step_requirements()
             self._step_playwright()
@@ -470,15 +477,14 @@ class InstallPage(Page):
         self._push("Closing any running Albedo windows...", "info", 0.02)
         _kill_locked_processes()
 
-    def _step_venv(self) -> str:
+    def _step_venv(self) -> None:
         self._push("Locating Python 3.12...", "info", 0.05)
         py = _find_python312()
         if py is None:
             raise RuntimeError(
                 "Python 3.12 not found. Install it via winget or python.org "
-                "and re-run this wizard.")
+                "then re-run this wizard.")
         self._push(f"  Found: {py}", "ok")
-
         if VENV.exists():
             self._push("  Existing .venv detected -- reusing.", "info", 0.08)
         else:
@@ -488,7 +494,6 @@ class InstallPage(Page):
             if r.returncode != 0:
                 raise RuntimeError(f"venv creation failed:\n{r.stderr}")
             self._push("  .venv created.", "ok")
-        return py
 
     def _step_build_tools(self) -> None:
         self._push("Upgrading pip / wheel / setuptools...", "info", 0.15)
@@ -551,7 +556,8 @@ class InstallPage(Page):
 
     def _step_ollama(self) -> None:
         self._push("Pulling Ollama model (llama3.2:3b)...", "info", 0.90)
-        self._push("  This may take 5-15 minutes. Do not close this window.", "info")
+        self._push("  This may take 5-15 minutes. Do not close this window.",
+                   "info")
         try:
             proc = subprocess.Popen(
                 ["ollama", "pull", "llama3.2:3b"],
@@ -562,23 +568,26 @@ class InstallPage(Page):
             if proc.returncode == 0:
                 self._push("  Ollama model ready.", "ok", 0.98)
             else:
-                self._push("  Ollama pull returned non-zero (may already be cached).",
-                           "info", 0.98)
+                self._push(
+                    "  Ollama pull returned non-zero (may already be cached).",
+                    "info", 0.98)
         except FileNotFoundError:
-            self._push("  Ollama not on PATH. Run 'ollama pull llama3.2:3b' after install.",
-                       "info", 0.98)
+            self._push(
+                "  Ollama not on PATH. Run 'ollama pull llama3.2:3b' after install.",
+                "info", 0.98)
 
-    def _stream_pip(self, cmd: list[str], end_pct: float | None = None) -> None:
-        """Run a pip command and stream its output to the log."""
+    def _stream_pip(self, cmd: list[str],
+                    end_pct: float | None = None) -> None:
         try:
             proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True)
             for line in proc.stdout:
                 stripped = line.strip()
                 if stripped:
                     self._push(f"  {stripped}", "info")
             proc.wait()
-            if proc.returncode not in (0,):
+            if proc.returncode != 0:
                 self._push(f"  pip exited with code {proc.returncode}", "err")
         except Exception as exc:
             self._push(f"  pip error: {exc}", "err")
@@ -586,43 +595,39 @@ class InstallPage(Page):
             self._push("", "info", end_pct)
 
 
+# ── Page 4: Complete ─────────────────────────────────────────────────────────
+
 class CompletePage(Page):
-    def __init__(self, parent, wizard: "SetupWizard"):
+    def __init__(self, parent: tk.Widget, wizard: "SetupWizard") -> None:
         super().__init__(parent, wizard)
-        self._success_frame: ctk.CTkFrame | None = None
-        self._fail_frame: ctk.CTkFrame | None = None
+        self._success_frame: tk.Frame | None = None
+        self._fail_frame: tk.Frame | None = None
         self._build()
 
     def _build(self) -> None:
-        self._success_frame = ctk.CTkFrame(self, fg_color="transparent")
-        _label(self._success_frame, "INSTALLATION COMPLETE", size=16,
-               bold=True, color=C_GREEN).pack(pady=(40, 12))
-        _label(self._success_frame,
-               "Albedo Mission Control is ready.\n"
-               "Double-click the Albedo shortcut on your Desktop to launch.",
-               color=C_TEXT).pack(pady=8)
-        ctk.CTkButton(self._success_frame, text="LAUNCH ALBEDO NOW",
-                      width=220, font=("Courier New", 13, "bold"),
-                      fg_color=C_GREEN, hover_color="#009944",
-                      text_color="#000000",
-                      command=self._launch).pack(pady=16)
-        ctk.CTkButton(self._success_frame, text="Exit", width=100,
-                      font=("Courier New", 11), fg_color=C_BORDER,
-                      command=self.wizard.destroy).pack()
+        self._success_frame = tk.Frame(self, bg=C_BG)
+        _lbl(self._success_frame, "INSTALLATION COMPLETE",
+             size=16, bold=True, color=C_GREEN).pack(pady=(40, 12))
+        _lbl(self._success_frame,
+             "Albedo Mission Control is ready.\n"
+             "Double-click the Albedo shortcut on your Desktop to launch.",
+             color=C_TEXT, justify="center").pack(pady=8)
+        _btn(self._success_frame, "LAUNCH ALBEDO NOW",
+             self._launch, bg=C_GREEN, fg="#000000", width=20).pack(pady=16)
+        _btn(self._success_frame, "Exit",
+             self.wizard.destroy, width=10).pack()
 
-        self._fail_frame = ctk.CTkFrame(self, fg_color="transparent")
-        _label(self._fail_frame, "INSTALLATION FAILED", size=16,
-               bold=True, color=C_DANGER).pack(pady=(40, 12))
-        _label(self._fail_frame,
-               "Review the log on the previous page for details.\n"
-               "Common fixes: run as Administrator, ensure winget is available.",
-               color=C_TEXT).pack(pady=8)
-        ctk.CTkButton(self._fail_frame, text="Back", width=100,
-                      font=("Courier New", 11), fg_color=C_BORDER,
-                      command=lambda: self.wizard.go_page(2)).pack(pady=12)
-        ctk.CTkButton(self._fail_frame, text="Exit", width=100,
-                      font=("Courier New", 11), fg_color=C_BORDER,
-                      command=self.wizard.destroy).pack()
+        self._fail_frame = tk.Frame(self, bg=C_BG)
+        _lbl(self._fail_frame, "INSTALLATION FAILED",
+             size=16, bold=True, color=C_DANGER).pack(pady=(40, 12))
+        _lbl(self._fail_frame,
+             "Review the log on the previous page for details.\n"
+             "Common fixes: run as Administrator, ensure winget is available.",
+             color=C_TEXT, justify="center").pack(pady=8)
+        _btn(self._fail_frame, "Back",
+             lambda: self.wizard.go_page(2), width=10).pack(pady=12)
+        _btn(self._fail_frame, "Exit",
+             self.wizard.destroy, width=10).pack()
 
     def show(self, success: bool) -> None:
         if success:
@@ -643,31 +648,56 @@ class CompletePage(Page):
         self.wizard.destroy()
 
 
-# ── Wizard shell ───────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Wizard shell
+# ---------------------------------------------------------------------------
 
-class SetupWizard(ctk.CTk):
+class SetupWizard(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ALBEDO  //  SETUP WIZARD")
-        self.geometry("680x620")
+        self.geometry("680x640")
         self.resizable(False, False)
-        self.configure(fg_color=C_BG)
+        self.configure(bg=C_BG)
+
+        # Progress bar dark style (must be configured after Tk.__init__)
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("Albedo.Horizontal.TProgressbar",
+                        troughcolor=C_BORDER, background=C_CYAN,
+                        thickness=16, borderwidth=0)
 
         self._page_idx = 0
         self._build_ui()
 
     def _build_ui(self) -> None:
-        # Header
-        hdr = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=58)
+        # Header bar
+        hdr = tk.Frame(self, bg=C_PANEL, height=58)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
-        _label(hdr, "ALBEDO  //  SETUP WIZARD", size=17, bold=True,
-               color=C_CYAN).pack(side="left", padx=20, pady=12)
-        self._step_lbl = _label(hdr, "1 / 4", color=C_MUTED, size=11)
+        tk.Label(hdr, text="ALBEDO  //  SETUP WIZARD",
+                 fg=C_CYAN, bg=C_PANEL,
+                 font=FONT_HEADER).pack(side="left", padx=20, pady=12)
+        self._step_lbl = tk.Label(hdr, text="1 / 4",
+                                   fg=C_MUTED, bg=C_PANEL, font=FONT_MONO)
         self._step_lbl.pack(side="right", padx=20)
 
+        # Navigation bar (packed before content so it anchors to the bottom)
+        nav = tk.Frame(self, bg=C_PANEL, height=54)
+        nav.pack(fill="x", side="bottom")
+        nav.pack_propagate(False)
+
+        self._cancel_btn = _btn(nav, "Cancel", self.destroy, width=8)
+        self._cancel_btn.pack(side="left", padx=12, pady=10)
+
+        self._back_btn = _btn(nav, "< Back", self._back, width=8)
+        self._back_btn.pack(side="left", padx=4, pady=10)
+
+        self._next_btn = _btn(nav, "Next >", self._next, width=12)
+        self._next_btn.pack(side="right", padx=12, pady=10)
+
         # Content area
-        self._content = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0)
+        self._content = tk.Frame(self, bg=C_BG)
         self._content.pack(fill="both", expand=True)
 
         # Build pages
@@ -677,28 +707,6 @@ class SetupWizard(ctk.CTk):
         self.complete_page = CompletePage(self._content, self)
         self._pages = [self.check_page, self.dir_page,
                        self.install_page, self.complete_page]
-
-        # Nav bar
-        nav = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=54)
-        nav.pack(fill="x", side="bottom")
-        nav.pack_propagate(False)
-
-        self._cancel_btn = ctk.CTkButton(nav, text="Cancel", width=90,
-                                         font=("Courier New", 11),
-                                         fg_color=C_BORDER, hover_color=C_DANGER,
-                                         command=self.destroy)
-        self._cancel_btn.pack(side="left", padx=12, pady=10)
-
-        self._back_btn = ctk.CTkButton(nav, text="< Back", width=90,
-                                       font=("Courier New", 11),
-                                       fg_color=C_BORDER, hover_color=C_DIM,
-                                       command=self._back)
-        self._back_btn.pack(side="left", padx=4, pady=10)
-
-        self._next_btn = ctk.CTkButton(nav, text="Next >", width=120,
-                                       font=("Courier New", 12, "bold"),
-                                       command=self._next)
-        self._next_btn.pack(side="right", padx=12, pady=10)
 
         self._show_page(0)
 
@@ -712,7 +720,9 @@ class SetupWizard(ctk.CTk):
         self._step_lbl.configure(text=f"{idx + 1} / 4")
         self._back_btn.configure(state="normal" if idx > 0 else "disabled")
         if idx == 2:
+            # Lock navigation while installing
             self._next_btn.configure(text="Installing...", state="disabled")
+            self._back_btn.configure(state="disabled")
         elif idx == 3:
             self._next_btn.configure(state="disabled")
             self._cancel_btn.configure(state="disabled")
@@ -738,7 +748,9 @@ class SetupWizard(ctk.CTk):
         self.complete_page.show(success)
 
 
-# ── Entry point ────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
     app = SetupWizard()

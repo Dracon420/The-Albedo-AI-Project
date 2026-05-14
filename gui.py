@@ -24,8 +24,20 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 
-import customtkinter as ctk
-from PIL import Image, ImageTk
+try:
+    import customtkinter as ctk
+    from PIL import Image, ImageTk
+except ImportError as _import_err:
+    import tkinter.messagebox as _mb
+    _mb.showerror(
+        "Albedo -- Missing Packages",
+        "Required packages are not installed in the virtual environment.\n\n"
+        f"Missing: {_import_err.name}\n\n"
+        "Run setup_utility.py to complete the installation:\n"
+        "  py -3.12 setup_utility.py\n\n"
+        "Or re-run the Albedo Setup Wizard from the Start Menu."
+    )
+    raise SystemExit(1)
 
 ROOT = Path(__file__).parent
 
