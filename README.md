@@ -14,7 +14,7 @@ Albedo is a fully local AI assistant. No cloud. No API keys. No subscription. It
 
 <div align="center">
 
-### [⬇ Download Albedo-Setup.exe](https://github.com/Dracon420/Albedo-Local-AI/raw/main/Albedo-Setup.exe)
+### [⬇ Download Albedo-Setup.exe](https://github.com/Dracon420/Albedo-Local-AI/raw/master/Albedo-Setup.exe)
 
 </div>
 
