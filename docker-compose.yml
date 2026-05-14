@@ -1,0 +1,97 @@
+services:
+
+  # ── Ollama — LLM inference ────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: albedo-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=24h       # keep model hot between queries
+      - OLLAMA_NUM_PARALLEL=1       # single-stream for RTX 2060 VRAM safety
+    # GPU passthrough — requires NVIDIA Container Toolkit on the host.
+    # Install guide: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── ChromaDB — vector store ───────────────────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: albedo-chromadb
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chroma_db:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Albedo — assistant core ───────────────────────────────────────────────
+  albedo:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: albedo-core
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      # Override .env URLs to use Docker service names instead of localhost
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHROMA_DB_PATH=/app/chroma_db
+    volumes:
+      - ./chroma_db:/app/chroma_db
+      # Mount knowledge base directories — set these to match your .env paths.
+      # Uncomment and edit the lines below:
+      # - C:\Chaotic 3D:/mnt/chaotic_3d:ro
+      # - C:\Exotic OS:/mnt/exotic_os:ro
+    stdin_open: true
+    tty: true
+    command: python main.py
+
+  # ── High-spec profile override ─────────────────────────────────────────────
+  # Uncomment the 'albedo-highspec' service and comment out 'albedo' above
+  # when running on RTX 3080+ / 32 GB RAM.
+  #
+  # albedo-highspec:
+  #   extends:
+  #     service: albedo
+  #   container_name: albedo-highspec
+  #   environment:
+  #     - OLLAMA_BASE_URL=http://ollama:11434
+  #     - CHROMA_DB_PATH=/app/chroma_db
+  #     - WHISPER_MODEL_SIZE=medium
+  #     - WHISPER_COMPUTE_TYPE=float16
+  #     - OLLAMA_MODEL=mixtral
+  #     - RAG_TOP_K=10
+  #     - WEB_SEARCH_MAX_RESULTS=10
+  #     - VAD_SILENCE_DURATION=2.0
+
+volumes:
+  ollama_models:
+    driver: local
