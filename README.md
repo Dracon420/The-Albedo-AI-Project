@@ -8,6 +8,31 @@ This document is the complete operational field manual. Read each phase before e
 
 ---
 
+## Phase 0 — Acquiring the Core
+
+Download the Albedo repository to your machine before running anything else.
+
+**Step 1.** Open **Windows PowerShell** (no admin required for this step).
+
+**Step 2.** Navigate to where you want the project to live — the Desktop is recommended:
+
+```powershell
+cd "$env:USERPROFILE\Desktop"
+```
+
+**Step 3.** Clone the repository and enter the project directory:
+
+```powershell
+git clone https://github.com/Dracon420/Albedo-Local-AI.git
+cd Albedo-Local-AI
+```
+
+> If `git` is not recognised, install it from [git-scm.com/download/win](https://git-scm.com/download/win) and reopen the terminal.
+
+You now have the full project at `Desktop\Albedo-Local-AI`. All subsequent commands are run from inside this folder.
+
+---
+
 ## Phase 1 — Pre-Flight: Authorization
 
 The installer is a PowerShell script. Windows blocks unsigned scripts by default. You must unlock execution rights for the current terminal session before anything else.
@@ -275,6 +300,18 @@ You: what was the last recorded temperature for enclosure 2?
 ```
 
 If results are empty, confirm the paths in `.env` are correct and re-run `--index`.
+
+### 6.4 Troubleshooting: indexing appears stalled
+
+If `python main.py --index` appears to hang with low CPU and GPU usage, the indexer is not frozen — it is parsing large binary-adjacent or configuration files (dense gcode, large JSON exports, multi-thousand-line logs) that are slow to tokenise and embed.
+
+**What to check:**
+
+- Close any running 3D slicer applications (PrusaSlicer, Bambu Studio, Cura, etc.). Slicers aggressively hold file handles and saturate disk I/O, which directly starves the indexer's read throughput.
+- Check Task Manager → Performance → Disk. If disk utilisation is near 100%, another process is competing for I/O. Wait for it to settle, or pause it before indexing.
+- Very large individual files (gcode over 50 MB, logs over 10 MB) are skipped by default per the `INDEXER_MAX_FILE_BYTES` limit in `.env`. This is intentional — oversized files degrade retrieval precision without adding useful context.
+
+The indexer will resume printing batch progress as soon as the current file completes. Give it at least 60 seconds before concluding it has stalled.
 
 ---
 
