@@ -41,6 +41,11 @@ def _get_model() -> WhisperModel:
     return _model
 
 
+def prewarm() -> None:
+    """Load the Whisper model now so the first MIC press is instant."""
+    _get_model()
+
+
 def transcribe(audio: np.ndarray) -> str:
     """
     Transcribe a float32 numpy array (16 kHz mono) to text.

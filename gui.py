@@ -326,11 +326,15 @@ class AlbedoGUI(ctk.CTk):
         self._pulse_phase  = 0.0
         self._icon_photo   = None   # ImageTk ref kept alive
         self._settings     = _load_settings()
+        self._scan_btn     = None   # set by _build_ui
 
         self._build_ui()
         self._start_queue_poll()
         self._animate()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Pre-warm Whisper in background so first MIC press is instant
+        threading.Thread(target=self._prewarm_whisper, daemon=True).start()
 
     # ── UI construction ────────────────────────────────────────────────────
 
@@ -379,6 +383,12 @@ class AlbedoGUI(ctk.CTk):
                                       fg_color=C_BORDER, hover_color=C_CYAN_DIM,
                                       command=self._handle_mic)
         self._mic_btn.pack(side="left", padx=(10, 4), pady=10)
+
+        self._scan_btn = ctk.CTkButton(row, text="SCAN", width=62, height=44,
+                                       font=("Courier New", 11, "bold"),
+                                       fg_color=C_BORDER, hover_color=C_PURPLE,
+                                       command=self._handle_scan)
+        self._scan_btn.pack(side="left", padx=(0, 4), pady=10)
 
         self._entry = ctk.CTkEntry(row,
                                    placeholder_text="Type a query or press MIC...",
@@ -463,8 +473,11 @@ class AlbedoGUI(ctk.CTk):
         self._state = state
         self._state_chip.configure(text=_STATE_LABEL[state])
         busy = state in ("processing", "speaking")
+        locked = busy or state == "listening"
 
         self._send_btn.configure(state="disabled" if busy else "normal")
+        if self._scan_btn:
+            self._scan_btn.configure(state="disabled" if locked else "normal")
 
         if state == "listening":
             self._mic_btn.configure(text="STOP", state="normal",
@@ -643,6 +656,68 @@ class AlbedoGUI(ctk.CTk):
             msg = str(exc)
             self._ui(lambda: self._log_append("error", msg))
 
+        finally:
+            self._ui(lambda: self._set_state("standby"))
+
+    # ── Whisper pre-warming ────────────────────────────────────────────────
+
+    def _prewarm_whisper(self) -> None:
+        """Load WhisperModel on a background thread at startup.
+        The first MIC press is instant because the model is already resident."""
+        try:
+            self._ui(lambda: self._log_append(
+                "system", "Loading Whisper STT model in background..."))
+            from albedo.audio.stt import prewarm
+            prewarm()
+            self._ui(lambda: self._log_append("system", "Whisper ready."))
+        except Exception as exc:
+            self._ui(lambda: self._log_append(
+                "system", f"Whisper pre-warm failed (will retry on first MIC press): {exc}"))
+
+    # ── Visual scan ────────────────────────────────────────────────────────
+
+    def _handle_scan(self) -> None:
+        if self._state != "standby":
+            return
+        self._set_state("processing")
+        threading.Thread(target=self._run_scan, daemon=True).start()
+
+    def _run_scan(self) -> None:
+        try:
+            from albedo.vision import capture_vision, vision_query
+
+            self._ui(lambda: self._state_chip.configure(text="CAPTURING..."))
+            frame = capture_vision(device=0)
+            if frame is None:
+                self._ui(lambda: self._log_append(
+                    "error",
+                    "Visual Scan: could not open webcam.  "
+                    "Check that the camera is connected and not in use."))
+                return
+
+            self._ui(lambda: self._state_chip.configure(text="ANALYZING..."))
+            result = vision_query(frame)
+
+            if not result or not result.strip():
+                result = (
+                    "[Albedo] No visual analysis returned.  "
+                    "Is moondream pulled?  Run: ollama pull moondream"
+                )
+
+            resp = result
+            self._ui(lambda: self._log_append("albedo", resp))
+            self._ui(lambda: self._set_state("speaking"))
+
+            try:
+                from albedo.audio.tts import speak
+                out_dev = self._settings.get("audio_output_device")
+                speak(result, device=out_dev)
+            except Exception as tts_err:
+                print(f"[gui] TTS error: {tts_err}")
+
+        except Exception as exc:
+            msg = str(exc)
+            self._ui(lambda: self._log_append("error", f"Visual Scan error: {msg}"))
         finally:
             self._ui(lambda: self._set_state("standby"))
 

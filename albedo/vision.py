@@ -1,16 +1,19 @@
 """
-albedo/vision.py  --  Webcam capture groundwork for moondream vision inference.
+albedo/vision.py  --  Webcam capture and moondream visual analysis.
 
-capture_vision() snaps a single frame from the webcam and returns it as an
-RGB uint8 numpy array ready to pass directly to the moondream model.
+capture_vision() snaps one webcam frame and returns it as an RGB numpy array.
+vision_query()   sends that frame to Ollama moondream and returns the analysis.
 
 Usage:
-    from albedo.vision import capture_vision
-    frame = capture_vision()          # default camera
-    frame = capture_vision(device=1)  # second camera (e.g. USB webcam)
+    from albedo.vision import capture_vision, vision_query
+    frame  = capture_vision()
+    result = vision_query(frame, "What do you see?")
+
+Requires: opencv-python, httpx, ollama pull moondream
 """
 from __future__ import annotations
 
+import base64
 import numpy as np
 
 
@@ -48,3 +51,60 @@ def capture_vision(device: int = 0) -> np.ndarray | None:
 
     # OpenCV returns BGR; moondream and PIL expect RGB.
     return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+
+def vision_query(
+    frame: np.ndarray,
+    prompt: str = "Describe in detail everything you see in this image.",
+) -> str:
+    """
+    Send an RGB frame to Ollama moondream for visual analysis.
+
+    Args:
+        frame:  HxWx3 uint8 RGB array from capture_vision().
+        prompt: Natural-language instruction for moondream.
+
+    Returns:
+        Model response string. Returns an error message instead of raising
+        so callers can display it directly in the chat log.
+
+    Prerequisite: ollama pull moondream
+    """
+    try:
+        import cv2
+        import httpx
+        from albedo.config import OLLAMA_BASE_URL
+
+        # Encode RGB frame as JPEG bytes then base64
+        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+        ok, buf = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        if not ok:
+            return "[vision] JPEG encode failed."
+        img_b64 = base64.b64encode(buf.tobytes()).decode("ascii")
+
+        payload = {
+            "model": "moondream",
+            "messages": [
+                {
+                    "role": "user",
+                    "content": prompt,
+                    "images": [img_b64],
+                }
+            ],
+            "stream": False,
+        }
+        resp = httpx.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload,
+            timeout=60.0,
+        )
+        resp.raise_for_status()
+        return resp.json()["message"]["content"].strip()
+
+    except httpx.ConnectError:
+        return "[vision] Ollama is not running. Start it with: ollama serve"
+    except Exception as exc:
+        return (
+            f"[vision] Error: {exc}\n"
+            "Is moondream pulled? Run: ollama pull moondream"
+        )
