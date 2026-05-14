@@ -489,7 +489,7 @@ Write-Host "  Leave blank to use console fallback until Piper is installed."
 Write-Host ""
 
 $piperBinary = Ask-Path "  piper.exe path" "C:\piper\piper.exe"
-$piperVoice  = Ask-Path "  Voice .onnx path" "C:\piper\voices\en_US-ryan-high.onnx"
+$piperVoice  = Ask-Path "  Voice .onnx path" "C:\piper\voices\en_US-kristin-medium.onnx"
 
 # ============================================================================
 # Step 11 -- Wake word model
