@@ -120,10 +120,12 @@ Write-Host "  ┌─────────────────────
 Write-Host "  │            HARDWARE TIER SELECTION              │" -ForegroundColor Magenta
 Write-Host "  │                                                 │" -ForegroundColor Magenta
 Write-Host "  │  [1] STANDARD  — RTX 2060 6 GB / 16 GB RAM     │" -ForegroundColor Magenta
-Write-Host "  │      Whisper small  · int8_float16 · mistral    │" -ForegroundColor Magenta
+Write-Host "  │      Whisper small · int8_float16               │" -ForegroundColor Magenta
+Write-Host "  │      LLM: llama3.2:3b                           │" -ForegroundColor Magenta
 Write-Host "  │                                                 │" -ForegroundColor Magenta
-Write-Host "  │  [2] HIGH-SPEC — RTX 3080+ / 32 GB RAM+        │" -ForegroundColor Magenta
-Write-Host "  │      Whisper medium · float16 · mixtral         │" -ForegroundColor Magenta
+Write-Host "  │  [2] HIGH-SPEC — RTX 3080+ / 8 GB+ VRAM        │" -ForegroundColor Magenta
+Write-Host "  │      Whisper medium · float16                   │" -ForegroundColor Magenta
+Write-Host "  │      LLM: llama3.1:8b                           │" -ForegroundColor Magenta
 Write-Host "  └─────────────────────────────────────────────────┘" -ForegroundColor Magenta
 Write-Host ""
 
@@ -136,7 +138,7 @@ $highSpec = ($tierInput -eq "2")
 if ($highSpec) {
     $whisperModel   = "medium"
     $whisperCompute = "float16"
-    $ollamaModel    = "mixtral"
+    $ollamaModel    = "llama3.1:8b"
     $ragTopK        = "10"
     $webMaxResults  = "10"
     $vadSilence     = "2.0"
@@ -144,7 +146,7 @@ if ($highSpec) {
 } else {
     $whisperModel   = "small"
     $whisperCompute = "int8_float16"
-    $ollamaModel    = "mistral"
+    $ollamaModel    = "llama3.2:3b"
     $ragTopK        = "5"
     $webMaxResults  = "5"
     $vadSilence     = "1.5"

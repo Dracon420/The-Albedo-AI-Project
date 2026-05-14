@@ -1,231 +1,242 @@
 # ALBEDO: Spartan-Class Local Assistant
 
-> **Classification:** Personal AI — Hybrid RAG Architecture  
-> **Wake Word:** `Cortana`  
-> **Ecosystem:** Exotic OS · Chaotic 3D Solutions  
-> **Status:** Active Development
+> **Wake Word:** `Cortana` · **Architecture:** Hybrid RAG · **Ecosystem:** Exotic OS · Chaotic 3D Solutions
+
+Albedo is a fully local AI assistant. No cloud. No API keys. No subscription.  
+It fuses a persistent local knowledge base (ChromaDB) with live web search, runs on your GPU via Ollama, and takes direct command of your Windows desktop through Open Interpreter. Say *Cortana* — it answers.
 
 ---
 
-## Tactical Overview
+## Phase 1 — Pre-Flight Checklist
 
-**Albedo** is a fully local, privacy-first AI assistant built for operators who need real answers — not cloud guesses. It fuses two intelligence streams: a persistent local knowledge base (ChromaDB) and live web reconnaissance (DuckDuckGo), then routes every query through a tiered pipeline before a single word is spoken.
+### 1.1 Enable Virtualization in BIOS
 
-Albedo is not a chatbot. It is a **Spartan-Class command interface** with direct access to your Windows desktop, your 3D printing workflow, and your system telemetry. When you say *Cortana*, it listens. When it doesn't know something for certain, it runs the **Verify Protocol** — cross-referencing local data against live web sources before delivering a diagnosis.
+Docker Desktop requires hardware virtualization to be active. Reboot into your BIOS and enable the relevant setting for your platform:
 
-No API keys. No telemetry. No subscription. Runs on your hardware, on your terms.
-
----
-
-## Key Features
-
-| Capability | Detail |
-|---|---|
-| **Bridge Control** | Open Interpreter runs OS-level commands, writes and executes code, opens applications, and manages files directly on your Windows desktop |
-| **Wake Word: "Cortana"** | OpenWakeWord listens passively on your mic. Drop a custom-trained `.onnx` model in `models/` to replace the placeholder |
-| **Hybrid RAG** | Every query hits ChromaDB (local) and optionally DuckDuckGo (web) before reaching the LLM — two sources, one answer |
-| **Verify Protocol** | Hardware diagnostic queries automatically trigger a dual-source cross-reference: Exotic OS telemetry + live web data, with explicit conflict reporting |
-| **Faster-Whisper STT** | CUDA-accelerated transcription at `int8_float16` precision — keeps Whisper under 0.5 GB VRAM alongside Ollama |
-| **Piper TTS** | Low-latency local voice synthesis via the Piper binary — zero cloud dependency, CPU-only so it never touches your VRAM budget |
-| **Offline-Capable** | Web search is additive. Albedo runs fully offline; the web layer activates only when you ask or when Verify fires |
-
----
-
-## Hardware Specifications
-
-| Component | Baseline (Current) | High-Spec (Upgrade Path) |
+| Platform | Setting Name | Common Location |
 |---|---|---|
-| **CPU** | AMD Ryzen 5 3600 | Ryzen 9 7900X or equivalent |
-| **RAM** | 16 GB DDR4 | 32 GB DDR5 |
-| **GPU** | NVIDIA RTX 2060 6 GB | NVIDIA RTX 3080+ 10 GB+ |
-| **OS** | Windows 11 Home | Windows 11 Pro |
-| **Whisper Model** | `small` · `int8_float16` | `medium` · `float16` |
-| **LLM (Ollama)** | `mistral` Q4 (~4 GB VRAM) | `mixtral` or `llama3:70b` |
-| **RAG top-k** | 5 chunks | 10 chunks |
+| **AMD** | SVM Mode | Advanced → CPU Configuration |
+| **Intel** | Intel Virtualization Technology (VT-x) | Advanced → CPU Configuration |
 
-> **VRAM budget on RTX 2060:** Ollama `mistral` Q4 ≈ 4.0 GB + Whisper `small` int8_float16 ≈ 0.5 GB = **~4.5 GB** — 1.5 GB headroom for ChromaDB ONNX inference.
+Save and reboot. If virtualization is already enabled, skip this step.
 
-Switch profiles by selecting tier `[2]` during `install.ps1`, or manually set the variables in `.env`. The `docker-compose.yml` includes a commented high-spec service block ready to uncomment.
+### 1.2 Install Docker Desktop for Windows
 
----
+Docker hosts the Ollama LLM engine and ChromaDB vector store as isolated, GPU-passthrough services.
 
-## Quick Start
+**Download:** [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)
 
-### Prerequisites
-
-- Python 3.10 or higher
-- [Ollama](https://ollama.com) installed and running (`ollama serve`)
-- [NVIDIA drivers](https://www.nvidia.com/drivers) up to date (536.40+ recommended for RTX 2060)
-- A microphone connected (for voice mode)
-
-### 1 — Clone the repository
+After installation, open Docker Desktop, go to **Settings → Resources → WSL Integration** and enable it for your default distro. Confirm Docker is running:
 
 ```powershell
-git clone https://github.com/Dracon420/Albedo-Local-AI.git
-cd Albedo-Local-AI
+docker --version
+docker compose version
 ```
 
-### 2 — Run the installer
+### 1.3 Verify NVIDIA Drivers
+
+GPU passthrough requires up-to-date drivers and the NVIDIA Container Toolkit (installed automatically with Docker Desktop on Windows via WSL2).
+
+Check your current driver version:
+
+```powershell
+nvidia-smi
+```
+
+Minimum recommended: **536.40** for RTX 2060. If your version is lower, update via [nvidia.com/drivers](https://www.nvidia.com/drivers).
+
+The output should show your GPU, driver version, and CUDA version. If `nvidia-smi` is not found, your drivers are not correctly installed.
+
+---
+
+## Phase 2 — Authorization
+
+Albedo's installer requires elevated execution rights in PowerShell. This is a one-time, process-scoped unlock — it does not permanently alter your system policy.
+
+**Step 1.** Right-click the Start menu and select **"Terminal (Admin)"** or **"Windows PowerShell (Admin)"**.
+
+**Step 2.** Paste the following command and press Enter:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process
+```
+
+> `-Scope Process` limits this bypass to the current terminal session only. It expires the moment you close the window. Do not use `-Scope Machine` or `-Scope CurrentUser`.
+
+---
+
+## Phase 3 — Deployment
+
+### 3.1 Navigate to the Albedo folder
+
+```powershell
+cd "C:\Users\YourName\Desktop\Local Cortana AI"
+```
+
+Replace the path with wherever you cloned or extracted the repository.
+
+### 3.2 Execute the installer
 
 ```powershell
 .\install.ps1
 ```
 
-The installer will:
-1. Create a Python virtual environment (`.venv`)
-2. Install all dependencies including Playwright Chromium for web scraping
-3. Pre-cache OpenWakeWord models
-4. Ask you to select a **hardware tier** (Standard / High-Spec)
-5. Prompt for your local directory paths and Piper TTS location
-6. Write a configured `.env` file
-7. Optionally run the initial ChromaDB index before exiting
+The script runs the following sequence automatically — no manual steps required:
 
-### 3 — Pull your Ollama model
+1. **Checks** Python 3.10+ and creates an isolated `.venv` virtual environment
+2. **Installs** all Python dependencies: ChromaDB, Faster-Whisper, Playwright, DuckDuckGo search, and the full audio stack
+3. **Downloads the Cortana wake word model** via OpenWakeWord — the base acoustic model that listens for your trigger phrase
+4. **Installs Playwright Chromium** — gives Open Interpreter a real browser for deep web scraping alongside standard search
+5. **Prompts for your hardware tier** (Standard / High-Spec) and writes a tuned `.env` to match
+6. **Prompts for your local directory paths** — Chaotic 3D and Exotic OS folders
+7. **Generates `.env`** with all settings pre-configured
+8. **Optionally runs** the initial ChromaDB index before exiting
 
-```powershell
-ollama pull mistral        # standard tier
-# or
-ollama pull mixtral        # high-spec tier
-```
+### 3.3 Pull the Ollama model
 
-### 4 — Launch Albedo
+After the installer completes, pull Albedo's default reasoning model:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
-
-python main.py              # text chat
-python main.py --voice      # wake word + Piper TTS voice mode
-python main.py --index      # re-index knowledge base
-python main.py --web "query"  # one-shot query with web search forced on
+ollama pull llama3.2:3b
 ```
 
-> **Voice mode note:** Piper TTS requires the binary and a voice model downloaded separately.  
-> Binary: [github.com/rhasspy/piper/releases](https://github.com/rhasspy/piper/releases)  
-> Voice: [huggingface.co/rhasspy/piper-voices](https://huggingface.co/rhasspy/piper-voices) — `en_US-ryan-high.onnx` recommended.  
-> Set `PIPER_BINARY` and `PIPER_VOICE_MODEL` in `.env`. Until configured, TTS prints to console — nothing breaks.
-
-### Docker (optional)
+Then confirm Ollama can see your GPU:
 
 ```powershell
-docker compose up
+ollama run llama3.2:3b "respond with: ONLINE"
 ```
-
-Requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) for GPU passthrough. Ollama and ChromaDB spin up as health-checked services; Albedo waits for both before starting.
 
 ---
 
-## Mission Parameters — Configuring Local Knowledge
+## Phase 4 — High-Spec Calibration
 
-Albedo's local RAG is split into two domain collections in ChromaDB. Point each one at your directories, then index.
+> **Applies to:** RTX 3080 / 3090 / 4080 / 4090 or any GPU with **8 GB+ VRAM**
 
-### Chaotic 3D Solutions
+The default model (`llama3.2:3b`) is tuned for the RTX 2060's 6 GB VRAM ceiling. If you have headroom to spare, swap Albedo's reasoning core to a larger model for significantly improved instruction-following, code generation, and synthesis quality.
 
-Set `CHAOTIC_3D_PATH` in `.env` to your 3D printing directory:
+### 4.1 Pull the upgraded model
+
+```powershell
+ollama pull llama3.1:8b
+```
+
+### 4.2 Edit `.env`
+
+Open `.env` in any text editor and change the model line:
 
 ```env
+# Default (RTX 2060 / 6 GB VRAM)
+OLLAMA_MODEL=llama3.2:3b
+
+# High-Spec (RTX 3080+ / 8 GB+ VRAM) — replace the line above with:
+OLLAMA_MODEL=llama3.1:8b
+```
+
+### 4.3 Raise Whisper precision (optional)
+
+While in `.env`, also upgrade Faster-Whisper for sharper transcription if VRAM allows:
+
+```env
+# Default
+WHISPER_MODEL_SIZE=small
+WHISPER_COMPUTE_TYPE=int8_float16
+
+# High-Spec
+WHISPER_MODEL_SIZE=medium
+WHISPER_COMPUTE_TYPE=float16
+```
+
+### 4.4 Raise RAG retrieval depth (optional)
+
+```env
+# Default
+RAG_TOP_K=5
+
+# High-Spec
+RAG_TOP_K=10
+```
+
+Save the file. No reinstall needed — settings are read at runtime.
+
+---
+
+## Phase 5 — RAG Initialization
+
+Albedo's local knowledge base is built from your own files. The more you give it, the sharper its answers. Two collections are indexed independently.
+
+### 5.1 Configure your directories
+
+Open `.env` and set both paths to match your actual folder locations:
+
+```env
+# Your 3D printing files: gcode, slicer configs, print profiles, material notes
 CHAOTIC_3D_PATH=D:\Chaotic 3D
-```
 
-Albedo indexes the following file types from this path:
-
-```
-.gcode  .cfg  .ini  .json  .txt  .md  .xml
-```
-
-This covers slicer configuration files (PrusaSlicer, Bambu Studio, Cura), print profiles, material settings, and any notes you keep alongside your models. STL binaries are skipped — index your gcode and config exports instead.
-
-### Exotic OS — Herpetology Logs & System Telemetry
-
-Set `EXOTIC_OS_PATH` in `.env` to your Exotic OS working directory:
-
-```env
+# Your Exotic OS directory: Python code, reptile husbandry logs, system telemetry
 EXOTIC_OS_PATH=D:\Exotic OS
 ```
 
-Albedo indexes:
+**What Albedo indexes:**
 
-```
-.py  .sh  .txt  .md  .log  .json  .yaml  .yml  .toml
-```
+| Collection | File Types |
+|---|---|
+| Chaotic 3D | `.gcode` `.cfg` `.ini` `.json` `.txt` `.md` `.xml` |
+| Exotic OS | `.py` `.sh` `.log` `.txt` `.md` `.json` `.yaml` `.toml` |
 
-This is where Albedo learns your system. Store your reptile husbandry records here — enclosure logs, temperature and humidity schedules, feeding records, vet notes — alongside any Python code, diagnostic output, or system logs from your Exotic OS builds. Albedo treats all of it as searchable context.
+For herpetology specifically — store feeding records, enclosure temperature and humidity logs, vet notes, and husbandry schedules as plain `.txt` or `.md` files inside `EXOTIC_OS_PATH`. Albedo will embed them into ChromaDB and retrieve relevant passages when you ask questions about your animals.
 
-### Running or re-running the index
+### 5.2 Run the indexer
 
 ```powershell
 python main.py --index
 ```
 
-The indexer is incremental — it skips files already in ChromaDB and only processes new or previously unseen content. Run it any time you add files to either directory. Progress is printed per-batch; memory usage is capped at 50 chunks per ChromaDB write to stay stable on 16 GB RAM.
+The indexer processes both directories, skips files already in the database, and adds only new content. Run it any time you add or update files. Progress is printed per batch.
 
----
-
-## Verify Protocol
-
-When any query contains hardware-related language (`gpu`, `crash`, `temperature`, `driver`, `bsod`, `vram`, and others), Albedo automatically activates the **Verify Protocol**:
-
-1. Retrieves matching records from the **Exotic OS ChromaDB collection** (your local telemetry)
-2. Runs a parallel **DuckDuckGo web search** on the same query
-3. Builds a structured synthesis prompt that presents both sources side-by-side
-4. Explicitly flags any conflict between local findings and external documentation
-
-This prevents hallucinated hardware advice. If your logs say one thing and the web says another, Albedo tells you — it does not silently pick one.
-
----
-
-## Architecture
-
-```
-[Microphone]
-     |
-  OpenWakeWord  <-- passive listener, CPU
-     | "Cortana"
-  Piper TTS: "Yes?"
-     |
-  Faster-Whisper (CUDA)  -->  transcribed text
-     |
-  ┌──────────────── pipeline.run() ─────────────────┐
-  │                                                  │
-  │  Hardware query?  ──YES──>  Verify Protocol      │
-  │       |                     Local RAG (Exotic OS)│
-  │       NO                  + Web Search           │
-  │       |                     Synthesis prompt     │
-  │  ChromaDB query                  |               │
-  │  (Chaotic 3D + Exotic OS)        |               │
-  │  + optional Web Search           |               │
-  │       |                          |               │
-  └───────┴──────────────────────────┘               │
-                     |
-              Open Interpreter
-              (Ollama backend + Bridge Control)
-                     |
-              Piper TTS  -->  [Speakers]
-```
-
----
-
-## Running Smoke Tests
+### 5.3 Verify indexing succeeded
 
 ```powershell
-python tests/smoke_test.py
+python main.py
 ```
 
-Tests local RAG indexing, live web search, Verify Protocol routing, and indexer RAM footprint. All 13 assertions pass on the baseline hardware configuration.
+At the prompt, test a query against each collection:
+
+```
+You: what are my current print profiles for PLA?
+You: what was the last recorded temperature for enclosure 2?
+```
+
+Albedo should return content sourced directly from your files. If results are empty, confirm the paths in `.env` are correct and re-run `--index`.
 
 ---
 
-## Stack
+## Launch Commands
+
+```powershell
+python main.py                  # Text chat
+python main.py --voice          # Voice mode — say "Cortana" to activate
+python main.py --voice --web    # Voice mode with web search always on
+python main.py --index          # Re-index knowledge base
+python main.py --web "query"    # One-shot query with live web search
+```
+
+```powershell
+docker compose up               # Run Ollama + ChromaDB as Docker services
+```
+
+---
+
+## Stack Reference
 
 | Layer | Technology |
 |---|---|
 | LLM runtime | [Ollama](https://ollama.com) |
-| Agent / desktop control | [Open Interpreter](https://github.com/OpenInterpreter/open-interpreter) |
+| Desktop control | [Open Interpreter](https://github.com/OpenInterpreter/open-interpreter) |
 | Vector store | [ChromaDB](https://www.trychroma.com) |
-| Embeddings | `all-MiniLM-L6-v2` via ChromaDB ONNX (CPU) |
 | Speech-to-text | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) |
 | Wake word | [OpenWakeWord](https://github.com/dscripka/openWakeWord) |
 | Text-to-speech | [Piper](https://github.com/rhasspy/piper) |
-| Web search | [ddgs](https://github.com/deedy5/ddgs) (DuckDuckGo, no API key) |
+| Web search | [ddgs](https://github.com/deedy5/ddgs) — DuckDuckGo, no API key |
 | Web scraping | Playwright · Trafilatura · BeautifulSoup4 |
 
 ---

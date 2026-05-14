@@ -8,7 +8,7 @@ CHAOTIC_3D_PATH = Path(os.getenv("CHAOTIC_3D_PATH", ""))
 EXOTIC_OS_PATH = Path(os.getenv("EXOTIC_OS_PATH", ""))
 CHROMA_DB_PATH = Path(os.getenv("CHROMA_DB_PATH", "./chroma_db"))
 
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "mistral")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
