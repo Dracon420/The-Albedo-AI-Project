@@ -1,178 +1,243 @@
-# ALBEDO: Spartan-Class Local Assistant
+# ALBEDO: Spartan-Class Local Assistant — Field Manual
 
 > **Wake Word:** `Cortana` · **Architecture:** Hybrid RAG · **Ecosystem:** Exotic OS · Chaotic 3D Solutions
 
-Albedo is a fully local AI assistant. No cloud. No API keys. No subscription.  
-It fuses a persistent local knowledge base (ChromaDB) with live web search, runs on your GPU via Ollama, and takes direct command of your Windows desktop through Open Interpreter. Say *Cortana* — it answers.
+Albedo is a fully local AI assistant. No cloud. No API keys. No subscription. It fuses a persistent local knowledge base (ChromaDB) with live web search, runs on your GPU via Ollama, and takes direct command of your Windows desktop through Open Interpreter. Say *Cortana* — it answers.
+
+This document is the complete operational field manual. Read each phase before executing it.
 
 ---
 
-## Phase 1 — Pre-Flight Checklist
+## Phase 1 — Pre-Flight: Authorization
 
-### 1.1 Enable Virtualization in BIOS
+The installer is a PowerShell script. Windows blocks unsigned scripts by default. You must unlock execution rights for the current terminal session before anything else.
 
-Docker Desktop requires hardware virtualization to be active. Reboot into your BIOS and enable the relevant setting for your platform:
+### 1.1 Open an elevated terminal
 
-| Platform | Setting Name | Common Location |
-|---|---|---|
-| **AMD** | SVM Mode | Advanced → CPU Configuration |
-| **Intel** | Intel Virtualization Technology (VT-x) | Advanced → CPU Configuration |
+Right-click the **Start menu** and select **Terminal (Admin)** or **Windows PowerShell (Admin)**. Standard (non-admin) terminals will fail silently on certain installer steps.
 
-Save and reboot. If virtualization is already enabled, skip this step.
+### 1.2 Set execution policy
 
-### 1.2 Install Docker Desktop for Windows
-
-Docker hosts the Ollama LLM engine and ChromaDB vector store as isolated, GPU-passthrough services.
-
-**Download:** [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/)
-
-After installation, open Docker Desktop, go to **Settings → Resources → WSL Integration** and enable it for your default distro. Confirm Docker is running:
-
-```powershell
-docker --version
-docker compose version
-```
-
-### 1.3 Verify NVIDIA Drivers
-
-GPU passthrough requires up-to-date drivers and the NVIDIA Container Toolkit (installed automatically with Docker Desktop on Windows via WSL2).
-
-Check your current driver version:
-
-```powershell
-nvidia-smi
-```
-
-Minimum recommended: **536.40** for RTX 2060. If your version is lower, update via [nvidia.com/drivers](https://www.nvidia.com/drivers).
-
-The output should show your GPU, driver version, and CUDA version. If `nvidia-smi` is not found, your drivers are not correctly installed.
-
----
-
-## Phase 2 — Authorization
-
-Albedo's installer requires elevated execution rights in PowerShell. This is a one-time, process-scoped unlock — it does not permanently alter your system policy.
-
-**Step 1.** Right-click the Start menu and select **"Terminal (Admin)"** or **"Windows PowerShell (Admin)"**.
-
-**Step 2.** Paste the following command and press Enter:
+Paste this command and press **Enter**:
 
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process
 ```
 
-> `-Scope Process` limits this bypass to the current terminal session only. It expires the moment you close the window. Do not use `-Scope Machine` or `-Scope CurrentUser`.
+Windows will display an **Execution Policy Change** warning and ask:
 
----
+```
+Do you want to change the execution policy?
+[Y] Yes  [A] Yes to All  [N] No  [L] No to All  [S] Suspend  [?] Help (default is "N"):
+```
 
-## Phase 3 — Deployment
+Type **`y`** and press **Enter**. The terminal is now authorized for this session only.
 
-### 3.1 Navigate to the Albedo folder
+> `-Scope Process` limits the bypass to the current window. It expires the moment you close the terminal — your system policy is never permanently changed.
+
+### 1.3 Navigate to the project directory
 
 ```powershell
 cd "C:\Users\YourName\Desktop\Local Cortana AI"
 ```
 
-Replace the path with wherever you cloned or extracted the repository.
+Replace the path with wherever you cloned or placed the repository.
 
-### 3.2 Execute the installer
+---
+
+## Phase 2 — Deployment: Running the Installer
+
+Execute the installer from the project directory:
 
 ```powershell
 .\install.ps1
 ```
 
-The script runs the following sequence automatically — no manual steps required:
+The script is **fully autonomous**. It will auto-detect your Python version, install Python 3.12 silently if needed, install Ollama, upgrade all build tools, and install every dependency. You only need to answer a few prompts.
 
-1. **Checks** Python 3.10+ and creates an isolated `.venv` virtual environment
-2. **Installs** all Python dependencies: ChromaDB, Faster-Whisper, Playwright, DuckDuckGo search, and the full audio stack
-3. **Downloads the Cortana wake word model** via OpenWakeWord — the base acoustic model that listens for your trigger phrase
-4. **Installs Playwright Chromium** — gives Open Interpreter a real browser for deep web scraping alongside standard search
-5. **Prompts for your hardware tier** (Standard / High-Spec) and writes a tuned `.env` to match
-6. **Prompts for your local directory paths** — Chaotic 3D and Exotic OS folders
-7. **Generates `.env`** with all settings pre-configured
-8. **Optionally runs** the initial ChromaDB index before exiting
+### 2.1 Installer prompt guide
 
-### 3.3 Pull the Ollama model
-
-After the installer completes, pull Albedo's default reasoning model:
-
-```powershell
-ollama pull llama3.2:3b
-```
-
-Then confirm Ollama can see your GPU:
-
-```powershell
-ollama run llama3.2:3b "respond with: ONLINE"
-```
+Work through each prompt using the reference below.
 
 ---
 
-## Phase 4 — High-Spec Calibration
+**HARDWARE TIER SELECTION**
 
-> **Applies to:** RTX 3080 / 3090 / 4080 / 4090 or any GPU with **8 GB+ VRAM**
+```
+[1] STANDARD  -- RTX 2060 6 GB / 16 GB RAM
+[2] HIGH-SPEC -- RTX 3080+ / 8 GB+ VRAM
+```
 
-The default model (`llama3.2:3b`) is tuned for the RTX 2060's 6 GB VRAM ceiling. If you have headroom to spare, swap Albedo's reasoning core to a larger model for significantly improved instruction-following, code generation, and synthesis quality.
+| Your Hardware | Select |
+|---|---|
+| RTX 2060 · 16 GB RAM (baseline build) | **1** |
+| RTX 3080 / 3090 / 4080 / 4090 · 8 GB+ VRAM | **2** |
 
-### 4.1 Pull the upgraded model
+Standard tier uses `llama3.2:3b` + Whisper small (`int8_float16`) — tuned to stay within the RTX 2060's 6 GB VRAM ceiling.
+
+---
+
+**LOCAL KNOWLEDGE BASE DIRECTORIES**
+
+```
+Chaotic 3D path (STLs, gcode, slicer configs):
+Exotic OS path  (Python code, logs, configs):
+```
+
+**Leave both blank and press Enter to skip.** You can point Albedo at your directories later with a single command:
+
+```powershell
+python main.py --index
+```
+
+If you want to configure them now, enter the full path to each folder (e.g. `D:\Chaotic 3D`). Non-existent paths are skipped automatically — the installer will not crash.
+
+---
+
+**PIPER TTS PATHS**
+
+```
+piper.exe path [C:\piper\piper.exe]:
+Voice .onnx path [C:\piper\voices\en_US-ryan-high.onnx]:
+```
+
+**Press Enter to accept the defaults.** Albedo will fall back to console text output if Piper is not installed. You can install Piper and update `.env` at any time without re-running the installer.
+
+Download Piper: [github.com/rhasspy/piper/releases](https://github.com/rhasspy/piper/releases)
+
+---
+
+**WAKE WORD MODEL**
+
+```
+Wake word model (label or .onnx path) [hey_jarvis]:
+```
+
+**Press Enter to accept `hey_jarvis` as the temporary wake word.** The custom `Cortana` wake word requires training a personal acoustic model — see **Phase 6** for the training guide. The system is fully functional with `hey_jarvis` in the meantime.
+
+---
+
+**PULL OLLAMA MODEL**
+
+```
+Pull Ollama model now? (llama3.2:3b -- may take several minutes) [Y/n]:
+```
+
+Type **`y`** or press Enter. See **Phase 3 — The Patience Protocol** before proceeding.
+
+---
+
+**RUN INITIAL CHROMADB INDEXING**
+
+```
+Run initial ChromaDB indexing now? [Y/n]:
+```
+
+If you left the directory paths blank above, type **`n`**. If you entered paths, type **`y`**.
+
+---
+
+### 2.2 What the installer does automatically
+
+The following steps require no input and run in sequence:
+
+1. Detects Python version — installs Python 3.12 via winget silently if system default is 3.13+ (no ML wheels available for newer versions)
+2. Detects Ollama — installs via winget silently if missing
+3. Creates `.venv` using the verified Python 3.12 binary
+4. Upgrades `pip`, `wheel`, and `setuptools` before touching any packages
+5. Installs all dependencies from `requirements.txt` using `--prefer-binary` to avoid source compilation
+6. Installs Playwright Chromium for Open Interpreter web scraping
+7. Pre-downloads OpenWakeWord base acoustic models
+8. Writes `.env` with all your selections
+9. Creates the **Albedo desktop shortcut** pointing to `Launch-Albedo.ps1`
+
+---
+
+## Phase 3 — The Patience Protocol
+
+Two steps in the installer look frozen and are not. **Do not close the terminal.**
+
+### 3.1 Ollama model download (5–15 minutes)
+
+When the installer pulls the Ollama model, the output will look like this:
+
+```
+pulling manifest
+pulling 00e1317cbf74... ████░░░░░░░░░░░░░░░░  0% ▕ 0 B/2.0 GB
+```
+
+The progress bar may sit at **0%** for several minutes before the download speed stabilises. This is normal — Ollama is negotiating the download from the registry. It will also appear to **hang near 99%** while it finalises the manifest and writes the model to disk.
+
+**Do not close the terminal.** The download is active even when the counter is not moving.
+
+### 3.2 Python dependency installation (3–10 minutes)
+
+Installing packages like `torch`, `faster-whisper`, and `sentence-transformers` downloads hundreds of megabytes of prebuilt wheels. The terminal output will scroll rapidly, then appear to pause. This is normal — pip is decompressing and linking large packages.
+
+---
+
+## Phase 4 — Handling Red Text
+
+During dependency installation you will see red warning output that looks like this:
+
+```
+ERROR: pip's dependency resolver does not currently take into account all the
+packages that are installed. This behaviour is the source of the following
+dependency conflicts.
+torch 2.x.x requires setuptools, which is not installed.
+```
+
+**This is a benign resolver warning, not a failure.** pip prints it in red because the conflict message is routed to stderr, but the packages install correctly. The installer has already upgraded `setuptools` before this step runs — the warning is a known pip reporting artefact when multiple large ML packages interact.
+
+If the installer prints `[OK] All packages installed successfully` immediately after the red block, the installation succeeded. If it prints `[X]` and asks whether to continue, review the specific package that failed — the torch/setuptools message alone is not a failure.
+
+---
+
+## Phase 5 — High-Spec Calibration
+
+> **Applies to:** RTX 3080 / 3090 / 4080 / 4090 — any GPU with 8 GB+ VRAM
+
+If you selected Tier 1 during install and later upgrade your hardware, update `.env` without re-running the installer:
+
+### 5.1 Pull the upgraded model
 
 ```powershell
 ollama pull llama3.1:8b
 ```
 
-### 4.2 Edit `.env`
-
-Open `.env` in any text editor and change the model line:
+### 5.2 Edit `.env`
 
 ```env
-# Default (RTX 2060 / 6 GB VRAM)
+# Standard (RTX 2060 / 6 GB VRAM)
 OLLAMA_MODEL=llama3.2:3b
-
-# High-Spec (RTX 3080+ / 8 GB+ VRAM) — replace the line above with:
-OLLAMA_MODEL=llama3.1:8b
-```
-
-### 4.3 Raise Whisper precision (optional)
-
-While in `.env`, also upgrade Faster-Whisper for sharper transcription if VRAM allows:
-
-```env
-# Default
 WHISPER_MODEL_SIZE=small
 WHISPER_COMPUTE_TYPE=int8_float16
-
-# High-Spec
-WHISPER_MODEL_SIZE=medium
-WHISPER_COMPUTE_TYPE=float16
-```
-
-### 4.4 Raise RAG retrieval depth (optional)
-
-```env
-# Default
 RAG_TOP_K=5
 
-# High-Spec
+# High-Spec (RTX 3080+ / 8 GB+ VRAM) -- replace all four lines above with:
+OLLAMA_MODEL=llama3.1:8b
+WHISPER_MODEL_SIZE=medium
+WHISPER_COMPUTE_TYPE=float16
 RAG_TOP_K=10
 ```
 
-Save the file. No reinstall needed — settings are read at runtime.
+Save `.env`. No reinstall needed — all settings are read at runtime.
 
 ---
 
-## Phase 5 — RAG Initialization
+## Phase 6 — RAG Initialization
 
-Albedo's local knowledge base is built from your own files. The more you give it, the sharper its answers. Two collections are indexed independently.
+Albedo's local knowledge base is built from your own files. Two collections are indexed independently.
 
-### 5.1 Configure your directories
+### 6.1 Configure your directories
 
-Open `.env` and set both paths to match your actual folder locations:
+Open `.env` and set both paths:
 
 ```env
-# Your 3D printing files: gcode, slicer configs, print profiles, material notes
+# 3D printing files: gcode, slicer configs, print profiles, material notes
 CHAOTIC_3D_PATH=D:\Chaotic 3D
 
-# Your Exotic OS directory: Python code, reptile husbandry logs, system telemetry
+# Exotic OS directory: Python code, reptile logs, system telemetry
 EXOTIC_OS_PATH=D:\Exotic OS
 ```
 
@@ -183,67 +248,128 @@ EXOTIC_OS_PATH=D:\Exotic OS
 | Chaotic 3D | `.gcode` `.cfg` `.ini` `.json` `.txt` `.md` `.xml` |
 | Exotic OS | `.py` `.sh` `.log` `.txt` `.md` `.json` `.yaml` `.toml` |
 
-For herpetology specifically — store feeding records, enclosure temperature and humidity logs, vet notes, and husbandry schedules as plain `.txt` or `.md` files inside `EXOTIC_OS_PATH`. Albedo will embed them into ChromaDB and retrieve relevant passages when you ask questions about your animals.
+For herpetology — store feeding records, enclosure temperature and humidity logs, vet notes, and husbandry schedules as `.txt` or `.md` files inside `EXOTIC_OS_PATH`. Albedo will embed and retrieve them.
 
-### 5.2 Run the indexer
+### 6.2 Run the indexer
+
+Activate the virtual environment first, then index:
 
 ```powershell
+.\.venv\Scripts\Activate.ps1
 python main.py --index
 ```
 
-The indexer processes both directories, skips files already in the database, and adds only new content. Run it any time you add or update files. Progress is printed per batch.
+The indexer skips files already in the database. Run it any time you add or update files.
 
-### 5.3 Verify indexing succeeded
+### 6.3 Verify indexing
 
 ```powershell
 python main.py
 ```
 
-At the prompt, test a query against each collection:
+Test a retrieval query:
 
 ```
 You: what are my current print profiles for PLA?
 You: what was the last recorded temperature for enclosure 2?
 ```
 
-Albedo should return content sourced directly from your files. If results are empty, confirm the paths in `.env` are correct and re-run `--index`.
+If results are empty, confirm the paths in `.env` are correct and re-run `--index`.
 
 ---
 
-## Launch Commands
+## Phase 7 — Wake Word Training: Custom Cortana Model
 
-```powershell
-python main.py                  # Text chat
-python main.py --voice          # Voice mode — say "Cortana" to activate
-python main.py --voice --web    # Voice mode with web search always on
-python main.py --index          # Re-index knowledge base
-python main.py --web "query"    # One-shot query with live web search
+The default wake word (`hey_jarvis`) is a placeholder. To activate Albedo by saying **"Cortana"**, you must train a personal acoustic model using openWakeWord's training pipeline. The process requires approximately 30 minutes of setup and generates a portable `.onnx` file.
+
+### 7.1 Requirements
+
+- Python environment with openWakeWord installed (already done by the installer)
+- A microphone to record positive training samples
+- Approximately 150–500 recordings of you saying "Cortana" in varied conditions (distance, background noise, vocal tone)
+
+### 7.2 Training procedure
+
+Follow the official openWakeWord training guide:
+
+**[github.com/dscripka/openWakeWord — Training New Models](https://github.com/dscripka/openWakeWord#training-new-models)**
+
+The guide walks through:
+1. Recording positive samples (`cortana_001.wav` through `cortana_N.wav`)
+2. Generating synthetic negative samples using the built-in tools
+3. Training the model with `train.py` — outputs `cortana.onnx`
+
+### 7.3 Deploying the trained model
+
+Once you have `cortana.onnx`, update `.env`:
+
+```env
+# Replace this:
+WAKEWORD_MODEL=hey_jarvis
+
+# With the full path to your trained model:
+WAKEWORD_MODEL=C:\path\to\cortana.onnx
 ```
 
+Restart Albedo. It will now respond only to your voice saying "Cortana".
+
+> **Tip:** Record samples at your normal speaking distance from your desk microphone, not close-range. The model must recognise the wake word under real ambient conditions.
+
+---
+
+## Phase 8 — One-Click Launch
+
+The installer creates a permanent **Albedo** shortcut on your Windows desktop and a `Launch-Albedo.ps1` script in the project root. Both are configured at install time — no manual editing required.
+
+### How it works
+
+Double-click the **Albedo** desktop shortcut. PowerShell runs `Launch-Albedo.ps1`, which:
+
+1. **Checks for a running Ollama process.** If Ollama is already running, nothing changes. If not, it starts `ollama serve` silently in the background with no visible window, then waits up to 8 seconds for it to bind its port.
+2. **Launches Albedo in voice mode** using the `.venv` Python binary directly — no manual activation required.
+3. **Keeps the console window open** after exit so any error output is readable before the window closes.
+
+### Manual launch (fallback)
+
+If the shortcut is ever deleted or the project is moved, re-create it by re-running `install.ps1`, or launch manually:
+
 ```powershell
-docker compose up               # Run Ollama + ChromaDB as Docker services
+# From an Admin PowerShell in the project directory:
+Set-ExecutionPolicy Bypass -Scope Process
+.\.venv\Scripts\Activate.ps1
+.\Launch-Albedo.ps1
+```
+
+### Terminal commands (direct control)
+
+```powershell
+python main.py                  # Text chat (no voice)
+python main.py --voice          # Voice mode -- say wake word to activate
+python main.py --voice --web    # Voice mode with live web search always on
+python main.py --index          # Re-index knowledge base
+python main.py --web "query"    # One-shot web-augmented query
 ```
 
 ---
 
 ## Optional: Albedo Mobile HUD
 
-A React Native client that gives you a Spartan HUD on your phone — full voice recording, TTS playback, and text chat over your Tailscale private network. No ports exposed to the internet.
+A React Native client that extends Albedo to your phone — full voice recording, TTS playback, and text chat over your Tailscale private network. No ports exposed to the internet.
 
 ### Prerequisites
 
-- **Expo Go** installed on your iOS or Android device ([iOS](https://apps.apple.com/app/expo-go/id982107779) · [Android](https://play.google.com/store/apps/details?id=host.exp.exponent))
-- **Tailscale** running on both your phone and the desktop running `server.py`, both joined to the same tailnet ([tailscale.com/download](https://tailscale.com/download))
+- **Expo Go** on your iOS or Android device ([iOS](https://apps.apple.com/app/expo-go/id982107779) · [Android](https://play.google.com/store/apps/details?id=host.exp.exponent))
+- **Tailscale** running on both your phone and desktop, joined to the same tailnet ([tailscale.com/download](https://tailscale.com/download))
 
 ### Configuration
 
-Find your desktop's Tailscale IP in a terminal on your PC:
+Find your desktop's Tailscale IP:
 
 ```powershell
 tailscale ip -4
 ```
 
-Open `albedo-mobile/src/api/client.ts` and replace the placeholder on line 6:
+Open `albedo-mobile/src/api/client.ts` line 6 and replace the placeholder:
 
 ```typescript
 // Before
@@ -253,30 +379,26 @@ export const SERVER_BASE = 'http://YOUR_TAILSCALE_IP:8000';
 export const SERVER_BASE = 'http://100.64.0.1:8000';
 ```
 
-### Launch Sequence
+### Launch sequence
 
-**Step 1 — Start the Bridge.** In a terminal at the project root, activate the FastAPI server:
+**Terminal 1 — Start the Bridge:**
 
 ```powershell
 python server.py
 ```
 
-You should see `Starting Albedo Bridge on 0.0.0.0:8000`. Leave this terminal open.
+Confirm the output shows `Starting Albedo Bridge on 0.0.0.0:8000`.
 
-**Step 2 — Start the App.** Open a second terminal, navigate to the mobile folder, and launch the Expo bundler:
+**Terminal 2 — Start the mobile bundler:**
 
 ```powershell
 cd albedo-mobile
 npx expo start
 ```
 
-### Initialization
+Scan the QR code with Expo Go. The Albedo Spartan HUD will initialise on your device. The header shows a cyan **BRIDGE** chip when the server connection is confirmed.
 
-A QR code will appear in the terminal. Open **Expo Go** on your phone and scan it. The Albedo Spartan HUD will initialize on your device within a few seconds.
-
-The header will show a **BRIDGE** chip in cyan once the app successfully reaches `server.py` over Tailscale, confirming the secure tunnel is live. You can then issue voice and text commands remotely — Albedo processes everything locally on your desktop and streams the response back to the HUD.
-
-> **Silent Protocol:** tap the `AUDIO` chip in the header to suppress TTS playback and receive text-only responses. Useful in quiet environments.
+> **Silent Protocol:** tap the `AUDIO` chip to suppress TTS and receive text-only responses.
 
 ---
 
@@ -292,6 +414,8 @@ The header will show a **BRIDGE** chip in cyan once the app successfully reaches
 | Text-to-speech | [Piper](https://github.com/rhasspy/piper) |
 | Web search | [ddgs](https://github.com/deedy5/ddgs) — DuckDuckGo, no API key |
 | Web scraping | Playwright · Trafilatura · BeautifulSoup4 |
+| Mobile client | React Native · Expo 51 · Tailscale |
+| Mobile bridge | FastAPI · Uvicorn |
 
 ---
 
