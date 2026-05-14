@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -18,6 +18,8 @@ import { ChatLog } from './src/components/ChatLog';
 import { ControlBar } from './src/components/ControlBar';
 import { Colors, Spacing, Typography } from './src/theme';
 import { InputMode, Message, VoiceStatus } from './src/types';
+import { chatRequest, voiceRequest, serverStatus } from './src/api/client';
+import { useAudioRecorder, playAudioBase64 } from './src/hooks/useAudio';
 
 let _msgId = 0;
 const uid = () => String(++_msgId);
@@ -25,12 +27,30 @@ const uid = () => String(++_msgId);
 export default function App() {
   const [fontsLoaded] = useFonts({ ShareTechMono_400Regular });
 
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [status, setStatus] = useState<VoiceStatus>('standby');
-  const [isMuted, setIsMuted] = useState(false);
-  const [isSilent, setIsSilent] = useState(false);
-  const [inputMode, setInputMode] = useState<InputMode>('voice');
-  const [draftText, setDraftText] = useState('');
+  const [messages, setMessages]     = useState<Message[]>([]);
+  const [status, setStatus]         = useState<VoiceStatus>('standby');
+  const [isMuted, setIsMuted]       = useState(false);
+  const [isSilent, setIsSilent]     = useState(false);
+  const [inputMode, setInputMode]   = useState<InputMode>('voice');
+  const [draftText, setDraftText]   = useState('');
+  const [serverOnline, setServerOnline] = useState<boolean | null>(null);
+
+  const { startRecording, stopRecording } = useAudioRecorder();
+
+  // ── Server health check on mount ────────────────────────────────────────────
+  useEffect(() => {
+    serverStatus().then((res) => {
+      setServerOnline(res !== null);
+      if (res) {
+        pushMessage('albedo',
+          `Bridge online — ${res.llm_model} · Whisper ${res.whisper_model} (${res.whisper_device})`);
+      } else {
+        pushMessage('albedo',
+          '[OFFLINE] Cannot reach server. Start server.py and verify Tailscale IP in src/api/client.ts');
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pushMessage = useCallback((role: Message['role'], text: string) => {
     setMessages((prev) => [
@@ -39,11 +59,12 @@ export default function App() {
     ]);
   }, []);
 
-  // ── Voice mic toggle ────────────────────────────────────────────────────────
-  const handleMicPress = useCallback(() => {
+  // ── Voice mic handler ────────────────────────────────────────────────────────
+  const handleMicPress = useCallback(async () => {
     if (isMuted) return;
+    if (status === 'processing' || status === 'speaking') return;
 
-    // Pressing mic while in keyboard mode: slide input away, return to voice
+    // Pressing mic while keyboard is open: slide input away and return to voice standby
     if (inputMode === 'keyboard') {
       setInputMode('voice');
       setStatus('standby');
@@ -51,52 +72,88 @@ export default function App() {
     }
 
     if (status === 'listening') {
+      // ── Stop recording → send to server ──────────────────────────────────
       setStatus('processing');
-      setTimeout(() => {
-        pushMessage('user', '[voice input]');
-        if (!isSilent) {
-          pushMessage('albedo', 'Voice pipeline online. Connect server.py over Tailscale to process real queries.');
-        } else {
-          pushMessage('albedo', '[SILENT PROTOCOL] Response suppressed. Audio playback disabled.');
-        }
-        setStatus('standby');
-      }, 1200);
-    } else if (status === 'standby') {
-      setStatus('listening');
-    }
-  }, [status, isMuted, inputMode, isSilent, pushMessage]);
+      try {
+        const audioUri = await stopRecording();
+        if (!audioUri) throw new Error('No audio captured');
 
-  // ── Keyboard send ───────────────────────────────────────────────────────────
-  const handleSendText = useCallback(() => {
+        const result = await voiceRequest(audioUri);
+
+        pushMessage('user', result.transcript || '[voice input]');
+        pushMessage('albedo', result.text);
+
+        if (!isSilent && result.audio_b64) {
+          setStatus('speaking');
+          await playAudioBase64(result.audio_b64);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Unknown error';
+        pushMessage('albedo', `[BRIDGE ERROR] ${msg}`);
+        // Ensure recording is cleaned up on error
+        await stopRecording().catch(() => {});
+      } finally {
+        setStatus('standby');
+      }
+
+    } else {
+      // ── Start recording ───────────────────────────────────────────────────
+      try {
+        await startRecording();
+        setStatus('listening');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Microphone unavailable';
+        pushMessage('albedo', `[BRIDGE ERROR] ${msg}`);
+        setStatus('standby');
+      }
+    }
+  }, [status, isMuted, inputMode, isSilent, startRecording, stopRecording, pushMessage]);
+
+  // ── Text chat handler ────────────────────────────────────────────────────────
+  const handleSendText = useCallback(async () => {
     const text = draftText.trim();
     if (!text) return;
+
     pushMessage('user', text);
     setDraftText('');
     setStatus('processing');
 
-    setTimeout(() => {
-      pushMessage(
-        'albedo',
-        `Received: "${text}". Connect to server.py at http://<tailscale-ip>:8000/api/chat for live responses.`,
-      );
-      setStatus('standby');
-    }, 900);
-  }, [draftText, pushMessage]);
+    try {
+      const result = await chatRequest(text);
+      pushMessage('albedo', result.text);
 
+      if (!isSilent && result.audio_b64) {
+        setStatus('speaking');
+        await playAudioBase64(result.audio_b64);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      pushMessage('albedo', `[BRIDGE ERROR] ${msg}`);
+    } finally {
+      setStatus('standby');
+    }
+  }, [draftText, isSilent, pushMessage]);
+
+  // ── Auxiliary handlers ───────────────────────────────────────────────────────
   const handleMuteToggle = useCallback(() => {
     setIsMuted((m) => !m);
-    if (status === 'listening') setStatus('standby');
-  }, [status]);
+    if (status === 'listening') {
+      stopRecording().catch(() => {});
+      setStatus('standby');
+    }
+  }, [status, stopRecording]);
 
-  const handleSilentToggle = useCallback(() => {
-    setIsSilent((s) => !s);
-  }, []);
+  const handleSilentToggle = useCallback(() => setIsSilent((s) => !s), []);
 
   const handleInputModeToggle = useCallback(() => {
     setInputMode((m) => (m === 'voice' ? 'keyboard' : 'voice'));
-    if (status === 'listening') setStatus('standby');
-  }, [status]);
+    if (status === 'listening') {
+      stopRecording().catch(() => {});
+      setStatus('standby');
+    }
+  }, [status, stopRecording]);
 
+  // ── Loading splash ───────────────────────────────────────────────────────────
   if (!fontsLoaded) {
     return <View style={styles.loading} />;
   }
@@ -109,12 +166,37 @@ export default function App() {
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
+
           {/* ── Header ──────────────────────────────────────────────── */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>ALBEDO</Text>
 
             <View style={styles.headerMeta}>
               <Text style={styles.headerSub}>SPARTAN-CLASS · HYBRID RAG</Text>
+
+              {/* Server status indicator */}
+              <View style={[
+                styles.serverChip,
+                serverOnline === true  && styles.serverChipOnline,
+                serverOnline === false && styles.serverChipOffline,
+              ]}>
+                <MaterialCommunityIcons
+                  name={serverOnline ? 'access-point' : 'access-point-off'}
+                  size={10}
+                  color={
+                    serverOnline === true  ? Colors.cyan :
+                    serverOnline === false ? Colors.danger :
+                    Colors.textMuted
+                  }
+                />
+                <Text style={[
+                  styles.serverChipLabel,
+                  serverOnline === true  && styles.serverChipLabelOnline,
+                  serverOnline === false && styles.serverChipLabelOffline,
+                ]}>
+                  {serverOnline === null ? 'CONNECTING' : serverOnline ? 'BRIDGE' : 'OFFLINE'}
+                </Text>
+              </View>
 
               {/* Silent Protocol chip */}
               <TouchableOpacity
@@ -166,6 +248,7 @@ export default function App() {
             onDraftChange={setDraftText}
             onSendText={handleSendText}
           />
+
         </KeyboardAvoidingView>
       </SafeAreaView>
     </HUDBackground>
@@ -201,7 +284,7 @@ const styles = StyleSheet.create({
   headerMeta: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
   },
   headerSub: {
     fontFamily: Typography.fontMono,
@@ -209,10 +292,43 @@ const styles = StyleSheet.create({
     color: Colors.textMuted,
     letterSpacing: Typography.tracking.wider,
   },
+  // Server status chip
+  serverChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 3,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    backgroundColor: 'rgba(10, 15, 44, 0.6)',
+  },
+  serverChipOnline: {
+    borderColor: Colors.cyanDim,
+    backgroundColor: 'rgba(0, 153, 187, 0.12)',
+  },
+  serverChipOffline: {
+    borderColor: 'rgba(255, 58, 92, 0.4)',
+    backgroundColor: 'rgba(255, 58, 92, 0.08)',
+  },
+  serverChipLabel: {
+    fontFamily: Typography.fontMono,
+    fontSize: 9,
+    color: Colors.textMuted,
+    letterSpacing: 2,
+  },
+  serverChipLabelOnline: {
+    color: Colors.cyan,
+  },
+  serverChipLabelOffline: {
+    color: Colors.danger,
+  },
+  // Silent Protocol chip
   silentChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     paddingHorizontal: Spacing.sm,
     paddingVertical: 3,
     borderRadius: 20,
