@@ -1,15 +1,16 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-    Albedo installer -- sets up the Python environment, ChromaDB, web-scraping
-    stack, and generates a .env configured for your hardware tier.
+    Albedo installer -- fully autonomous one-click setup.
+    Auto-detects Python version, installs Python 3.12 via winget if the system
+    default is 3.13+ (no ML wheels), creates the venv with the correct binary,
+    upgrades build tools, installs all dependencies, and writes .env.
 #>
 
-Set-StrictMode -Version Latest
-# NOTE: $ErrorActionPreference = "Stop" only catches PowerShell cmdlet errors.
-# Native executables (pip, python, git) must be checked via $LASTEXITCODE.
-# We use "Continue" here and do explicit exit-code checks after every native call.
+# $ErrorActionPreference = "Continue" so native exe exit codes don't throw;
+# we check $LASTEXITCODE manually after every external call.
 $ErrorActionPreference = "Continue"
+Set-StrictMode -Off
 
 # ============================================================================
 # Helpers
@@ -28,8 +29,8 @@ function Ask-Path {
     param([string]$Prompt, [string]$Default = "")
     $display = if ($Default) { "$Prompt [$Default]" } else { $Prompt }
     $raw = Read-Host $display
-    $value = if ($raw.Trim() -eq "" -and $Default -ne "") { $Default } else { $raw.Trim() }
-    return $value
+    if ($raw.Trim() -eq "" -and $Default -ne "") { return $Default }
+    return $raw.Trim()
 }
 
 function Ask-YesNo {
@@ -40,103 +41,190 @@ function Ask-YesNo {
     return $raw.Trim() -match '^[Yy]'
 }
 
-function Write-Step {
-    param([string]$Text)
-    Write-Host ""
-    Write-Host "  >> $Text" -ForegroundColor Yellow
-}
+function Write-Step  { param([string]$T); Write-Host ""; Write-Host "  >> $T" -ForegroundColor Yellow }
+function Write-OK    { param([string]$T); Write-Host "    [OK] $T" -ForegroundColor Green }
+function Write-Warn  { param([string]$T); Write-Host "    [!]  $T" -ForegroundColor DarkYellow }
+function Write-Fail  { param([string]$T); Write-Host "    [X]  $T" -ForegroundColor Red }
+function Write-Info  { param([string]$T); Write-Host "         $T" -ForegroundColor Gray }
 
-function Write-OK {
-    param([string]$Text)
-    Write-Host "    [OK] $Text" -ForegroundColor Green
-}
-
-function Write-Warn {
-    param([string]$Text)
-    Write-Host "    [!]  $Text" -ForegroundColor DarkYellow
-}
-
-function Write-Fail {
-    param([string]$Text)
-    Write-Host "    [X]  $Text" -ForegroundColor Red
-}
-
-# Run a native executable and return $true if it exited cleanly.
+# Runs a script block, returns $true on exit code 0, $false otherwise.
 function Invoke-Native {
     param([scriptblock]$Cmd, [string]$Label)
     & $Cmd
-    if ($LASTEXITCODE -ne 0) {
-        Write-Fail "$Label exited with code $LASTEXITCODE"
-        return $false
-    }
+    if ($LASTEXITCODE -ne 0) { Write-Fail "$Label failed (exit $LASTEXITCODE)"; return $false }
     return $true
 }
 
-# Check whether a Python module is importable inside the venv.
+# Returns $true if the given Python module is importable inside the venv.
 function Test-Module {
     param([string]$Module)
     & $script:python -c "import $Module" 2>&1 | Out-Null
     return ($LASTEXITCODE -eq 0)
 }
 
+# Returns a hashtable @{Major;Minor;Full} or $null.
+function Get-PyVersion {
+    param([string]$Exe)
+    try {
+        $raw = (& $Exe --version 2>&1).ToString().Trim()
+        if ($raw -match "Python (\d+)\.(\d+)") {
+            return @{ Major = [int]$Matches[1]; Minor = [int]$Matches[2]; Full = $raw }
+        }
+    } catch {}
+    return $null
+}
+
+# Tries every known strategy to locate a Python 3.12 executable.
+function Find-Python312 {
+    # Refresh PATH first so winget installs are visible
+    $env:PATH = [System.Environment]::GetEnvironmentVariable("PATH","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("PATH","User")
+
+    # 1. Python Launcher (most reliable on Windows -- reads registry, not PATH)
+    try {
+        $exe = (& py -3.12 -c "import sys; print(sys.executable)" 2>&1).ToString().Trim()
+        if ($exe -and (Test-Path $exe)) { return $exe }
+    } catch {}
+
+    # 2. Common install paths (user install and machine install)
+    $candidates = @(
+        "$env:LOCALAPPDATA\Programs\Python\Python312\python.exe",
+        "$env:ProgramFiles\Python312\python.exe",
+        "C:\Python312\python.exe",
+        "$env:ProgramW6432\Python312\python.exe"
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c) { return $c }
+    }
+
+    # 3. Scan PATH entries for python3.12 or python.exe that reports 3.12
+    foreach ($dir in ($env:PATH -split ";")) {
+        $candidate = Join-Path $dir "python.exe"
+        if (Test-Path $candidate) {
+            $v = Get-PyVersion $candidate
+            if ($null -ne $v -and $v.Major -eq 3 -and $v.Minor -eq 12) { return $candidate }
+        }
+    }
+
+    return $null
+}
+
 # ============================================================================
-# Prerequisites
+# Banner
 # ============================================================================
 
 Write-Banner
 
-Write-Step "Checking prerequisites..."
+# ============================================================================
+# Step 1 -- Detect Python and auto-install 3.12 if needed
+# ============================================================================
 
-# Python 3.10+ (with warning for 3.13+ where ML wheels may be missing)
-$pyver = ""
+Write-Step "Detecting Python version..."
+
+# Probe the system default python
+$sysPyExe = $null
+$sysPyVer = $null
 try {
-    $pyver = (& python --version 2>&1).ToString().Trim()
-} catch {
-    Write-Host ""
-    Write-Fail "Python not found on PATH."
-    Write-Host "  Install Python 3.12 from: https://python.org/downloads/" -ForegroundColor Yellow
-    Write-Host "  Then re-run this installer." -ForegroundColor Yellow
+    $sysPyExe = (& python -c "import sys; print(sys.executable)" 2>&1).ToString().Trim()
+    $sysPyVer = Get-PyVersion $sysPyExe
+} catch {}
+
+$pythonExe = $null   # will hold the exe we'll actually use
+
+if ($null -eq $sysPyVer) {
+    # No python on PATH at all
+    Write-Warn "No Python found on PATH. Attempting auto-install of Python 3.12..."
+    $pythonExe = $null   # handled below
+} elseif ($sysPyVer.Major -eq 3 -and $sysPyVer.Minor -le 12 -and $sysPyVer.Minor -ge 10) {
+    # Perfect -- 3.10, 3.11, or 3.12
+    $pythonExe = $sysPyExe
+    Write-OK "$($sysPyVer.Full) detected -- compatible"
+} elseif ($sysPyVer.Major -eq 3 -and $sysPyVer.Minor -ge 13) {
+    # 3.13+ -- ML wheels missing, need 3.12
+    Write-Warn "$($sysPyVer.Full) detected -- ML packages lack prebuilt wheels for 3.13+."
+    Write-Info "Searching for an existing Python 3.12 installation..."
+    $pythonExe = Find-Python312
+    if ($pythonExe) {
+        $v312 = Get-PyVersion $pythonExe
+        Write-OK "Found Python $($v312.Full) at: $pythonExe"
+    }
+} else {
+    Write-Fail "Python $($sysPyVer.Full) is too old (3.10 minimum required)."
+    Write-Info "Run: winget install --id Python.Python.3.12"
     exit 1
 }
 
-if ($pyver -match "Python (\d+)\.(\d+)") {
-    $major = [int]$Matches[1]
-    $minor = [int]$Matches[2]
+# -- Auto-install Python 3.12 via winget if we still don't have a good exe --
 
-    if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 10)) {
-        Write-Fail "Python 3.10 or higher required (found $pyver)."
-        Write-Host "  Install Python 3.12: https://python.org/downloads/" -ForegroundColor Yellow
+if ($null -eq $pythonExe) {
+    Write-Host ""
+    Write-Host "  +--------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host "  |  Python 3.12 not found -- auto-installing now    |" -ForegroundColor Yellow
+    Write-Host "  |  This takes ~2 minutes. Please wait...           |" -ForegroundColor Yellow
+    Write-Host "  +--------------------------------------------------+" -ForegroundColor Yellow
+    Write-Host ""
+
+    # Verify winget is available
+    $wingetExe = $null
+    try {
+        $wingetExe = (& where.exe winget 2>&1 | Select-Object -First 1).ToString().Trim()
+    } catch {}
+
+    if (-not $wingetExe -or -not (Test-Path $wingetExe)) {
+        Write-Fail "winget is not available on this system."
+        Write-Host ""
+        Write-Host "  Install Python 3.12 manually, then re-run install.ps1:" -ForegroundColor Yellow
+        Write-Info "  https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
         exit 1
     }
 
-    if ($major -eq 3 -and $minor -ge 13) {
+    Write-Info "Running: winget install Python.Python.3.12 --silent ..."
+    & winget install --id Python.Python.3.12 --silent `
+        --accept-package-agreements --accept-source-agreements 2>&1
+
+    $wingetOk = ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq -1978335189)
+    # -1978335189 = WINGET_INSTALLED_STATUS_ALREADY_INSTALLED (treat as success)
+
+    if (-not $wingetOk) {
+        Write-Fail "winget install exited with code $LASTEXITCODE."
         Write-Host ""
-        Write-Host "  +-------------------------------------------------+" -ForegroundColor Red
-        Write-Host "  |  WARNING: Python $pyver detected              |" -ForegroundColor Red
-        Write-Host "  |                                                 |" -ForegroundColor Red
-        Write-Host "  |  The ML stack (tiktoken, faster-whisper, etc.)  |" -ForegroundColor Red
-        Write-Host "  |  does not yet publish prebuilt wheels for 3.13+ |" -ForegroundColor Red
-        Write-Host "  |  Packages will attempt to compile from source   |" -ForegroundColor Red
-        Write-Host "  |  which requires the Rust compiler on Windows.   |" -ForegroundColor Red
-        Write-Host "  |                                                 |" -ForegroundColor Red
-        Write-Host "  |  RECOMMENDED: Use Python 3.12                   |" -ForegroundColor Red
-        Write-Host "  |  winget install --id Python.Python.3.12         |" -ForegroundColor Red
-        Write-Host "  +-------------------------------------------------+" -ForegroundColor Red
-        Write-Host ""
-        $cont = Ask-YesNo "  Continue with Python $major.$minor anyway?" $false
-        if (-not $cont) {
-            Write-Host "  Aborted. Install Python 3.12 and retry." -ForegroundColor Yellow
-            exit 1
-        }
+        Write-Host "  Install Python 3.12 manually, then re-run install.ps1:" -ForegroundColor Yellow
+        Write-Info "  https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe"
+        exit 1
     }
 
-    Write-OK "$pyver"
-} else {
-    Write-Fail "Could not parse Python version from: $pyver"
-    exit 1
+    Write-OK "winget install completed -- locating Python 3.12..."
+
+    # Give the installer a moment to register paths
+    Start-Sleep -Seconds 3
+
+    $pythonExe = Find-Python312
+
+    if ($null -eq $pythonExe) {
+        Write-Fail "Python 3.12 installed but could not be located on disk."
+        Write-Host ""
+        Write-Host "  Close this terminal, open a new Admin PowerShell, and re-run:" -ForegroundColor Yellow
+        Write-Info "  .\install.ps1"
+        Write-Host "  (A new terminal picks up the updated PATH from winget.)" -ForegroundColor Gray
+        exit 1
+    }
+
+    $v312 = Get-PyVersion $pythonExe
+    Write-OK "Python $($v312.Full) ready at: $pythonExe"
 }
 
-# Git (optional)
+# Final version sanity check
+$chosenVer = Get-PyVersion $pythonExe
+if ($null -eq $chosenVer) {
+    Write-Fail "Cannot determine version of: $pythonExe"
+    exit 1
+}
+Write-OK "Using $($chosenVer.Full) -- $pythonExe"
+
+# ============================================================================
+# Step 2 -- Git (optional)
+# ============================================================================
+
 try {
     $gitver = (& git --version 2>&1).ToString().Trim()
     Write-OK $gitver
@@ -145,153 +233,119 @@ try {
 }
 
 # ============================================================================
-# Virtual environment
+# Step 3 -- Virtual environment (created with the verified Python 3.12 binary)
 # ============================================================================
 
-Write-Step "Setting up Python virtual environment..."
+Write-Step "Setting up Python 3.12 virtual environment..."
 
 $venvPath = Join-Path $PSScriptRoot ".venv"
+
+# If an existing .venv was built with the wrong Python version, wipe it.
+$existingVenvPy = Join-Path $venvPath "Scripts\python.exe"
+if (Test-Path $existingVenvPy) {
+    $existingVer = Get-PyVersion $existingVenvPy
+    if ($null -ne $existingVer -and $existingVer.Minor -ne $chosenVer.Minor) {
+        Write-Warn "Existing .venv was built with Python 3.$($existingVer.Minor) -- rebuilding with 3.$($chosenVer.Minor)."
+        Remove-Item $venvPath -Recurse -Force
+    }
+}
+
 if (-not (Test-Path $venvPath)) {
-    $ok = Invoke-Native { & python -m venv $venvPath } "python -m venv"
-    if (-not $ok) { Write-Fail "Failed to create virtual environment."; exit 1 }
-    Write-OK "Created .venv"
+    $ok = Invoke-Native { & $pythonExe -m venv $venvPath } "python -m venv"
+    if (-not $ok) {
+        Write-Fail "Failed to create virtual environment."
+        Write-Info "Try: Remove-Item .venv -Recurse -Force  then re-run."
+        exit 1
+    }
+    Write-OK "Created .venv (Python $($chosenVer.Full))"
 } else {
-    Write-OK ".venv already exists -- skipping creation"
+    Write-OK ".venv already exists (Python $($chosenVer.Full))"
 }
 
 $pip    = Join-Path $venvPath "Scripts\pip.exe"
 $python = Join-Path $venvPath "Scripts\python.exe"
 
 if (-not (Test-Path $pip) -or -not (Test-Path $python)) {
-    Write-Fail "Virtual environment appears broken (pip or python missing)."
-    Write-Host "  Delete .venv and re-run the installer." -ForegroundColor Yellow
+    Write-Fail "Virtual environment is broken (pip or python missing inside .venv\Scripts\)."
+    Write-Info "Delete .venv and re-run install.ps1."
     exit 1
 }
 
 # ============================================================================
-# Upgrade build tools FIRST
-# This is critical -- outdated pip/wheel/setuptools are the #1 cause of
-# source-build failures. Do this before touching requirements.txt.
+# Step 4 -- Upgrade pip + wheel + setuptools BEFORE touching requirements.txt
+# Outdated build tools are the #1 cause of wheel-not-found failures.
 # ============================================================================
 
 Write-Step "Upgrading pip, wheel, and setuptools..."
-$ok = Invoke-Native { & $python -m pip install --upgrade pip wheel setuptools } "pip upgrade"
-if (-not $ok) {
-    Write-Warn "Build tool upgrade had warnings -- continuing."
+$ok = Invoke-Native {
+    & $python -m pip install --upgrade pip wheel setuptools --quiet
+} "pip/wheel/setuptools upgrade"
+if ($ok) {
+    Write-OK "Build tools upgraded"
 } else {
-    Write-OK "pip, wheel, setuptools up to date"
+    Write-Warn "Build tool upgrade had warnings -- continuing anyway."
 }
 
 # ============================================================================
-# Pre-install tiktoken with a prebuilt binary wheel
-#
-# tiktoken (pulled by open-interpreter) requires Rust to compile from source.
-# On Windows, prebuilt wheels exist for Python 3.10-3.12. If none is found
-# (e.g. Python 3.13+), we detect Rust and guide the user before continuing.
-# ============================================================================
-
-Write-Step "Pre-installing tiktoken (prebuilt binary wheel)..."
-& $pip install "tiktoken" --prefer-binary --quiet 2>&1 | Out-Null
-$tiktokenOk = ($LASTEXITCODE -eq 0)
-
-if (-not $tiktokenOk) {
-    Write-Warn "No prebuilt tiktoken wheel found for this Python version."
-    Write-Host ""
-
-    # Check for Rust
-    $rustVer = ""
-    try { $rustVer = (& rustc --version 2>&1).ToString().Trim() } catch {}
-
-    if ($rustVer -match "rustc") {
-        Write-OK "Rust found: $rustVer -- tiktoken will compile from source."
-        # Retry now that we know Rust is present
-        Invoke-Native { & $pip install "tiktoken" } "tiktoken (from source)" | Out-Null
-        $tiktokenOk = ($LASTEXITCODE -eq 0)
-    } else {
-        Write-Host "  +-------------------------------------------------+" -ForegroundColor Red
-        Write-Host "  |  Rust compiler NOT FOUND                        |" -ForegroundColor Red
-        Write-Host "  |                                                 |" -ForegroundColor Red
-        Write-Host "  |  tiktoken must be compiled from source but      |" -ForegroundColor Red
-        Write-Host "  |  no Rust toolchain was detected.                |" -ForegroundColor Red
-        Write-Host "  |                                                 |" -ForegroundColor Red
-        Write-Host "  |  OPTION A (recommended): Switch to Python 3.12  |" -ForegroundColor Yellow
-        Write-Host "  |    winget install --id Python.Python.3.12       |" -ForegroundColor Gray
-        Write-Host "  |                                                 |" -ForegroundColor Yellow
-        Write-Host "  |  OPTION B: Install Rust, then re-run            |" -ForegroundColor Yellow
-        Write-Host "  |    winget install --id Rustlang.Rustup          |" -ForegroundColor Gray
-        Write-Host "  |    (close terminal, reopen, then re-run)        |" -ForegroundColor Gray
-        Write-Host "  +-------------------------------------------------+" -ForegroundColor Red
-        Write-Host ""
-        $cont = Ask-YesNo "  Skip tiktoken and continue? (open-interpreter may not work)" $false
-        if (-not $cont) {
-            Write-Host "  Aborted. Follow Option A or B above, then re-run install.ps1." -ForegroundColor Yellow
-            exit 1
-        }
-        Write-Warn "Skipping tiktoken -- open-interpreter functionality will be limited."
-    }
-} else {
-    Write-OK "tiktoken installed (prebuilt wheel)"
-}
-
-# ============================================================================
-# Python dependencies
+# Step 5 -- Install requirements.txt
+# --prefer-binary tells pip to always take a prebuilt wheel over source.
+# With Python 3.12 this covers every package in the stack.
 # ============================================================================
 
 Write-Step "Installing Python dependencies (this may take several minutes)..."
-Write-Host "  Using --prefer-binary to avoid source compilation where possible." -ForegroundColor Gray
+Write-Info "Using --prefer-binary to skip source compilation."
 
 & $pip install --prefer-binary -r (Join-Path $PSScriptRoot "requirements.txt")
 $depsOk = ($LASTEXITCODE -eq 0)
 
-if (-not $depsOk) {
+if ($depsOk) {
+    Write-OK "All packages installed successfully"
+} else {
     Write-Host ""
-    Write-Warn "One or more packages failed to install."
-    Write-Warn "Albedo may be missing features. Review the errors above."
-    Write-Host "  Tip: Most failures on Python 3.13+ are solved by switching to 3.12." -ForegroundColor Gray
+    Write-Warn "One or more packages reported errors."
+    Write-Info "Review the output above. If tiktoken still fails, ensure Python 3.12 is in use."
     $cont = Ask-YesNo "  Continue with partial installation?" $true
     if (-not $cont) { exit 1 }
-} else {
-    Write-OK "All core packages installed"
 }
 
 # ============================================================================
-# Playwright browser (guarded -- only runs if playwright module is present)
+# Step 6 -- Playwright browser (guarded)
 # ============================================================================
 
-Write-Step "Installing Playwright Chromium for Open Interpreter web scraping..."
+Write-Step "Installing Playwright Chromium..."
 if (Test-Module "playwright") {
-    $ok = Invoke-Native { & $python -m playwright install chromium } "playwright install"
+    $ok = Invoke-Native { & $python -m playwright install chromium } "playwright install chromium"
     if ($ok) {
         Write-OK "Playwright Chromium ready"
     } else {
-        Write-Warn "Playwright browser download failed -- web scraping will be limited."
-        Write-Warn "Retry manually: .venv\Scripts\python.exe -m playwright install chromium"
+        Write-Warn "Browser download failed -- web scraping will be limited."
+        Write-Info "Retry: .venv\Scripts\python.exe -m playwright install chromium"
     }
 } else {
-    Write-Warn "playwright module not installed -- skipping browser download."
-    Write-Warn "Retry after fixing deps: .venv\Scripts\pip install playwright"
+    Write-Warn "playwright not installed -- skipping browser download."
+    Write-Info "Retry after fixing deps: .venv\Scripts\pip install playwright"
 }
 
 # ============================================================================
-# OpenWakeWord models (guarded -- only runs if openwakeword is present)
+# Step 7 -- OpenWakeWord base models (guarded)
 # ============================================================================
 
-Write-Step "Pre-downloading OpenWakeWord base models..."
+Write-Step "Pre-downloading OpenWakeWord models..."
 if (Test-Module "openwakeword") {
     & $python -c "import openwakeword; openwakeword.utils.download_models()" 2>&1
     if ($LASTEXITCODE -eq 0) {
         Write-OK "OpenWakeWord models cached"
     } else {
-        Write-Warn "Model download had errors -- wake word may need manual setup."
-        Write-Warn "Retry: .venv\Scripts\python.exe -c `"import openwakeword; openwakeword.utils.download_models()`""
+        Write-Warn "Model download had errors."
+        Write-Info "Retry: .venv\Scripts\python.exe -c `"import openwakeword; openwakeword.utils.download_models()`""
     }
 } else {
-    Write-Warn "openwakeword module not installed -- wake word detection unavailable."
-    Write-Warn "Retry after fixing deps: .venv\Scripts\pip install openwakeword"
+    Write-Warn "openwakeword not installed -- wake word detection unavailable."
+    Write-Info "Retry after fixing deps: .venv\Scripts\pip install openwakeword"
 }
 
 # ============================================================================
-# Hardware tier selection
+# Step 8 -- Hardware tier selection
 # ============================================================================
 
 Write-Host ""
@@ -308,10 +362,7 @@ Write-Host "  |      LLM: llama3.1:8b                             |" -Foreground
 Write-Host "  +---------------------------------------------------+" -ForegroundColor Magenta
 Write-Host ""
 
-do {
-    $tierInput = Read-Host "  Select tier [1/2]"
-} while ($tierInput -notmatch '^[12]$')
-
+do { $tierInput = Read-Host "  Select tier [1/2]" } while ($tierInput -notmatch '^[12]$')
 $highSpec = ($tierInput -eq "2")
 
 if ($highSpec) {
@@ -333,7 +384,7 @@ if ($highSpec) {
 }
 
 # ============================================================================
-# Directory configuration
+# Step 9 -- Directory configuration
 # ============================================================================
 
 Write-Host ""
@@ -342,7 +393,7 @@ Write-Host "  |         LOCAL KNOWLEDGE BASE DIRECTORIES         |" -ForegroundC
 Write-Host "  +---------------------------------------------------+" -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  These directories are indexed into ChromaDB for local RAG."
-Write-Host "  Leave blank to skip a collection (you can re-run --index later)."
+Write-Host "  Leave blank to skip a collection (run --index later to add it)."
 Write-Host ""
 
 $chaotic3dPath = Ask-Path "  Chaotic 3D path (STLs, gcode, slicer configs)"
@@ -353,7 +404,7 @@ foreach ($pair in @(
     @{ Label = "Exotic OS";  Path = $exoticOsPath  }
 )) {
     if ($pair.Path -ne "" -and -not (Test-Path $pair.Path)) {
-        Write-Warn "$($pair.Label) path '$($pair.Path)' does not exist -- will be skipped during indexing"
+        Write-Warn "$($pair.Label) path does not exist -- will be skipped during indexing"
     } elseif ($pair.Path -ne "") {
         Write-OK "$($pair.Label) -> $($pair.Path)"
     }
@@ -363,7 +414,7 @@ $chromaPath = Ask-Path "  ChromaDB storage path" "./chroma_db"
 Write-OK "ChromaDB -> $chromaPath"
 
 # ============================================================================
-# Piper TTS paths
+# Step 10 -- Piper TTS
 # ============================================================================
 
 Write-Host ""
@@ -381,16 +432,16 @@ $piperBinary = Ask-Path "  piper.exe path" "C:\piper\piper.exe"
 $piperVoice  = Ask-Path "  Voice .onnx path" "C:\piper\voices\en_US-ryan-high.onnx"
 
 # ============================================================================
-# Wake word model
+# Step 11 -- Wake word model
 # ============================================================================
 
 Write-Host ""
 $wakewordModel = Ask-Path "  Wake word model (label or .onnx path)" "hey_jarvis"
-Write-Warn "To use 'Cortana' as wake word, train a custom model and point this at the .onnx file."
-Write-Host "  Training guide: https://github.com/dscripka/openWakeWord#training-new-models"
+Write-Warn "To use 'Cortana', train a custom model and point this at the .onnx file."
+Write-Info "Training guide: https://github.com/dscripka/openWakeWord#training-new-models"
 
 # ============================================================================
-# Ollama model override
+# Step 12 -- Ollama model override
 # ============================================================================
 
 Write-Host ""
@@ -398,13 +449,12 @@ $ollamaOverride = Ask-Path "  Ollama model (leave blank for tier default: $ollam
 if ($ollamaOverride -ne "") { $ollamaModel = $ollamaOverride }
 
 # ============================================================================
-# Generate .env
+# Step 13 -- Generate .env
 # ============================================================================
 
 Write-Step "Writing .env..."
 
-$envPath = Join-Path $PSScriptRoot ".env"
-
+$envPath      = Join-Path $PSScriptRoot ".env"
 $highSpecFlag = if ($highSpec) { "true" } else { "false" }
 $tierLabel    = if ($highSpec) { "high-spec" } else { "standard" }
 
@@ -450,7 +500,7 @@ Set-Content -Path $envPath -Value $envContent -Encoding UTF8
 Write-OK ".env written to $envPath"
 
 # ============================================================================
-# Initial index (guarded -- only runs if chromadb imported cleanly)
+# Step 14 -- Initial ChromaDB index (guarded)
 # ============================================================================
 
 Write-Host ""
@@ -459,18 +509,21 @@ $doIndex = Ask-YesNo "  Run initial ChromaDB indexing now?" $true
 if ($doIndex) {
     if (Test-Module "chromadb") {
         Write-Step "Indexing local directories into ChromaDB..."
-        $ok = Invoke-Native { & $python (Join-Path $PSScriptRoot "main.py") --index } "main.py --index"
+        $ok = Invoke-Native {
+            & $python (Join-Path $PSScriptRoot "main.py") --index
+        } "main.py --index"
         if ($ok) {
             Write-OK "Indexing complete"
         } else {
-            Write-Warn "Indexing exited with errors. Run 'python main.py --index' manually when ready."
+            Write-Warn "Indexing exited with errors."
+            Write-Info "Run manually when ready: python main.py --index"
         }
     } else {
         Write-Warn "chromadb not installed -- skipping index."
-        Write-Warn "Fix dependencies first, then run: python main.py --index"
+        Write-Info "Fix deps first, then run: python main.py --index"
     }
 } else {
-    Write-Warn "Skipped -- run 'python main.py --index' when ready"
+    Write-Warn "Skipped -- run 'python main.py --index' when ready."
 }
 
 # ============================================================================
@@ -483,14 +536,14 @@ Write-Host "  |             ALBEDO IS READY                  |" -ForegroundColor
 Write-Host "  +----------------------------------------------+" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Activate the virtual environment:" -ForegroundColor White
-Write-Host "    .\.venv\Scripts\Activate.ps1" -ForegroundColor Gray
+Write-Info "  .\.venv\Scripts\Activate.ps1"
 Write-Host ""
 Write-Host "  Start Albedo:" -ForegroundColor White
-Write-Host "    python main.py            # text chat" -ForegroundColor Gray
-Write-Host "    python main.py --voice    # wake word + voice" -ForegroundColor Gray
-Write-Host "    python main.py --index    # re-index knowledge base" -ForegroundColor Gray
+Write-Info "  python main.py              # text chat"
+Write-Info "  python main.py --voice      # wake word + voice"
+Write-Info "  python main.py --index      # re-index knowledge base"
 Write-Host ""
 Write-Host "  Make sure Ollama is running:" -ForegroundColor White
-Write-Host "    ollama serve" -ForegroundColor Gray
-Write-Host "    ollama pull $ollamaModel" -ForegroundColor Gray
+Write-Info "  ollama serve"
+Write-Info "  ollama pull $ollamaModel"
 Write-Host ""
