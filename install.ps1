@@ -616,7 +616,9 @@ if ($doIndex) {
 
 Write-Step "Creating desktop shortcut..."
 
-$launcherPath = Join-Path $PSScriptRoot "Launch-Albedo.ps1"
+# Resolve to absolute path so the shortcut works from any drive or folder
+$projectAbs   = (Resolve-Path $PSScriptRoot).Path
+$launcherPath = Join-Path $projectAbs "Launch-Albedo.ps1"
 $desktopPath  = [System.Environment]::GetFolderPath("Desktop")
 $shortcutPath = Join-Path $desktopPath "Albedo.lnk"
 
@@ -625,15 +627,24 @@ if (-not (Test-Path $launcherPath)) {
     Write-Info "Ensure Launch-Albedo.ps1 is in the same folder as install.ps1."
 } else {
     try {
+        # Delete the existing shortcut first so Windows does not serve a
+        # stale cached icon from the old .lnk file
+        if (Test-Path $shortcutPath) {
+            Remove-Item -Force $shortcutPath
+        }
+
         $shell    = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($shortcutPath)
 
         $shortcut.TargetPath       = "powershell.exe"
         $shortcut.Arguments        = "-ExecutionPolicy Bypass -WindowStyle Normal -File `"$launcherPath`""
-        $shortcut.WorkingDirectory = $PSScriptRoot
+        $shortcut.WorkingDirectory = $projectAbs
         $shortcut.Description      = "Launch Albedo -- Spartan-Class Local AI"
 
-        $icoPath = Join-Path $PSScriptRoot "albedo_icon.ico"
+        # Absolute icon path -- relative paths silently fall back to the
+        # default PowerShell icon because the shell resolves them from
+        # system32, not the project root
+        $icoPath = Join-Path $projectAbs "albedo_icon.ico"
         if (Test-Path $icoPath) {
             $shortcut.IconLocation = "$icoPath,0"
             Write-Info "Custom icon applied: albedo_icon.ico"
