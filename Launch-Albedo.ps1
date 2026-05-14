@@ -91,13 +91,19 @@ if ($ollamaRunning) {
 # Launch Albedo in voice mode
 # ============================================================================
 
+$guiPy = Join-Path $projectRoot "gui.py"
+
 Write-Host ""
-Write-Host "  >> Activating Albedo (voice mode)..." -ForegroundColor Cyan
-Write-Host "     Say 'Cortana' to wake Albedo." -ForegroundColor Gray
-Write-Host "     Press Ctrl+C to stop." -ForegroundColor Gray
+Write-Host "  >> Launching Albedo Mission Control..." -ForegroundColor Cyan
+Write-Host "     Close the window or press Ctrl+C to stop." -ForegroundColor Gray
 Write-Host ""
 
-& $python $mainPy --voice
+if (Test-Path $guiPy) {
+    & $python $guiPy
+} else {
+    Write-Host "    [!]  gui.py not found -- falling back to voice mode." -ForegroundColor DarkYellow
+    & $python $mainPy --voice
+}
 
 # Keep the window open if Albedo exits unexpectedly
 Write-Host ""
