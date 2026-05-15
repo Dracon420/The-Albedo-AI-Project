@@ -243,45 +243,6 @@ def _write_env(chaotic: str, exotic: str, piper_bin: str, persona: str) -> None:
     env_path.write_text("\n".join(result) + "\n", encoding="utf-8")
 
 
-def _create_shortcut(install_root: Path) -> None:
-    launcher = install_root / "Launch-Albedo.ps1"
-    desktop  = Path(os.path.expandvars("%USERPROFILE%")) / "Desktop"
-    lnk_path = desktop / "Albedo Mission Control.lnk"
-    ico_path = install_root / "albedo_icon.ico"
-
-    if lnk_path.exists():
-        lnk_path.unlink()
-
-    try:
-        import win32com.client  # type: ignore
-        shell    = win32com.client.Dispatch("WScript.Shell")
-        shortcut = shell.CreateShortcut(str(lnk_path))
-        shortcut.TargetPath       = "powershell.exe"
-        shortcut.Arguments        = (f'-ExecutionPolicy Bypass -WindowStyle Normal '
-                                     f'-File "{launcher}"')
-        shortcut.WorkingDirectory = str(install_root)
-        shortcut.Description      = "Launch Albedo -- Spartan-Class Local AI"
-        shortcut.IconLocation     = (f"{ico_path},0" if ico_path.exists()
-                                     else "powershell.exe,0")
-        shortcut.Save()
-    except Exception:
-        try:
-            ps = (
-                f'$ws=New-Object -ComObject WScript.Shell; '
-                f'$lnk=$ws.CreateShortcut("{lnk_path}"); '
-                f'$lnk.TargetPath="powershell.exe"; '
-                f'$lnk.Arguments='
-                f'"-ExecutionPolicy Bypass -WindowStyle Normal -File `"{launcher}`""; '
-                f'$lnk.WorkingDirectory="{install_root}"; '
-                f'$lnk.IconLocation="{ico_path},0"; '
-                f'$lnk.Save()'
-            )
-            subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-                           capture_output=True, timeout=15)
-        except Exception:
-            pass
-
-
 # ---------------------------------------------------------------------------
 # Widget factory helpers
 # ---------------------------------------------------------------------------
@@ -585,7 +546,6 @@ class InstallPage(Page):
             self._step_download_voices()
             self._step_whisper_model()
             self._step_env(dirs)
-            self._step_shortcut()
             self._step_ollama()
             self._push("", "info", 1.0)
             self._push("Installation complete!", "ok")
@@ -729,11 +689,6 @@ class InstallPage(Page):
         except Exception as exc:
             self._push(f"  settings.json write skipped (non-fatal): {exc}", "info")
         self._push("  .env written.", "ok")
-
-    def _step_shortcut(self) -> None:
-        self._push("Creating desktop shortcut...", "info", 0.87)
-        _create_shortcut(ROOT)
-        self._push("  Albedo shortcut created on Desktop.", "ok")
 
     def _step_ollama(self) -> None:
         self._push("Pulling Ollama model (llama3.2:3b)...", "info", 0.90)
