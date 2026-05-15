@@ -143,6 +143,12 @@ Type: files;          Name: "{app}\.env"
 Type: filesandordirs; Name: "{app}\*"
 Type: dirifempty;     Name: "{app}"
 
+; Desktop shortcut scorch — destroys both the Inno-managed shortcut and the
+; rogue 'Albedo Mission Control.lnk' written by setup_utility.py, regardless
+; of which user profile received it (admin install vs. per-user install).
+Type: files; Name: "{commondesktop}\Albedo*.lnk"
+Type: files; Name: "{userdesktop}\Albedo*.lnk"
+
 ; ── Pre-install Python check ───────────────────────────────────────────────
 [Code]
 var
