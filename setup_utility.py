@@ -89,39 +89,52 @@ def _find_python312() -> str | None:
 
 def _check_ollama() -> bool:
     """
-    Detect Ollama via three escalating strategies so pythonw.exe's stripped
-    PATH never causes a false-negative:
+    Detect Ollama via four escalating strategies.
 
-    1. shutil.which — honours the current PATH (works in normal terminals).
-    2. Known Windows install path — %LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe
-    3. REST probe — if the daemon is already running, the /api/version endpoint
-       responds even when the binary isn't on PATH at all.
+    shell=True on strategy 1 is the critical fix for pythonw.exe: the
+    windowless launcher strips the user PATH, so shutil.which and direct
+    [exe] calls both miss ollama.exe. Routing through the Windows shell
+    ('cmd /c ollama --version') uses the full system PATH and succeeds
+    even when the subprocess environment is stripped.
+
+    Return True the instant any strategy succeeds so the wizard never
+    triggers a download for an already-installed instance.
     """
-    # Strategy 1: PATH lookup
+    # Strategy 1: shell=True — Windows shell resolves the full user PATH.
+    # This is the fix for pythonw.exe's stripped environment.
+    try:
+        r = subprocess.run(
+            "ollama --version",
+            capture_output=True, text=True, timeout=10, shell=True,
+        )
+        if r.returncode == 0:
+            return True
+    except Exception:
+        pass
+
+    # Strategy 2: shutil.which + explicit binary invocation
     exe = shutil.which("ollama")
     if exe:
         try:
-            r = subprocess.run([exe, "--version"], capture_output=True,
-                               text=True, timeout=10)
+            r = subprocess.run([exe, "--version"],
+                               capture_output=True, text=True, timeout=10)
             if r.returncode == 0:
                 return True
         except Exception:
             pass
 
-    # Strategy 2: well-known Windows install location
+    # Strategy 3: well-known Windows install location.
+    # If the binary exists at the standard path, treat it as installed
+    # regardless of --version exit code — the file presence is sufficient.
     local_app = os.environ.get("LOCALAPPDATA", "")
     if local_app:
         candidate = Path(local_app) / "Programs" / "Ollama" / "ollama.exe"
         if candidate.is_file():
-            try:
-                r = subprocess.run([str(candidate), "--version"],
-                                   capture_output=True, text=True, timeout=10)
-                if r.returncode == 0:
-                    return True
-            except Exception:
-                pass
+            return True
 
-    # Strategy 3: REST probe — daemon already running?
+    # Strategy 4: REST probe — daemon is already running.
+    # Handles the case where ollama.exe is completely off PATH but the
+    # service was started by the system or a previous session.
     try:
         import urllib.request as _ur
         with _ur.urlopen("http://localhost:11434/api/version", timeout=3) as resp:
@@ -380,14 +393,19 @@ class SystemCheckPage(Page):
 
         def _run() -> None:
             if not self._results.get("Ollama"):
-                try:
-                    subprocess.run(
-                        ["winget", "install", "Ollama.Ollama",
-                         "--accept-source-agreements",
-                         "--accept-package-agreements", "--silent"],
-                        timeout=120)
-                except Exception:
-                    pass
+                # Re-verify with the full four-strategy check before downloading.
+                # If Ollama is already installed but was missed by the initial
+                # PATH scan (pythonw.exe stripped env), skip the winget call
+                # entirely — avoids triggering a 2 GB upgrade unnecessarily.
+                if not _check_ollama():
+                    try:
+                        subprocess.run(
+                            ["winget", "install", "Ollama.Ollama",
+                             "--accept-source-agreements",
+                             "--accept-package-agreements", "--silent"],
+                            timeout=120)
+                    except Exception:
+                        pass
             if not self._results.get("Python 3.12"):
                 try:
                     subprocess.run(
