@@ -790,21 +790,13 @@ class AlbedoGUI(ctk.CTk):
 
     def _load_icon(self) -> None:
         self._draw_circuit_board()   # PCB traces behind the icon
-        ico = ROOT / "albedo_icon.ico"
-        if ico.exists():
+        logo = ROOT / "albedo_logo.png"
+        if logo.exists():
             try:
-                img = Image.open(ico)
-                best = img.copy()
-                try:
-                    for frame in range(getattr(img, "n_frames", 1)):
-                        img.seek(frame)
-                        if img.size[0] >= best.size[0]:
-                            best = img.copy()
-                except EOFError:
-                    pass
-                best = best.convert("RGBA").resize(
-                    (ICON_RADIUS * 2, ICON_RADIUS * 2), Image.LANCZOS)
-                self._icon_photo = ImageTk.PhotoImage(best)
+                img = (Image.open(logo)
+                           .convert("RGBA")
+                           .resize((ICON_RADIUS * 2, ICON_RADIUS * 2), Image.LANCZOS))
+                self._icon_photo = ImageTk.PhotoImage(img)
                 self._canvas.create_image(CENTER, CENTER,
                                           image=self._icon_photo, tags="icon")
                 return
