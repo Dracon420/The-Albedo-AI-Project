@@ -13,6 +13,7 @@ log and TTS both receive clean plain-prose text.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from albedo.rag.retriever import query_all
 from albedo.web.search import web_search, format_web_results
@@ -129,6 +130,43 @@ def _build_standard_prompt(query: str, rag_results: dict,
 
 
 # ---------------------------------------------------------------------------
+# STL file count interceptor
+# Resolves the real count directly in Python — never lets the LLM guess CWD.
+# ---------------------------------------------------------------------------
+
+_STL_COUNT_SIGNALS = frozenset({
+    "stl", ".stl", "3d print", "3d model", "3d file",
+    "chaotic", "printing directory", "model file", "gcode",
+})
+
+_FILE_COUNT_SIGNALS = frozenset({
+    "how many", "count", "number of", "total", "how much",
+    "list", "show me", "find", "do i have",
+})
+
+
+def _is_stl_count_query(query: str) -> bool:
+    """True when the user is asking for a file count in the 3D printing directory."""
+    q = query.lower()
+    has_stl   = any(s in q for s in _STL_COUNT_SIGNALS)
+    has_count = any(s in q for s in _FILE_COUNT_SIGNALS)
+    return has_stl and has_count
+
+
+def _count_stl_files() -> tuple[int, str]:
+    """
+    Count .stl files under CHAOTIC_3D_PATH using pathlib.
+    Returns (count, path_str). count is -1 if path is not configured.
+    """
+    from albedo.config import CHAOTIC_3D_PATH
+    p = Path(CHAOTIC_3D_PATH)
+    if not p.exists() or str(p) in ("", "."):
+        return -1, str(p)
+    count = sum(1 for _ in p.rglob("*.stl"))
+    return count, str(p)
+
+
+# ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
 
@@ -137,6 +175,19 @@ def run(query: str, use_web: bool = False,
     # ── 0. Conversational bypass ─────────────────────────────────────────────
     if _is_conversational(query):
         return _strip_markdown(direct_reply(query, history=history))
+
+    # ── 0b. STL file count — resolve in Python, present via direct_reply ─────
+    if _is_stl_count_query(query):
+        count, path = _count_stl_files()
+        if count < 0:
+            fact = (
+                "The 3D Printing directory is not configured. "
+                "Set CHAOTIC_3D_PATH in your .env file and re-index."
+            )
+        else:
+            noun = "file" if count == 1 else "files"
+            fact = f"Found {count} STL {noun} in your 3D Printing directory at {path}."
+        return _strip_markdown(direct_reply(fact, history=history))
 
     # ── 1. Hardware Verify protocol ──────────────────────────────────────────
     if is_hardware_query(query):

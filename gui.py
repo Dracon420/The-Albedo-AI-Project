@@ -113,8 +113,10 @@ C_ORANGE     = "#FF9900"   # tactical orange       (SYS / system tags)
 C_PURPLE     = "#9988FF"   # scan hover
 C_DANGER     = "#FF3A5C"   # error
 
+C_VIOLET     = "#BD00FF"   # plasma violet (standby indicator)
+
 _STATE_COLOR = {
-    "standby":    C_MUTED,
+    "standby":    C_ORANGE,  # high-vis amber — always readable
     "listening":  C_GREEN,   # neon green
     "processing": C_CYAN,    # electric cyan
     "speaking":   C_PURPLE,
@@ -469,6 +471,8 @@ class AlbedoGUI(ctk.CTk):
         self._icon_photo   = None   # ImageTk ref kept alive
         self._settings     = _load_settings()
         self._scan_btn     = None   # set by _build_ui
+        self._audio_btn    = None   # AUDIO ON/MUTE toggle — set by _build_ui
+        self._audio_muted  = False  # TTS kill-switch
         # Rolling conversation context — last 10 turns (20 messages)
         self._chat_history: list[dict] = []
 
@@ -500,13 +504,14 @@ class AlbedoGUI(ctk.CTk):
                      text_color=C_CYAN).pack(side="left", padx=22, pady=14)
 
         self._state_chip = ctk.CTkLabel(hdr, text="STANDBY",
-                                        font=("Courier New", 13),
-                                        text_color=C_MUTED)
+                                        font=("Courier New", 13, "bold"),
+                                        text_color=C_ORANGE)
         self._state_chip.pack(side="right", padx=22)
 
         ctk.CTkButton(hdr, text="LOGS", width=60, height=30,
                       font=("Courier New", 10, "bold"),
-                      fg_color=C_BORDER, hover_color=C_MUTED,
+                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+                      text_color=C_CYAN,
                       command=self._open_console).pack(side="right", padx=(0, 4), pady=16)
 
         # ── Tactical HUD status bar ─────────────────────────────────────────
@@ -516,14 +521,14 @@ class AlbedoGUI(ctk.CTk):
         ctk.CTkLabel(
             hud,
             text="// CORE_SYS: ACTIVE  |  BRIDGE: OK  |  MEM: ONLINE  |  VEC_DB: READY",
-            font=("Courier New", 9),
-            text_color=C_MUTED,
+            font=("Courier New", 9, "bold"),
+            text_color=C_CYAN,
         ).pack(side="left", padx=16)
         ctk.CTkLabel(
             hud,
             text="[ NET_LINK: OK ]",
-            font=("Courier New", 9),
-            text_color=C_CYAN_DIM,
+            font=("Courier New", 9, "bold"),
+            text_color=C_ORANGE,
         ).pack(side="right", padx=16)
 
         # ── Orb canvas ─────────────────────────────────────────────────────
@@ -542,9 +547,9 @@ class AlbedoGUI(ctk.CTk):
         log_hdr.pack(fill="x", padx=6, pady=(4, 0))
         log_hdr.pack_propagate(False)
         ctk.CTkLabel(log_hdr, text="// CHAT_FEED",
-                     font=("Courier New", 9), text_color=C_MUTED).pack(side="left")
+                     font=("Courier New", 9, "bold"), text_color=C_CYAN).pack(side="left")
         ctk.CTkLabel(log_hdr, text="[ STREAM: ACTIVE ]",
-                     font=("Courier New", 9), text_color=C_CYAN_DIM).pack(side="right")
+                     font=("Courier New", 9, "bold"), text_color=C_ORANGE).pack(side="right")
 
         self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 16),
                                    fg_color=C_PANEL, text_color=C_TEXT,
@@ -563,9 +568,9 @@ class AlbedoGUI(ctk.CTk):
         cmd_hdr.pack(fill="x", padx=18)
         cmd_hdr.pack_propagate(False)
         ctk.CTkLabel(cmd_hdr, text="[ CMD_INPUT ]",
-                     font=("Courier New", 9), text_color=C_MUTED).pack(side="left")
+                     font=("Courier New", 9, "bold"), text_color=C_CYAN).pack(side="left")
         ctk.CTkLabel(cmd_hdr, text="// INPUT_READY",
-                     font=("Courier New", 9), text_color=C_CYAN_DIM).pack(side="right")
+                     font=("Courier New", 9, "bold"), text_color=C_GREEN).pack(side="right")
 
         # ── Input row (neon border on entry) ────────────────────────────────
         row = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
@@ -607,7 +612,16 @@ class AlbedoGUI(ctk.CTk):
         ctk.CTkButton(row, text="HARDWARE", width=88, height=44,
                       font=("Courier New", 10, "bold"),
                       fg_color=C_BORDER, hover_color=C_CYAN_DIM,
-                      command=self._open_hardware_settings).pack(side="left", padx=(4, 10), pady=10)
+                      command=self._open_hardware_settings).pack(side="left", padx=(4, 4), pady=10)
+
+        self._audio_btn = ctk.CTkButton(
+            row, text="AUDIO: ON", width=100, height=44,
+            font=("Courier New", 10, "bold"),
+            fg_color=C_GREEN, hover_color="#22CC00",
+            text_color="#000000",
+            command=self._toggle_audio_mute,
+        )
+        self._audio_btn.pack(side="left", padx=(0, 10), pady=10)
 
     # ── Icon loading ───────────────────────────────────────────────────────
 
@@ -851,12 +865,13 @@ class AlbedoGUI(ctk.CTk):
             self._ui(lambda: self._set_state("speaking"))
 
             # TTS runs on this background thread -- UI stays responsive
-            try:
-                from albedo.audio.tts import speak_streamed
-                out_dev = self._settings.get("audio_output_device")
-                speak_streamed(response, device=out_dev, voice_model=self._get_tts_voice())
-            except Exception as tts_err:
-                print(f"[gui] TTS error: {tts_err}")
+            if not self._audio_muted:
+                try:
+                    from albedo.audio.tts import speak_streamed
+                    out_dev = self._settings.get("audio_output_device")
+                    speak_streamed(response, device=out_dev, voice_model=self._get_tts_voice())
+                except Exception as tts_err:
+                    print(f"[gui] TTS error: {tts_err}")
 
         except Exception as exc:
             msg = str(exc)
@@ -915,12 +930,13 @@ class AlbedoGUI(ctk.CTk):
             self._ui(lambda: self._log_append("albedo", resp))
             self._ui(lambda: self._set_state("speaking"))
 
-            try:
-                from albedo.audio.tts import speak_streamed
-                out_dev = self._settings.get("audio_output_device")
-                speak_streamed(result, device=out_dev, voice_model=self._get_tts_voice())
-            except Exception as tts_err:
-                print(f"[gui] TTS error: {tts_err}")
+            if not self._audio_muted:
+                try:
+                    from albedo.audio.tts import speak_streamed
+                    out_dev = self._settings.get("audio_output_device")
+                    speak_streamed(result, device=out_dev, voice_model=self._get_tts_voice())
+                except Exception as tts_err:
+                    print(f"[gui] TTS error: {tts_err}")
 
         except Exception as exc:
             msg = str(exc)
@@ -993,6 +1009,31 @@ class AlbedoGUI(ctk.CTk):
             self._hardware_win.focus()
             return
         self._hardware_win = HardwareSettingsDialog(self)
+
+    def _toggle_audio_mute(self) -> None:
+        """Toggle TTS mute. Immediately kills any playing audio via sd.stop()."""
+        self._audio_muted = not self._audio_muted
+        if self._audio_muted:
+            try:
+                import sounddevice as sd
+                sd.stop()
+            except Exception:
+                pass
+            self._audio_btn.configure(
+                text="AUDIO: MUTE",
+                fg_color=C_DANGER,
+                hover_color="#CC2040",
+                text_color="#FFFFFF",
+            )
+            self._log_append("system", "[SYS] Audio output muted.")
+        else:
+            self._audio_btn.configure(
+                text="AUDIO: ON",
+                fg_color=C_GREEN,
+                hover_color="#22CC00",
+                text_color="#000000",
+            )
+            self._log_append("system", "[SYS] Audio output restored.")
 
     def _reset_audio_stream(self) -> None:
         """Stop and discard the current AudioStream so the next MIC press
