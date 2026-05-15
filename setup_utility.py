@@ -148,18 +148,17 @@ def _write_env(chaotic: str, exotic: str, piper_bin: str, persona: str) -> None:
     env_path   = ROOT / ".env"
     example    = ROOT / ".env.example"
     voices_dir = ROOT / "voices"
-    ww_dir     = ROOT / "wakeword_models"
+    ww_dir     = ROOT / "wakewords"  # bundled in repo
 
     cortana_voice = str(voices_dir / "en_US-kristin-medium.onnx")
     jarvis_voice  = str(voices_dir / "en_US-ryan-medium.onnx")
 
     if persona == "jarvis":
         active_voice    = jarvis_voice
-        active_wakeword = "hey_jarvis"
+        active_wakeword = str(ww_dir / "hey_jarvis_v0.1.onnx")
     else:
         active_voice    = cortana_voice
-        cortana_onnx    = ww_dir / "hey_core_tah_nuh.onnx"
-        active_wakeword = str(cortana_onnx) if cortana_onnx.exists() else "hey_jarvis"
+        active_wakeword = str(ww_dir / "hey_core_tah_nuh.onnx")
 
     lines = (example.read_text(encoding="utf-8").splitlines()
              if example.exists() else [])
@@ -375,7 +374,7 @@ class DirectoryPage(Page):
         super().__init__(parent, wizard)
         self._3d_var      = tk.StringVar(value="")
         self._os_var      = tk.StringVar(value="")
-        self._piper_var   = tk.StringVar(value=r"C:\piper\piper.exe")
+        self._piper_var   = tk.StringVar(value=str(ROOT / "piper" / "piper.exe"))
         self._persona_var = tk.StringVar(value="Cortana")
         self._build()
 

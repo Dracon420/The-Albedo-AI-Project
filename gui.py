@@ -47,7 +47,7 @@ SETTINGS_PATH = ROOT / "settings.json"
 # ── Persona constants ──────────────────────────────────────────────────────
 
 _VOICES_DIR   = ROOT / "voices"
-_WAKEWORD_DIR = ROOT / "wakeword_models"
+_WAKEWORD_DIR = ROOT / "wakewords"  # bundled in repo
 
 # Display-name → voice file + wakeword model
 PERSONA_MAP: dict[str, dict[str, str]] = {
@@ -57,7 +57,7 @@ PERSONA_MAP: dict[str, dict[str, str]] = {
     },
     "Jarvis": {
         "voice":    str(_VOICES_DIR / "en_US-ryan-medium.onnx"),
-        "wakeword": "hey_jarvis",
+        "wakeword": str(_WAKEWORD_DIR / "hey_jarvis_v0.1.onnx"),
     },
 }
 _PERSONA_DISPLAY = list(PERSONA_MAP.keys())  # ["Cortana", "Jarvis"]

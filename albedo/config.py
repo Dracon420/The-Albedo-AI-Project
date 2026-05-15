@@ -31,7 +31,7 @@ COLLECTION_EXOTIC_OS = "exotic_os"
 
 # --- Audio / Voice ---
 # Path to the Piper TTS executable (download from github.com/rhasspy/piper/releases)
-PIPER_BINARY = os.getenv("PIPER_BINARY", r"C:\piper\piper.exe")
+PIPER_BINARY = os.getenv("PIPER_BINARY", str(_PROJECT_ROOT / "piper" / "piper.exe"))
 
 # Project root (two levels up: albedo/config.py → albedo/ → root)
 _PROJECT_ROOT = Path(__file__).parent.parent
@@ -52,9 +52,9 @@ PIPER_VOICE_JARVIS = os.getenv(
 # Legacy single-model path (used as fallback when per-persona paths aren't set)
 PIPER_VOICE_MODEL = os.getenv("PIPER_VOICE_MODEL", PIPER_VOICE_CORTANA)
 
-# Local wake word model cache
+# Local wake word model cache (bundled in repo under wakewords/)
 WAKEWORD_MODELS_DIR = Path(os.getenv(
-    "WAKEWORD_MODELS_DIR", str(_PROJECT_ROOT / "wakeword_models")
+    "WAKEWORD_MODELS_DIR", str(_PROJECT_ROOT / "wakewords")
 ))
 
 # OpenWakeWord model — set to path of a custom .onnx, or use a built-in label.
