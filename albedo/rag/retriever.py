@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import chromadb
-from chromadb.utils import embedding_functions
 from albedo.config import (
     CHROMA_DB_PATH,
     COLLECTION_CHAOTIC_3D,
@@ -9,11 +8,40 @@ from albedo.config import (
     RAG_TOP_K,
 )
 
-# Force CPU so all 6 GB VRAM stays reserved for the Ollama LLM.
-_ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-    model_name="all-MiniLM-L6-v2",
-    device="cpu",
-)
+# ---------------------------------------------------------------------------
+# Embedding function — lazy-initialised so a corrupt model file does not
+# freeze the process at import time (Errno 22 / OSError on .bin/.pkl files).
+# If initialisation fails, _get_ef() returns None and all queries fall back
+# to token-overlap keyword search automatically.
+# ---------------------------------------------------------------------------
+
+_ef = None          # SentenceTransformerEmbeddingFunction or None
+_ef_tried = False   # True once we have attempted init (success or failure)
+
+
+def _get_ef():
+    global _ef, _ef_tried
+    if _ef_tried:
+        return _ef
+    _ef_tried = True
+    try:
+        from chromadb.utils import embedding_functions
+        _ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+            model_name="all-MiniLM-L6-v2",
+            device="cpu",
+        )
+        print("[retriever] Embedding model loaded (all-MiniLM-L6-v2, CPU).")
+    except Exception as exc:
+        print(
+            f"[retriever] WARNING: embedding model failed to load "
+            f"({type(exc).__name__}: {exc}).\n"
+            "[retriever] Falling back to keyword search. "
+            "Delete chroma_db/ and re-index to restore semantic search."
+        )
+        _ef = None
+    return _ef
+
+
 _client: chromadb.PersistentClient | None = None
 
 
@@ -24,27 +52,70 @@ def _get_client() -> chromadb.PersistentClient:
     return _client
 
 
+# ---------------------------------------------------------------------------
+# Keyword fallback — token overlap ranking, no model required
+# ---------------------------------------------------------------------------
+
+def _keyword_fallback(col, query: str, n_results: int) -> list[dict]:
+    """Simple token-overlap search used when the embedding model is unavailable."""
+    try:
+        all_docs = col.get(include=["documents", "metadatas"])
+        tokens = set(query.lower().split())
+        scored: list[tuple[int, str, dict]] = []
+        for doc, meta in zip(all_docs["documents"], all_docs["metadatas"]):
+            overlap = sum(1 for t in tokens if t in doc.lower())
+            if overlap:
+                scored.append((overlap, doc, meta or {}))
+        scored.sort(reverse=True)
+        return [
+            {"text": doc, "source": meta.get("source", ""), "score": 0.0}
+            for _, doc, meta in scored[:n_results]
+        ]
+    except Exception as exc:
+        print(f"[retriever] Keyword fallback also failed: {exc}")
+        return []
+
+
+# ---------------------------------------------------------------------------
+# Core query logic
+# ---------------------------------------------------------------------------
+
 def _query_collection(collection_name: str, query: str, top_k: int) -> list[dict]:
     client = _get_client()
+    ef = _get_ef()
+
     try:
-        col = client.get_collection(collection_name, embedding_function=_ef)
+        col = client.get_collection(collection_name, embedding_function=ef)
     except Exception:
         return []
 
     count = col.count()
     if count == 0:
         return []
-    # Always retrieve at least 3 chunks when available; never exceed what exists.
+
     n_results = min(count, max(top_k, 3))
-    results = col.query(query_texts=[query], n_results=n_results)
-    chunks = []
-    for doc, meta, distance in zip(
-        results["documents"][0],
-        results["metadatas"][0],
-        results["distances"][0],
-    ):
-        chunks.append({"text": doc, "source": meta.get("source", ""), "score": distance})
-    return chunks
+
+    # No embedding model available — skip straight to keyword fallback
+    if ef is None:
+        return _keyword_fallback(col, query, n_results)
+
+    # Semantic search via embedding model
+    try:
+        results = col.query(query_texts=[query], n_results=n_results)
+        chunks = []
+        for doc, meta, distance in zip(
+            results["documents"][0],
+            results["metadatas"][0],
+            results["distances"][0],
+        ):
+            chunks.append({"text": doc, "source": meta.get("source", ""), "score": distance})
+        return chunks
+    except Exception as exc:
+        print(
+            f"[retriever] Embedding query failed "
+            f"({type(exc).__name__}: {exc}); using keyword fallback."
+        )
+        return _keyword_fallback(col, query, n_results)
 
 
 def query_chaotic_3d(query: str, top_k: int = RAG_TOP_K) -> list[dict]:
@@ -58,5 +129,5 @@ def query_exotic_os(query: str, top_k: int = RAG_TOP_K) -> list[dict]:
 def query_all(query: str, top_k: int = RAG_TOP_K) -> dict[str, list[dict]]:
     return {
         "chaotic_3d": query_chaotic_3d(query, top_k),
-        "exotic_os": query_exotic_os(query, top_k),
+        "exotic_os":  query_exotic_os(query, top_k),
     }
