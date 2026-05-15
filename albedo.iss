@@ -88,6 +88,15 @@ Source: "Albedo-Maintenance.ps1"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md";            DestDir: "{app}"; Flags: ignoreversion
 Source: "CLAUDE.md";            DestDir: "{app}"; Flags: ignoreversion
 
+; ── Piper TTS binary (bundled in repo under piper/) ───────────────────────
+Source: "piper\*";              DestDir: "{app}\piper";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; ── Piper voice models (downloaded by setup_utility.py; include if present) ─
+Source: "voices\*";             DestDir: "{app}\voices";            Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; ── OpenWakeWord models (bundled in repo under wakewords/) ────────────────
+Source: "wakewords\*";          DestDir: "{app}\wakewords";         Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
 ; ── Icon (optional -- installer skips gracefully if absent) ───────────────
 Source: "albedo_icon.ico";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 

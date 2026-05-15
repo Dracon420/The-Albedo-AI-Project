@@ -279,17 +279,42 @@ class HardwareSettingsDialog(ctk.CTkToplevel):
                      font=("Courier New", 10), text_color=C_MUTED).pack(pady=(0, 12))
 
         try:
-            devices = sd.query_devices()
+            devices  = sd.query_devices()
+            hostapis = sd.query_hostapis()
         except Exception:
-            devices = []
+            devices  = []
+            hostapis = []
+
+        # Deduplicate: one entry per physical device name.
+        # Prefer WASAPI (best quality) → MME → DirectSound → anything else.
+        _API_RANK = {"Windows WASAPI": 0, "MME": 1, "Windows DirectSound": 2}
+
+        def _rank(d: dict) -> int:
+            try:
+                return _API_RANK.get(hostapis[d["hostapi"]]["name"], 99)
+            except Exception:
+                return 99
+
+        seen_in:  dict[str, tuple[int, int]] = {}  # name → (rank, device_idx)
+        seen_out: dict[str, tuple[int, int]] = {}
 
         for i, d in enumerate(devices):
+            name = d["name"]
+            r    = _rank(d)
             if d["max_input_channels"] > 0:
-                self._in_ids.append(i)
-                self._in_labels.append(f"{d['name']} [{i}]")
+                if name not in seen_in or r < seen_in[name][0]:
+                    seen_in[name] = (r, i)
             if d["max_output_channels"] > 0:
-                self._out_ids.append(i)
-                self._out_labels.append(f"{d['name']} [{i}]")
+                if name not in seen_out or r < seen_out[name][0]:
+                    seen_out[name] = (r, i)
+
+        for name, (_, idx) in seen_in.items():
+            self._in_ids.append(idx)
+            self._in_labels.append(name)
+
+        for name, (_, idx) in seen_out.items():
+            self._out_ids.append(idx)
+            self._out_labels.append(name)
 
         settings = self._parent._settings
 
@@ -799,8 +824,8 @@ class AlbedoGUI(ctk.CTk):
             prewarm()
             self._ui(lambda: self._log_append("system", "Whisper ready."))
         except Exception as exc:
-            self._ui(lambda: self._log_append(
-                "system", f"Whisper pre-warm failed (will retry on first MIC press): {exc}"))
+            _prewarm_msg = f"Whisper pre-warm failed (will retry on first MIC press): {exc}"
+            self._ui(lambda: self._log_append("system", _prewarm_msg))
 
     # ── Visual scan ────────────────────────────────────────────────────────
 
