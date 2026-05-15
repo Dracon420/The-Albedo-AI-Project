@@ -61,11 +61,12 @@ WAKEWORD_MODELS_DIR = Path(os.getenv(
 # Train a custom model: github.com/dscripka/openWakeWord#training-new-models
 WAKEWORD_MODEL = os.getenv("WAKEWORD_MODEL", "hey_jarvis")
 
-# Faster-Whisper: keep "small" + int8_float16 to stay within 6 GB VRAM alongside Ollama.
-# Bump to "medium" only after upgrading to 32 GB RAM and verifying VRAM headroom.
+# Faster-Whisper: CPU + int8 avoids the cublas64_12.dll CUDA dependency and
+# leaves the full 6 GB VRAM budget for Ollama. Transcription latency on CPU
+# with the small model is typically 1-3 s for a 30 s clip -- acceptable.
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
-WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cuda")
-WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8_float16")
+WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
+WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 
 AUDIO_SAMPLE_RATE = 16000          # Hz — required by both OpenWakeWord and Whisper
 AUDIO_CHUNK_MS = 80                # ms per OpenWakeWord inference frame (1280 samples)

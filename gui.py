@@ -471,7 +471,7 @@ class AlbedoGUI(ctk.CTk):
                      text_color=C_CYAN).pack(side="left", padx=22, pady=14)
 
         self._state_chip = ctk.CTkLabel(hdr, text="STANDBY",
-                                        font=("Courier New", 11),
+                                        font=("Courier New", 13),
                                         text_color=C_MUTED)
         self._state_chip.pack(side="right", padx=22)
 
@@ -490,7 +490,7 @@ class AlbedoGUI(ctk.CTk):
         log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8)
         log_outer.pack(fill="both", expand=True, padx=16, pady=(12, 4))
 
-        self._log = ctk.CTkTextbox(log_outer, font=("Courier New", 12),
+        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 16),
                                    fg_color=C_PANEL, text_color=C_TEXT,
                                    wrap="word", state="disabled", border_width=0,
                                    scrollbar_button_color=C_BORDER)
@@ -520,7 +520,7 @@ class AlbedoGUI(ctk.CTk):
 
         self._entry = ctk.CTkEntry(row,
                                    placeholder_text="Type a query or press MIC...",
-                                   font=("Courier New", 12),
+                                   font=("Consolas", 14),
                                    fg_color=C_BG, border_color=C_BORDER,
                                    text_color=C_TEXT, height=44)
         self._entry.pack(side="left", fill="x", expand=True, padx=4, pady=10)
