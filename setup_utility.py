@@ -25,6 +25,7 @@ import subprocess
 import sys
 import threading
 import urllib.request
+import webbrowser
 from pathlib import Path
 from datetime import datetime
 import tkinter as tk
@@ -200,11 +201,18 @@ def _download_voice_models() -> list[str]:
     return failed
 
 
-def _write_env(chaotic: str, exotic: str, piper_bin: str, persona: str) -> None:
+def _write_env(
+    gemini_key: str,
+    groq_key: str,
+    together_key: str,
+    vault_path: str,
+    piper_bin: str,
+    persona: str,
+) -> None:
     env_path   = ROOT / ".env"
     example    = ROOT / ".env.example"
     voices_dir = ROOT / "voices"
-    ww_dir     = ROOT / "wakewords"  # bundled in repo
+    ww_dir     = ROOT / "wakewords"
 
     cortana_voice = str(voices_dir / "en_US-kristin-medium.onnx")
     jarvis_voice  = str(voices_dir / "en_US-ryan-medium.onnx")
@@ -219,8 +227,12 @@ def _write_env(chaotic: str, exotic: str, piper_bin: str, persona: str) -> None:
     lines = (example.read_text(encoding="utf-8").splitlines()
              if example.exists() else [])
     overrides = {
-        "CHAOTIC_3D_PATH":      chaotic,
-        "EXOTIC_OS_PATH":       exotic,
+        # ── Swarm Matrix / onboarding keys ──────────────────────────────
+        "GEMINI_API_KEY":       gemini_key,
+        "GROQ_API_KEY":         groq_key,
+        "TOGETHER_API_KEY":     together_key,
+        "OBSIDIAN_VAULT_PATH":  vault_path,
+        # ── Audio / voice ────────────────────────────────────────────────
         "PIPER_BINARY":         piper_bin,
         "PIPER_VOICE_MODEL":    active_voice,
         "PIPER_VOICE_CORTANA":  cortana_voice,
@@ -245,6 +257,21 @@ def _write_env(chaotic: str, exotic: str, piper_bin: str, persona: str) -> None:
         if k not in written:
             result.append(f'{k}="{v}"')
     env_path.write_text("\n".join(result) + "\n", encoding="utf-8")
+
+    # Belt-and-suspenders: use python-dotenv set_key for the four keys the
+    # gui.py boot intercept checks.  By _step_env time pip has already run,
+    # so dotenv is importable from the active interpreter.
+    try:
+        from dotenv import set_key
+        for _k, _v in [
+            ("GEMINI_API_KEY",      gemini_key),
+            ("GROQ_API_KEY",        groq_key),
+            ("TOGETHER_API_KEY",    together_key),
+            ("OBSIDIAN_VAULT_PATH", vault_path),
+        ]:
+            set_key(str(env_path), _k, _v)
+    except Exception:
+        pass  # stdlib write above is the authoritative path
 
 
 # ---------------------------------------------------------------------------
@@ -396,31 +423,44 @@ class DirectoryPage(Page):
 
     def __init__(self, parent: tk.Widget, wizard: "SetupWizard") -> None:
         super().__init__(parent, wizard)
-        self._3d_var      = tk.StringVar(value="")
-        self._os_var      = tk.StringVar(value="")
-        self._piper_var   = tk.StringVar(value=str(ROOT / "piper" / "piper.exe"))
-        self._persona_var = tk.StringVar(value="Cortana")
+        self._gemini_var   = tk.StringVar(value="")
+        self._groq_var     = tk.StringVar(value="")
+        self._together_var = tk.StringVar(value="")
+        self._vault_var    = tk.StringVar(value="")
+        self._piper_var    = tk.StringVar(value=str(ROOT / "piper" / "piper.exe"))
+        self._persona_var  = tk.StringVar(value="Cortana")
         self._build()
 
     def _build(self) -> None:
-        _lbl(self, "STEP 2  --  DIRECTORY SELECTION",
+        _lbl(self, "STEP 2  --  API KEYS & VAULT",
              size=14, bold=True, color=C_CYAN).pack(pady=(24, 4))
-        _lbl(self, "Choose your knowledge-base source folders.",
+        _lbl(self,
+             "Enter your Swarm Matrix API keys and select your Obsidian vault.",
              color=C_MUTED).pack(pady=(0, 12))
 
         box = tk.Frame(self, bg=C_PANEL, bd=0)
         box.pack(fill="x", padx=24, pady=4)
 
-        self._dir_row(box, "Chaotic 3D Folder  (STL / gcode / slicer)",
-                      self._3d_var, is_dir=True)
-        self._dir_row(box, "Exotic OS Folder   (Python / logs / reptile records)",
-                      self._os_var, is_dir=True)
+        self._api_row(box, "Gemini API Key",
+                      self._gemini_var,
+                      "https://aistudio.google.com/app/apikey")
+        self._api_row(box, "Groq API Key",
+                      self._groq_var,
+                      "https://console.groq.com/keys")
+        self._api_row(box, "Together API Key",
+                      self._together_var,
+                      "https://api.together.xyz/settings/api-keys")
+
+        tk.Frame(box, height=1, bg=C_BORDER).pack(fill="x", padx=16, pady=8)
+
+        self._dir_row(box, "Obsidian Vault Path  (your Markdown knowledge base)",
+                      self._vault_var, is_dir=True)
 
         tk.Frame(box, height=1, bg=C_BORDER).pack(fill="x", padx=16, pady=8)
 
         self._path_row(box, "Piper binary path", self._piper_var)
 
-        # Persona dropdown -- drives both TTS voice and wake word model
+        # Persona dropdown
         prow = tk.Frame(box, bg=C_PANEL)
         prow.pack(fill="x", padx=16, pady=4)
         _lbl(prow, "Initial persona  (sets voice model + wake word)",
@@ -436,8 +476,23 @@ class DirectoryPage(Page):
              size=9, color=C_MUTED, bg=C_PANEL).pack(anchor="w", pady=(2, 0))
 
         _lbl(self,
-             "Leave 3D / OS folders blank to configure later via SETTINGS.",
+             "Gemini key and Vault Path are required. Others can be added later.",
              color=C_MUTED, size=10).pack(pady=(8, 0))
+
+    def _api_row(self, parent: tk.Widget, label: str,
+                 var: tk.StringVar, help_url: str) -> None:
+        """Entry row with a trailing [?] button that opens the dev console."""
+        row = tk.Frame(parent, bg=C_PANEL)
+        row.pack(fill="x", padx=16, pady=4)
+        _lbl(row, label, size=10, bg=C_PANEL).pack(anchor="w")
+        inner = tk.Frame(row, bg=C_PANEL)
+        inner.pack(fill="x")
+        tk.Entry(inner, textvariable=var, bg=C_BG, fg=C_TEXT,
+                 insertbackground=C_CYAN, relief="flat", bd=2,
+                 font=FONT_SMALL, show="•").pack(
+                     side="left", fill="x", expand=True, padx=(0, 4))
+        _btn(inner, " ? ", lambda u=help_url: webbrowser.open(u),
+             width=3).pack(side="left")
 
     def _dir_row(self, parent: tk.Widget, label: str,
                  var: tk.StringVar, is_dir: bool = False) -> None:
@@ -467,10 +522,12 @@ class DirectoryPage(Page):
 
     def get_values(self) -> dict[str, str]:
         return {
-            "chaotic":   self._3d_var.get().strip(),
-            "exotic":    self._os_var.get().strip(),
-            "piper_bin": self._piper_var.get().strip(),
-            "persona":   self._persona_var.get().strip().lower(),  # "cortana" / "jarvis"
+            "gemini_key":   self._gemini_var.get().strip(),
+            "groq_key":     self._groq_var.get().strip(),
+            "together_key": self._together_var.get().strip(),
+            "vault_path":   self._vault_var.get().strip(),
+            "piper_bin":    self._piper_var.get().strip(),
+            "persona":      self._persona_var.get().strip().lower(),
         }
 
 
@@ -680,9 +737,11 @@ class InstallPage(Page):
         self._push("Writing .env configuration...", "info", 0.84)
         persona = dirs.get("persona", "cortana")
         _write_env(
-            chaotic=dirs["chaotic"],
-            exotic=dirs["exotic"],
-            piper_bin=dirs["piper_bin"],
+            gemini_key=dirs.get("gemini_key", ""),
+            groq_key=dirs.get("groq_key", ""),
+            together_key=dirs.get("together_key", ""),
+            vault_path=dirs.get("vault_path", ""),
+            piper_bin=dirs.get("piper_bin", ""),
             persona=persona,
         )
         # Write initial settings.json so the GUI knows the active persona
