@@ -14,7 +14,7 @@
 ; ── Build metadata ─────────────────────────────────────────────────────────
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "1.0"
+#define AppVersion   "1.2.0"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/Albedo-Local-AI"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -84,6 +84,9 @@ Source: "generate_stl_manifest.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "diagnostics.py";          DestDir: "{app}"; Flags: ignoreversion
 Source: "swarm.py";                DestDir: "{app}"; Flags: ignoreversion
 Source: "memory.py";               DestDir: "{app}"; Flags: ignoreversion
+Source: "telemetry.py";            DestDir: "{app}"; Flags: ignoreversion
+Source: "operative_dream.py";      DestDir: "{app}"; Flags: ignoreversion
+Source: "logs\*";                  DestDir: "{app}\logs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "requirements.txt";     DestDir: "{app}"; Flags: ignoreversion
 Source: ".env.example";         DestDir: "{app}"; Flags: ignoreversion
 Source: "Launch-Albedo.ps1";    DestDir: "{app}"; Flags: ignoreversion

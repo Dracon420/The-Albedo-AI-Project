@@ -1026,6 +1026,17 @@ class AlbedoGUI(ctk.CTk):
             except Exception as exc:
                 return f"[OBSIDIAN VAULT] Indexing failed: {exc}"
 
+        # Dream cycle intercept.
+        if any(q_lower == kw or q_lower.startswith(kw + " ")
+               for kw in ("dream cycle", "rem cycle", "initiate dream", "run dream")):
+            try:
+                from operative_dream import initiate_rem_cycle
+                return initiate_rem_cycle()
+            except Exception as exc:
+                return f"[dream] REM cycle failed: {exc}"
+
+        from telemetry import log_trace
+
         try:
             from swarm import autonomous_commander, query_groq, query_together
             result  = autonomous_commander(query)
@@ -1033,28 +1044,42 @@ class AlbedoGUI(ctk.CTk):
             payload = result["payload"]
 
             if route == "direct":
+                log_trace(query, route, success=True)
                 return payload
             if route == "groq":
-                return "[GROQ EXECUTING]\n" + query_groq(payload)
+                response = "[GROQ EXECUTING]\n" + query_groq(payload)
+                log_trace(query, route, success=not response.startswith("[swarm]"))
+                return response
             if route == "together":
-                return "[TOGETHER EVALUATING]\n" + query_together(payload)
+                response = "[TOGETHER EVALUATING]\n" + query_together(payload)
+                log_trace(query, route, success=not response.startswith("[swarm]"))
+                return response
             if route == "memory":
                 try:
                     from memory import search_memory
                     chunks = search_memory(payload)
                     if chunks:
                         body = "\n\n---\n\n".join(chunks)
+                        log_trace(query, route, success=True)
                         return f"[OBSIDIAN VAULT]\n{body}"
+                    log_trace(query, route, success=False)
                     return "[OBSIDIAN VAULT] No relevant notes found. Try 'index vault' first."
                 except Exception as exc:
                     print(f"[gui] Memory search error: {exc}")
+                    log_trace(query, route, success=False)
             # route == "local" — fall through to Ollama below
         except Exception as exc:
             print(f"[gui] Commander routing error (falling back to local): {exc}")
 
         from albedo.pipeline import run as pipeline_run
         history_snapshot = list(self._chat_history)
-        return pipeline_run(query, use_web=use_web, history=history_snapshot)
+        try:
+            response = pipeline_run(query, use_web=use_web, history=history_snapshot)
+            log_trace(query, "local", success=bool(response and response.strip()))
+            return response
+        except Exception as exc:
+            log_trace(query, "local", success=False)
+            raise
 
     # ── Pipeline runner (always on a background thread) ────────────────────
 
