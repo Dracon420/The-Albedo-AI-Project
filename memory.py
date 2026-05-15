@@ -31,7 +31,7 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_VAULT = r"C:\Users\demon\Desktop\Albedo Project"
+DEFAULT_VAULT = r"C:\Users\demon\Desktop\Albedo Project Brain"
 DB_PATH       = str(Path(__file__).parent / "albedo_memory_db")
 COLLECTION    = "obsidian_vault"
 CHUNK_SIZE    = 1000
