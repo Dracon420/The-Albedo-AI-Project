@@ -4,7 +4,14 @@
     Albedo maintenance utility.
     Provides update and uninstall operations without touching system-level
     dependencies (Python, Ollama, Piper).
+
+.PARAMETER AutoUpdate
+    Run a non-interactive update (git pull + pip upgrade) and exit.
+    Used by the "Update Albedo" Start Menu shortcut.
 #>
+param(
+    [switch]$AutoUpdate
+)
 
 $ErrorActionPreference = "Continue"
 
@@ -36,6 +43,31 @@ function Write-Step ([string]$msg) { Write-Host "  >> $msg"    -ForegroundColor 
 # ============================================================================
 # Update
 # ============================================================================
+
+function Invoke-DownloadVoices {
+    $voicesDir = Join-Path $projectRoot "voices"
+    if (-not (Test-Path $voicesDir)) { New-Item -ItemType Directory -Path $voicesDir | Out-Null }
+
+    $base = "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US"
+    $files = @(
+        "kristin/medium/en_US-kristin-medium.onnx",
+        "kristin/medium/en_US-kristin-medium.onnx.json",
+        "ryan/medium/en_US-ryan-medium.onnx",
+        "ryan/medium/en_US-ryan-medium.onnx.json"
+    )
+    foreach ($f in $files) {
+        $filename = Split-Path $f -Leaf
+        $dest = Join-Path $voicesDir $filename
+        if (Test-Path $dest) { continue }
+        Write-Info "Downloading $filename..."
+        try {
+            Invoke-WebRequest -Uri "$base/$f" -OutFile $dest -UseBasicParsing -ErrorAction Stop
+            Write-OK "$filename downloaded."
+        } catch {
+            Write-Warn "Could not download $filename (non-fatal): $_"
+        }
+    }
+}
 
 function Invoke-Update {
     Write-Host ""
@@ -81,6 +113,10 @@ function Invoke-Update {
         Write-Warn "One or more packages reported an issue (exit $LASTEXITCODE)."
         Write-Info "Review the output above for details."
     }
+
+    Write-Host ""
+    Write-Step "Ensuring voice models are present..."
+    Invoke-DownloadVoices
 
     Write-Host ""
     Write-OK "Update complete. Restart Albedo to apply changes."
@@ -153,6 +189,16 @@ function Invoke-Uninstall {
     Write-Info "The project folder itself has not been deleted."
     Write-Info "To reinstall, run install.ps1 from this directory."
     Write-Host ""
+}
+
+# ============================================================================
+# Entry point -- AutoUpdate short-circuits the interactive menu
+# ============================================================================
+
+if ($AutoUpdate) {
+    Write-Header
+    Invoke-Update
+    exit 0
 }
 
 # ============================================================================

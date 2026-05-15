@@ -92,14 +92,13 @@ Source: "CLAUDE.md";            DestDir: "{app}"; Flags: ignoreversion
 Source: "albedo_icon.ico";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
-; Start Menu group
-Name: "{group}\{#AppFullName}";         Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Normal -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Comment: "Launch Albedo Spartan-Class AI"
-Name: "{group}\Setup Wizard";           Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -Command ""py -3.12 '{app}\setup_utility.py'"""; WorkingDir: "{app}"; Comment: "Re-run the Albedo Setup Wizard"
-Name: "{group}\Maintenance Utility";    Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -File ""{app}\Albedo-Maintenance.ps1"""; WorkingDir: "{app}"; Comment: "Update or uninstall Albedo"
-Name: "{group}\{cm:UninstallProgram,{#AppFullName}}"; Filename: "{uninstallexe}"
+; Start Menu group -- 3 shortcuts only
+Name: "{group}\Launch Albedo";          Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Comment: "Launch Albedo Spartan-Class AI"
+Name: "{group}\Update Albedo";          Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Normal -File ""{app}\Albedo-Maintenance.ps1"" -AutoUpdate"; WorkingDir: "{app}"; Comment: "Pull latest code and upgrade packages"
+Name: "{group}\Uninstall Albedo";       Filename: "{uninstallexe}"; Comment: "Remove Albedo from this computer"
 
 ; Desktop shortcut (only when the user selected the task above)
-Name: "{autodesktop}\{#AppFullName}";   Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Normal -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Tasks: desktopicon; Comment: "Launch Albedo Spartan-Class AI"
+Name: "{autodesktop}\Albedo";           Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Tasks: desktopicon; Comment: "Launch Albedo Spartan-Class AI"
 
 [Run]
 ; Run the setup wizard after files are copied.

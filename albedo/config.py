@@ -32,10 +32,32 @@ COLLECTION_EXOTIC_OS = "exotic_os"
 # --- Audio / Voice ---
 # Path to the Piper TTS executable (download from github.com/rhasspy/piper/releases)
 PIPER_BINARY = os.getenv("PIPER_BINARY", r"C:\piper\piper.exe")
-# Path to the Piper voice model (.onnx file)
-PIPER_VOICE_MODEL = os.getenv("PIPER_VOICE_MODEL", r"C:\piper\voices\en_US-ryan-high.onnx")
 
-# OpenWakeWord model — set to path of a custom Cortana .onnx, or use a built-in label.
+# Project root (two levels up: albedo/config.py → albedo/ → root)
+_PROJECT_ROOT = Path(__file__).parent.parent
+
+# Local voice model cache -- downloaded by setup_utility.py / Invoke-Update
+VOICES_DIR = Path(os.getenv("VOICES_DIR", str(_PROJECT_ROOT / "voices")))
+
+# Per-persona voice paths (overrideable via .env)
+PIPER_VOICE_CORTANA = os.getenv(
+    "PIPER_VOICE_CORTANA",
+    str(VOICES_DIR / "en_US-kristin-medium.onnx"),
+)
+PIPER_VOICE_JARVIS = os.getenv(
+    "PIPER_VOICE_JARVIS",
+    str(VOICES_DIR / "en_US-ryan-medium.onnx"),
+)
+
+# Legacy single-model path (used as fallback when per-persona paths aren't set)
+PIPER_VOICE_MODEL = os.getenv("PIPER_VOICE_MODEL", PIPER_VOICE_CORTANA)
+
+# Local wake word model cache
+WAKEWORD_MODELS_DIR = Path(os.getenv(
+    "WAKEWORD_MODELS_DIR", str(_PROJECT_ROOT / "wakeword_models")
+))
+
+# OpenWakeWord model — set to path of a custom .onnx, or use a built-in label.
 # Train a custom model: github.com/dscripka/openWakeWord#training-new-models
 WAKEWORD_MODEL = os.getenv("WAKEWORD_MODEL", "hey_jarvis")
 

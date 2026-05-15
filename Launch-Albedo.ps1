@@ -12,6 +12,7 @@ $ErrorActionPreference = "Continue"
 # Resolve project root relative to this script file
 $projectRoot = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $python      = Join-Path $projectRoot ".venv\Scripts\python.exe"
+$pythonw     = Join-Path $projectRoot ".venv\Scripts\pythonw.exe"
 $mainPy      = Join-Path $projectRoot "main.py"
 
 # ============================================================================
@@ -162,13 +163,11 @@ Write-Host "     Close the window or press Ctrl+C to stop." -ForegroundColor Gra
 Write-Host ""
 
 if (Test-Path $guiPy) {
-    & $python $guiPy
+    # Prefer pythonw.exe (windowless) so no console can be accidentally closed.
+    # Fall back to python.exe if the venv was created without pythonw (rare).
+    $launcher = if (Test-Path $pythonw) { $pythonw } else { $python }
+    & $launcher $guiPy
 } else {
     Write-Host "    [!]  gui.py not found -- falling back to voice mode." -ForegroundColor DarkYellow
     & $python $mainPy --voice
 }
-
-# Keep the window open if Albedo exits unexpectedly
-Write-Host ""
-Write-Host "  Albedo exited. Press Enter to close this window." -ForegroundColor DarkYellow
-Read-Host

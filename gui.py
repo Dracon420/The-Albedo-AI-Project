@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import math
 import queue
+import sys
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -43,6 +44,24 @@ except ImportError as _import_err:
 ROOT          = Path(__file__).parent
 SETTINGS_PATH = ROOT / "settings.json"
 
+# ── Persona constants ──────────────────────────────────────────────────────
+
+_VOICES_DIR   = ROOT / "voices"
+_WAKEWORD_DIR = ROOT / "wakeword_models"
+
+# Display-name → voice file + wakeword model
+PERSONA_MAP: dict[str, dict[str, str]] = {
+    "Cortana": {
+        "voice":    str(_VOICES_DIR / "en_US-kristin-medium.onnx"),
+        "wakeword": str(_WAKEWORD_DIR / "hey_core_tah_nuh.onnx"),
+    },
+    "Jarvis": {
+        "voice":    str(_VOICES_DIR / "en_US-ryan-medium.onnx"),
+        "wakeword": "hey_jarvis",
+    },
+}
+_PERSONA_DISPLAY = list(PERSONA_MAP.keys())  # ["Cortana", "Jarvis"]
+
 
 # ── Settings persistence ───────────────────────────────────────────────────
 
@@ -60,6 +79,22 @@ def _save_settings(data: dict) -> None:
         SETTINGS_PATH.write_text(json.dumps(data, indent=2), encoding="utf-8")
     except Exception as exc:
         print(f"[gui] Failed to save settings: {exc}")
+
+
+# ── stdout / stderr redirector ─────────────────────────────────────────────
+
+class _StdRedirector:
+    """Routes sys.stdout / sys.stderr writes to the in-app console buffer."""
+
+    def __init__(self, write_fn):
+        self._write = write_fn
+
+    def write(self, text: str) -> None:
+        if text:
+            self._write(text)
+
+    def flush(self) -> None:
+        pass
 
 
 # ── Theme ──────────────────────────────────────────────────────────────────
@@ -126,10 +161,11 @@ def _update_env(key: str, value: str) -> None:
 # ── Settings dialog ────────────────────────────────────────────────────────
 
 class SettingsDialog(ctk.CTkToplevel):
-    def __init__(self, parent: AlbedoGUI):
+    def __init__(self, parent: "AlbedoGUI"):
         super().__init__(parent)
-        self.title("ALBEDO  //  RAG SETTINGS")
-        self.geometry("580x320")
+        self._parent = parent
+        self.title("ALBEDO  //  SETTINGS")
+        self.geometry("580x420")
         self.resizable(False, False)
         self.configure(fg_color=C_PANEL)
         self.grab_set()
@@ -139,6 +175,8 @@ class SettingsDialog(ctk.CTkToplevel):
     def _build(self) -> None:
         from albedo.config import CHAOTIC_3D_PATH, EXOTIC_OS_PATH
         p = {"padx": 24, "pady": 6}
+
+        # ── RAG directories ────────────────────────────────────────────────
         ctk.CTkLabel(self, text="RAG DIRECTORIES", font=("Courier New", 15, "bold"),
                      text_color=C_CYAN).pack(pady=(20, 8))
         ctk.CTkLabel(self, text="Chaotic 3D  --  STL / gcode / slicer configs",
@@ -153,6 +191,29 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkEntry(self, textvariable=self._var_os, width=530,
                      font=("Courier New", 11), fg_color=C_BG,
                      border_color=C_BORDER, text_color=C_TEXT).pack(**p)
+
+        # ── Persona / wake word ────────────────────────────────────────────
+        ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x", padx=24, pady=(12, 4))
+        ctk.CTkLabel(self, text="PERSONA  &  WAKE WORD",
+                     font=("Courier New", 15, "bold"),
+                     text_color=C_CYAN).pack(pady=(8, 4))
+        ctk.CTkLabel(self, text="Changes voice model and wake word simultaneously.",
+                     font=("Courier New", 10), text_color=C_MUTED).pack(pady=(0, 6))
+
+        active = self._parent._settings.get("active_persona", "cortana").capitalize()
+        if active not in PERSONA_MAP:
+            active = "Cortana"
+        self._persona_var = ctk.StringVar(value=active)
+        ctk.CTkOptionMenu(self,
+                          variable=self._persona_var,
+                          values=_PERSONA_DISPLAY,
+                          font=("Courier New", 12),
+                          fg_color=C_BG, text_color=C_TEXT,
+                          button_color=C_BORDER, button_hover_color=C_CYAN_DIM,
+                          dropdown_fg_color=C_BG,
+                          dropdown_text_color=C_TEXT).pack(padx=24, fill="x", pady=(0, 4))
+
+        # ── Buttons ────────────────────────────────────────────────────────
         btn = ctk.CTkFrame(self, fg_color="transparent")
         btn.pack(pady=16)
         ctk.CTkButton(btn, text="SAVE", width=130,
@@ -172,7 +233,10 @@ class SettingsDialog(ctk.CTkToplevel):
         import importlib
         import albedo.config as _cfg
         importlib.reload(_cfg)
-        self._msg.configure(text="Saved. Re-index to apply.", text_color=C_GREEN)
+
+        self._parent._apply_persona(self._persona_var.get())
+        self._msg.configure(text="Saved. Re-index to apply new RAG paths.",
+                            text_color=C_GREEN)
 
     def _reindex(self) -> None:
         self._msg.configure(text="Indexing...", text_color=C_CYAN)
@@ -306,6 +370,56 @@ class HardwareSettingsDialog(ctk.CTkToplevel):
                             text_color=C_GREEN)
 
 
+# ── Developer console dialog ───────────────────────────────────────────────
+
+class ConsoleDialog(ctk.CTkToplevel):
+    def __init__(self, parent: "AlbedoGUI") -> None:
+        super().__init__(parent)
+        self._parent = parent
+        self.title("ALBEDO  //  DEVELOPER CONSOLE")
+        self.geometry("820x500")
+        self.configure(fg_color=C_PANEL)
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+        self._build()
+        # Populate with buffered history from before the dialog was opened
+        if parent._console_buf:
+            self._append("".join(parent._console_buf))
+
+    def _build(self) -> None:
+        hdr = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0, height=42)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        ctk.CTkLabel(hdr, text="DEVELOPER CONSOLE  --  stdout / stderr",
+                     font=("Courier New", 12, "bold"),
+                     text_color=C_CYAN).pack(side="left", padx=16, pady=10)
+        ctk.CTkButton(hdr, text="CLEAR", width=70, height=26,
+                      font=("Courier New", 10),
+                      fg_color=C_BORDER, hover_color=C_DANGER,
+                      command=self._clear).pack(side="right", padx=12, pady=8)
+
+        self._txt = ctk.CTkTextbox(self, font=("Courier New", 11),
+                                   fg_color=C_BG, text_color=C_TEXT,
+                                   wrap="word", state="disabled", border_width=0,
+                                   scrollbar_button_color=C_BORDER)
+        self._txt.pack(fill="both", expand=True, padx=4, pady=4)
+
+    def _append(self, text: str) -> None:
+        self._txt.configure(state="normal")
+        self._txt.insert("end", text)
+        self._txt.configure(state="disabled")
+        self._txt._textbox.see("end")
+
+    def _clear(self) -> None:
+        self._txt.configure(state="normal")
+        self._txt.delete("1.0", "end")
+        self._txt.configure(state="disabled")
+        self._parent._console_buf.clear()
+
+    def _on_close(self) -> None:
+        self._parent._console_win = None
+        self.destroy()
+
+
 # ── Main window ────────────────────────────────────────────────────────────
 
 class AlbedoGUI(ctk.CTk):
@@ -323,10 +437,19 @@ class AlbedoGUI(ctk.CTk):
         self._audio_stream = None   # AudioStream, lazy-init
         self._settings_win = None
         self._hardware_win = None
+        self._console_win  = None
+        self._console_buf: list[str] = []
         self._pulse_phase  = 0.0
         self._icon_photo   = None   # ImageTk ref kept alive
         self._settings     = _load_settings()
         self._scan_btn     = None   # set by _build_ui
+
+        # Redirect stdout/stderr into the in-app console so nothing is lost
+        # when running under pythonw.exe (no console window).
+        self._stdout_orig = sys.stdout
+        self._stderr_orig = sys.stderr
+        sys.stdout = _StdRedirector(self._console_write)
+        sys.stderr = _StdRedirector(self._console_write)
 
         self._build_ui()
         self._start_queue_poll()
@@ -351,6 +474,11 @@ class AlbedoGUI(ctk.CTk):
                                         font=("Courier New", 11),
                                         text_color=C_MUTED)
         self._state_chip.pack(side="right", padx=22)
+
+        ctk.CTkButton(hdr, text="LOGS", width=60, height=30,
+                      font=("Courier New", 10, "bold"),
+                      fg_color=C_BORDER, hover_color=C_MUTED,
+                      command=self._open_console).pack(side="right", padx=(0, 4), pady=16)
 
         # Orb canvas
         self._canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE,
@@ -648,7 +776,7 @@ class AlbedoGUI(ctk.CTk):
             try:
                 from albedo.audio.tts import speak
                 out_dev = self._settings.get("audio_output_device")
-                speak(response, device=out_dev)
+                speak(response, device=out_dev, voice_model=self._get_tts_voice())
             except Exception as tts_err:
                 print(f"[gui] TTS error: {tts_err}")
 
@@ -711,7 +839,7 @@ class AlbedoGUI(ctk.CTk):
             try:
                 from albedo.audio.tts import speak
                 out_dev = self._settings.get("audio_output_device")
-                speak(result, device=out_dev)
+                speak(result, device=out_dev, voice_model=self._get_tts_voice())
             except Exception as tts_err:
                 print(f"[gui] TTS error: {tts_err}")
 
@@ -720,6 +848,58 @@ class AlbedoGUI(ctk.CTk):
             self._ui(lambda: self._log_append("error", f"Visual Scan error: {msg}"))
         finally:
             self._ui(lambda: self._set_state("standby"))
+
+    # ── Persona management ─────────────────────────────────────────────────
+
+    def _get_tts_voice(self) -> str | None:
+        """Return the Piper voice model path for the active persona."""
+        key = self._settings.get("active_persona", "cortana").capitalize()
+        persona = PERSONA_MAP.get(key) or PERSONA_MAP.get("Cortana")
+        return persona["voice"] if persona else None
+
+    def _apply_persona(self, display_name: str) -> None:
+        """Switch active persona: hot-swap TTS voice + wakeword model, persist."""
+        persona = PERSONA_MAP.get(display_name)
+        if not persona:
+            return
+        key = display_name.lower()
+        old_key = self._settings.get("active_persona", "")
+        self._settings["active_persona"] = key
+        _save_settings(self._settings)
+
+        # Persist to .env so CLI listener mode picks it up on next launch
+        _update_env("PIPER_VOICE_MODEL", persona["voice"])
+        _update_env("WAKEWORD_MODEL",    persona["wakeword"])
+
+        # Hot-swap the wakeword model for the current session
+        try:
+            from albedo.audio import wakeword as _ww
+            _ww.set_active_model(persona["wakeword"])
+        except Exception as exc:
+            print(f"[gui] wakeword hot-swap failed (non-fatal): {exc}")
+
+        if key != old_key:
+            self._log_append(
+                "system",
+                f"[SYS] Persona updated: {display_name}. "
+                "Voice and Wake Word synchronized.",
+            )
+
+    # ── Developer console ──────────────────────────────────────────────────
+
+    def _console_write(self, text: str) -> None:
+        """Buffer a console line and forward it to the dialog if open."""
+        self._console_buf.append(text)
+        if len(self._console_buf) > 500:
+            self._console_buf = self._console_buf[-500:]
+        if self._console_win and self._console_win.winfo_exists():
+            self._ui(lambda t=text: self._console_win._append(t))
+
+    def _open_console(self) -> None:
+        if self._console_win and self._console_win.winfo_exists():
+            self._console_win.focus()
+            return
+        self._console_win = ConsoleDialog(self)
 
     # ── Settings ───────────────────────────────────────────────────────────
 
@@ -748,6 +928,8 @@ class AlbedoGUI(ctk.CTk):
     # ── Cleanup ────────────────────────────────────────────────────────────
 
     def _on_close(self) -> None:
+        sys.stdout = self._stdout_orig
+        sys.stderr = self._stderr_orig
         if self._audio_stream:
             try:
                 self._audio_stream.stop()

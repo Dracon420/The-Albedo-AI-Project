@@ -17,12 +17,14 @@ has already locked it.
 """
 from __future__ import annotations
 
+import json as _json
 import os
 import queue
 import shutil
 import subprocess
 import sys
 import threading
+import urllib.request
 from pathlib import Path
 from datetime import datetime
 import tkinter as tk
@@ -108,18 +110,67 @@ def _kill_locked_processes() -> None:
             pass
 
 
-def _write_env(chaotic: str, exotic: str, piper_bin: str,
-               piper_voice: str, wakeword: str) -> None:
-    env_path = ROOT / ".env"
-    example  = ROOT / ".env.example"
+_HF_BASE = (
+    "https://huggingface.co/rhasspy/piper-voices/resolve/v1.0.0/en/en_US"
+)
+_VOICE_FILES = [
+    ("kristin/medium/en_US-kristin-medium.onnx",      "en_US-kristin-medium.onnx"),
+    ("kristin/medium/en_US-kristin-medium.onnx.json", "en_US-kristin-medium.onnx.json"),
+    ("ryan/medium/en_US-ryan-medium.onnx",             "en_US-ryan-medium.onnx"),
+    ("ryan/medium/en_US-ryan-medium.onnx.json",        "en_US-ryan-medium.onnx.json"),
+]
+
+
+def _download_voice_models() -> list[str]:
+    """Download both persona voice models from HuggingFace into ROOT/voices/.
+    Returns a list of human-readable messages for any files that failed."""
+    voices_dir = ROOT / "voices"
+    voices_dir.mkdir(exist_ok=True)
+    failed: list[str] = []
+    for rel, filename in _VOICE_FILES:
+        dest = voices_dir / filename
+        if dest.exists():
+            continue
+        url = f"{_HF_BASE}/{rel}"
+        try:
+            urllib.request.urlretrieve(url, dest)
+        except Exception as exc:
+            failed.append(f"{filename}: {exc}")
+            if dest.exists():
+                try:
+                    dest.unlink()
+                except OSError:
+                    pass
+    return failed
+
+
+def _write_env(chaotic: str, exotic: str, piper_bin: str, persona: str) -> None:
+    env_path   = ROOT / ".env"
+    example    = ROOT / ".env.example"
+    voices_dir = ROOT / "voices"
+    ww_dir     = ROOT / "wakeword_models"
+
+    cortana_voice = str(voices_dir / "en_US-kristin-medium.onnx")
+    jarvis_voice  = str(voices_dir / "en_US-ryan-medium.onnx")
+
+    if persona == "jarvis":
+        active_voice    = jarvis_voice
+        active_wakeword = "hey_jarvis"
+    else:
+        active_voice    = cortana_voice
+        cortana_onnx    = ww_dir / "hey_core_tah_nuh.onnx"
+        active_wakeword = str(cortana_onnx) if cortana_onnx.exists() else "hey_jarvis"
+
     lines = (example.read_text(encoding="utf-8").splitlines()
              if example.exists() else [])
     overrides = {
         "CHAOTIC_3D_PATH":      chaotic,
         "EXOTIC_OS_PATH":       exotic,
         "PIPER_BINARY":         piper_bin,
-        "PIPER_VOICE_MODEL":    piper_voice,
-        "WAKEWORD_MODEL":       wakeword,
+        "PIPER_VOICE_MODEL":    active_voice,
+        "PIPER_VOICE_CORTANA":  cortana_voice,
+        "PIPER_VOICE_JARVIS":   jarvis_voice,
+        "WAKEWORD_MODEL":       active_wakeword,
         "OLLAMA_MODEL":         "llama3.2:3b",
         "WHISPER_MODEL_SIZE":   "small",
         "WHISPER_DEVICE":       "cuda",
@@ -318,14 +369,14 @@ class SystemCheckPage(Page):
 # ── Page 2: Directory Selection ─────────────────────────────────────────────
 
 class DirectoryPage(Page):
+    _PERSONAS = ["Cortana", "Jarvis"]
+
     def __init__(self, parent: tk.Widget, wizard: "SetupWizard") -> None:
         super().__init__(parent, wizard)
-        self._3d_var    = tk.StringVar(value="")
-        self._os_var    = tk.StringVar(value="")
-        self._piper_var = tk.StringVar(value=r"C:\piper\piper.exe")
-        self._voice_var = tk.StringVar(
-            value=r"C:\piper\voices\en_US-kristin-medium.onnx")
-        self._wake_var  = tk.StringVar(value="hey_jarvis")
+        self._3d_var      = tk.StringVar(value="")
+        self._os_var      = tk.StringVar(value="")
+        self._piper_var   = tk.StringVar(value=r"C:\piper\piper.exe")
+        self._persona_var = tk.StringVar(value="Cortana")
         self._build()
 
     def _build(self) -> None:
@@ -345,8 +396,21 @@ class DirectoryPage(Page):
         tk.Frame(box, height=1, bg=C_BORDER).pack(fill="x", padx=16, pady=8)
 
         self._path_row(box, "Piper binary path", self._piper_var)
-        self._path_row(box, "Voice model (.onnx)", self._voice_var)
-        self._path_row(box, "Wake word model", self._wake_var)
+
+        # Persona dropdown -- drives both TTS voice and wake word model
+        prow = tk.Frame(box, bg=C_PANEL)
+        prow.pack(fill="x", padx=16, pady=4)
+        _lbl(prow, "Initial persona  (sets voice model + wake word)",
+             size=10, bg=C_PANEL).pack(anchor="w")
+        opt = tk.OptionMenu(prow, self._persona_var, *self._PERSONAS)
+        opt.configure(bg=C_BTN, fg=C_TEXT, activebackground=C_DIM,
+                      activeforeground=C_TEXT, relief="flat",
+                      font=FONT_SMALL, highlightthickness=0)
+        opt["menu"].configure(bg=C_BTN, fg=C_TEXT, font=FONT_SMALL)
+        opt.pack(fill="x", pady=(4, 0))
+        _lbl(prow,
+             "Voice models are auto-downloaded during installation.",
+             size=9, color=C_MUTED, bg=C_PANEL).pack(anchor="w", pady=(2, 0))
 
         _lbl(self,
              "Leave 3D / OS folders blank to configure later via SETTINGS.",
@@ -380,11 +444,10 @@ class DirectoryPage(Page):
 
     def get_values(self) -> dict[str, str]:
         return {
-            "chaotic":     self._3d_var.get().strip(),
-            "exotic":      self._os_var.get().strip(),
-            "piper_bin":   self._piper_var.get().strip(),
-            "piper_voice": self._voice_var.get().strip(),
-            "wakeword":    self._wake_var.get().strip(),
+            "chaotic":   self._3d_var.get().strip(),
+            "exotic":    self._os_var.get().strip(),
+            "piper_bin": self._piper_var.get().strip(),
+            "persona":   self._persona_var.get().strip().lower(),  # "cortana" / "jarvis"
         }
 
 
@@ -463,6 +526,7 @@ class InstallPage(Page):
             self._step_requirements()
             self._step_playwright()
             self._step_wakeword_models()
+            self._step_download_voices()
             self._step_env(dirs)
             self._step_shortcut()
             self._step_ollama()
@@ -528,6 +592,19 @@ class InstallPage(Page):
         except Exception:
             self._push("  Playwright not installed (non-fatal).", "info")
 
+    def _step_download_voices(self) -> None:
+        self._push("Downloading Piper voice models (Cortana + Jarvis)...", "info", 0.82)
+        self._push("  Fetching en_US-kristin-medium and en_US-ryan-medium from HuggingFace...",
+                   "info")
+        failed = _download_voice_models()
+        if failed:
+            for msg in failed:
+                self._push(f"  Skipped (non-fatal): {msg}", "info")
+            self._push("  Download voices manually: huggingface.co/rhasspy/piper-voices",
+                       "info")
+        else:
+            self._push("  Voice models ready.", "ok", 0.83)
+
     def _step_wakeword_models(self) -> None:
         self._push("Pre-downloading OpenWakeWord base models...", "info", 0.80)
         try:
@@ -545,13 +622,26 @@ class InstallPage(Page):
 
     def _step_env(self, dirs: dict[str, str]) -> None:
         self._push("Writing .env configuration...", "info", 0.84)
+        persona = dirs.get("persona", "cortana")
         _write_env(
             chaotic=dirs["chaotic"],
             exotic=dirs["exotic"],
             piper_bin=dirs["piper_bin"],
-            piper_voice=dirs["piper_voice"],
-            wakeword=dirs["wakeword"],
+            persona=persona,
         )
+        # Write initial settings.json so the GUI knows the active persona
+        settings_path = ROOT / "settings.json"
+        try:
+            existing: dict = {}
+            if settings_path.exists():
+                try:
+                    existing = _json.loads(settings_path.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+            existing["active_persona"] = persona
+            settings_path.write_text(_json.dumps(existing, indent=2), encoding="utf-8")
+        except Exception as exc:
+            self._push(f"  settings.json write skipped (non-fatal): {exc}", "info")
         self._push("  .env written.", "ok")
 
     def _step_shortcut(self) -> None:
