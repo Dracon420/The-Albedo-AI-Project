@@ -638,9 +638,9 @@ class InstallPage(Page):
             self._push("  OpenWakeWord models skipped (non-fatal).", "info")
 
     def _step_whisper_model(self) -> None:
-        self._push("Pre-downloading Whisper 'tiny' STT model...", "info", 0.85)
+        self._push("[SYS] Verifying/Downloading Whisper STT 'tiny' model... Please wait.", "info", 0.85)
         self._push("  Model: tiny  |  device: cpu  |  compute_type: int8", "info")
-        self._push("  Initializing model — downloads to HuggingFace cache on first run.", "info")
+        self._push("  This step blocks until the download is 100% complete.", "info")
         script = (
             "from faster_whisper import WhisperModel; "
             "print('[whisper] Verifying model cache...', flush=True); "

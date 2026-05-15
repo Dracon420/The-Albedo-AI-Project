@@ -50,6 +50,14 @@ def _clear_whisper_cache() -> None:
             print(f"[stt] Cache clear skipped ({entry.name}): {exc}")
 
 
+def is_cached() -> bool:
+    """Return True if the Whisper model snapshot is present in the HuggingFace cache."""
+    hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
+    hub_dir = hf_home / "hub"
+    slug = f"models--Systran--faster-whisper-{WHISPER_MODEL_SIZE}"
+    return (hub_dir / slug).exists()
+
+
 def _get_model() -> WhisperModel:
     global _model
     if _model is not None:

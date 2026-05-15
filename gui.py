@@ -128,8 +128,8 @@ _STATE_LABEL = {
     "speaking":   "SPEAKING",
 }
 
-CANVAS_SIZE = 260
-ICON_RADIUS = 64
+CANVAS_SIZE = 300
+ICON_RADIUS = 82
 CENTER      = CANVAS_SIZE // 2
 
 
@@ -455,8 +455,8 @@ class AlbedoGUI(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ALBEDO  //  MISSION CONTROL")
-        self.geometry("760x960")
-        self.minsize(640, 780)
+        self.geometry("800x1040")
+        self.minsize(680, 860)
         self.configure(fg_color=C_BG)
 
         self._state        = "standby"
@@ -509,7 +509,7 @@ class AlbedoGUI(ctk.CTk):
         self._state_chip.pack(side="right", padx=22)
 
         ctk.CTkButton(hdr, text="LOGS", width=68, height=34,
-                      font=("Courier New", 11, "bold"),
+                      font=("Courier New", 13, "bold"),
                       fg_color=C_BORDER, hover_color=C_CYAN_DIM,
                       text_color=C_CYAN,
                       command=self._open_console).pack(side="right", padx=(0, 4), pady=16)
@@ -521,13 +521,13 @@ class AlbedoGUI(ctk.CTk):
         ctk.CTkLabel(
             hud,
             text="// CORE_SYS: ACTIVE  |  BRIDGE: OK  |  MEM: ONLINE  |  VEC_DB: READY",
-            font=("Courier New", 10, "bold"),
+            font=("Courier New", 12, "bold"),
             text_color=C_CYAN,
         ).pack(side="left", padx=16)
         ctk.CTkLabel(
             hud,
             text="[ NET_LINK: OK ]",
-            font=("Courier New", 10, "bold"),
+            font=("Courier New", 12, "bold"),
             text_color=C_ORANGE,
         ).pack(side="right", padx=16)
 
@@ -547,11 +547,11 @@ class AlbedoGUI(ctk.CTk):
         log_hdr.pack(fill="x", padx=6, pady=(4, 0))
         log_hdr.pack_propagate(False)
         ctk.CTkLabel(log_hdr, text="// CHAT_FEED",
-                     font=("Courier New", 10, "bold"), text_color=C_CYAN).pack(side="left")
+                     font=("Courier New", 12, "bold"), text_color=C_CYAN).pack(side="left")
         ctk.CTkLabel(log_hdr, text="[ STREAM: ACTIVE ]",
-                     font=("Courier New", 10, "bold"), text_color=C_ORANGE).pack(side="right")
+                     font=("Courier New", 12, "bold"), text_color=C_ORANGE).pack(side="right")
 
-        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 18),
+        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 20),
                                    fg_color=C_PANEL, text_color=C_TEXT,
                                    wrap="word", state="disabled", border_width=0,
                                    scrollbar_button_color=C_CYAN_DIM)
@@ -568,9 +568,9 @@ class AlbedoGUI(ctk.CTk):
         cmd_hdr.pack(fill="x", padx=18)
         cmd_hdr.pack_propagate(False)
         ctk.CTkLabel(cmd_hdr, text="[ CMD_INPUT ]",
-                     font=("Courier New", 10, "bold"), text_color=C_CYAN).pack(side="left")
+                     font=("Courier New", 12, "bold"), text_color=C_CYAN).pack(side="left")
         ctk.CTkLabel(cmd_hdr, text="// INPUT_READY",
-                     font=("Courier New", 10, "bold"), text_color=C_GREEN).pack(side="right")
+                     font=("Courier New", 12, "bold"), text_color=C_GREEN).pack(side="right")
 
         # ── Input row (neon border on entry) ────────────────────────────────
         row = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
@@ -578,7 +578,7 @@ class AlbedoGUI(ctk.CTk):
         row.pack(fill="x", padx=16, pady=(2, 12))
 
         self._mic_btn = ctk.CTkButton(row, text="MIC", width=68, height=48,
-                                      font=("Courier New", 13, "bold"),
+                                      font=("Courier New", 15, "bold"),
                                       fg_color=C_BORDER, hover_color=C_CYAN,
                                       command=self._handle_mic)
         self._mic_btn.pack(side="left", padx=(10, 4), pady=10)
@@ -591,7 +591,7 @@ class AlbedoGUI(ctk.CTk):
 
         self._entry = ctk.CTkEntry(row,
                                    placeholder_text="Type a query or press MIC...",
-                                   font=("Consolas", 16),
+                                   font=("Consolas", 18),
                                    fg_color=C_BG, border_color=C_CYAN,
                                    text_color=C_TEXT, height=48)
         self._entry.pack(side="left", fill="x", expand=True, padx=4, pady=10)
@@ -605,18 +605,18 @@ class AlbedoGUI(ctk.CTk):
         self._send_btn.pack(side="left", padx=4, pady=10)
 
         ctk.CTkButton(row, text="SETTINGS", width=92, height=48,
-                      font=("Courier New", 11, "bold"),
+                      font=("Courier New", 13, "bold"),
                       fg_color=C_BORDER, hover_color=C_CYAN,
                       command=self._open_settings).pack(side="left", padx=4, pady=10)
 
         ctk.CTkButton(row, text="HARDWARE", width=92, height=48,
-                      font=("Courier New", 11, "bold"),
+                      font=("Courier New", 13, "bold"),
                       fg_color=C_BORDER, hover_color=C_CYAN,
                       command=self._open_hardware_settings).pack(side="left", padx=(4, 4), pady=10)
 
         self._audio_btn = ctk.CTkButton(
             row, text="AUDIO: ON", width=110, height=48,
-            font=("Courier New", 11, "bold"),
+            font=("Courier New", 13, "bold"),
             fg_color=C_GREEN, hover_color="#22CC00",
             text_color="#000000",
             command=self._toggle_audio_mute,
@@ -627,119 +627,164 @@ class AlbedoGUI(ctk.CTk):
 
     def _draw_circuit_board(self) -> None:
         """
-        Draw PCB-style circuit traces on the canvas, behind the orb icon.
+        Draw an intricate PCB-style circuit board behind the orb icon.
         All elements use tag='circuit' so they sit below 'ring' and 'icon'.
+
+        Geometry (300 px canvas, ICON_RADIUS=82, KEEP=96):
+          - Outer perimeter buses at ±44 px from edges  (always clear of keep-out)
+          - Secondary signal buses stop at x≈75/225, y≈75/225  (keep-out boundary)
+          - Three concentric orbital rings route around the core
+          - Cardinal glow spokes bridge secondary buses to the orbital ring
         """
         cv = self._canvas
         W  = CANVAS_SIZE
+        CX = CY = W // 2
+        KEEP = ICON_RADIUS + 14   # 96 for 300 px canvas
 
-        # Palette — all blended toward C_BG (#0A0E17)
-        T_GRID   = "#0C1A2A"   # barely-visible dot grid
-        T_DIM    = "#0A2848"   # dim bus traces
-        T_MED    = "#0D4080"   # medium routed traces
-        T_BRIGHT = "#0B60A8"   # bright traces
-        T_HOT    = "#0088C0"   # hot highlight traces
-        T_CYAN   = "#00A0C0"   # cyan spokes toward the orb
-        PAD_C    = "#005080"   # via / pad fill
-        CHIP_F   = "#080D18"   # IC body fill
-        CHIP_O   = "#0A2A50"   # IC body outline
+        # Palette — deep blues/cyans blended toward C_BG (#0A0E17)
+        T_GRID   = "#0A1A2E"   # barely-visible dot grid
+        T_DEEP   = "#071C3A"   # power/ground bus (darkest)
+        T_DIM    = "#0A2E5E"   # background signal traces
+        T_MED    = "#0C4888"   # medium routed traces
+        T_BRIGHT = "#0870B0"   # bright corner routes
+        T_HOT    = "#0898D0"   # hot connection traces
+        T_CYAN   = "#00BCDE"   # primary data lines / spokes
+        PAD_C    = "#00486A"   # via / pad fill
+        PAD_HOT  = "#00A8C8"   # via inner glow
+        CHIP_F   = "#040C1C"   # IC body fill
+        CHIP_O   = "#0A2E5A"   # IC body outline (normal)
+        CHIP_HOT = "#0C4880"   # IC body outline (data interface)
 
         def ln(pts, col=T_MED, w=1):
-            cv.create_line(*pts, fill=col, width=w,
-                           tags="circuit", capstyle="round", joinstyle="round")
+            cv.create_line(*pts, fill=col, width=w, tags="circuit",
+                           capstyle="round", joinstyle="round")
+
+        def gln(pts, col_bg, col_fg, w_bg=6, w_fg=2):
+            """Glow trace: wide dim underlay then narrow bright line on top."""
+            ln(pts, col_bg, w_bg)
+            ln(pts, col_fg, w_fg)
 
         def pad(x, y, r=2, col=PAD_C):
-            cv.create_oval(x-r, y-r, x+r, y+r,
-                           fill=col, outline="", tags="circuit")
+            cv.create_oval(x-r, y-r, x+r, y+r, fill=col, outline="", tags="circuit")
 
-        def chip(x1, y1, x2, y2):
+        def via(x, y):
+            cv.create_oval(x-4, y-4, x+4, y+4, fill=PAD_C,
+                           outline=T_HOT, width=1, tags="circuit")
+            cv.create_oval(x-1, y-1, x+1, y+1, fill=PAD_HOT,
+                           outline="", tags="circuit")
+
+        def chip(x1, y1, x2, y2, hot=False):
+            o = CHIP_HOT if hot else CHIP_O
             cv.create_rectangle(x1, y1, x2, y2,
-                                fill=CHIP_F, outline=CHIP_O,
-                                width=1, tags="circuit")
+                                fill=CHIP_F, outline=o, width=1, tags="circuit")
+            mx, nr = (x1+x2)//2, min(5, (x2-x1)//5)
+            cv.create_arc(mx-nr, y1-nr//2, mx+nr, y1+nr//2,
+                          start=0, extent=180, fill=CHIP_F, outline=o,
+                          width=1, tags="circuit")
 
-        CX = CY = W // 2   # canvas centre
-        KEEP = ICON_RADIUS + 10   # keep-out radius around the icon
-
-        # ── IC bodies ─────────────────────────────────────────────────────
-        chip(4,     4,     52,    36)       # top-left
-        chip(W-52,  4,     W-4,   36)       # top-right
-        chip(4,     W-36,  52,    W-4)      # bottom-left
-        chip(W-52,  W-36,  W-4,   W-4)     # bottom-right
-        chip(4,     CY-26, 38,    CY+26)    # left-mid
-        chip(W-38,  CY-26, W-4,   CY+26)   # right-mid
-        chip(CX-32, 4,     CX+32, 28)       # top-mid
-        chip(CX-32, W-28,  CX+32, W-4)     # bottom-mid
-
-        # ── Background dot grid (skips keep-out zone) ─────────────────────
-        for gx in range(20, W, 20):
-            for gy in range(20, W, 20):
-                if (gx - CX)**2 + (gy - CY)**2 > KEEP**2:
+        # ── 1. Dot grid (skip keep-out + small margin) ─────────────────────
+        for gx in range(12, W, 12):
+            for gy in range(12, W, 12):
+                if (gx-CX)**2 + (gy-CY)**2 > (KEEP+8)**2:
                     cv.create_oval(gx-1, gy-1, gx+1, gy+1,
                                    fill=T_GRID, outline="", tags="circuit")
 
-        # ── Main perimeter buses ───────────────────────────────────────────
-        ln([0, 38,   W, 38],   T_DIM, 2)
-        ln([0, W-38, W, W-38], T_DIM, 2)
-        ln([38,   0, 38,   W], T_DIM, 2)
-        ln([W-38, 0, W-38, W], T_DIM, 2)
+        # ── 2. IC bodies ───────────────────────────────────────────────────
+        # Corner large chips
+        chip(4,    4,    64,    42)
+        chip(W-64, 4,    W-4,   42)
+        chip(4,    W-42, 64,    W-4)
+        chip(W-64, W-42, W-4,   W-4)
+        # Mid-edge data interface chips (hot border — they feed the core)
+        chip(4,     CY-28, 42,     CY+28, hot=True)
+        chip(W-42,  CY-28, W-4,    CY+28, hot=True)
+        chip(CX-32, 4,     CX+32,  30,    hot=True)
+        chip(CX-32, W-30,  CX+32,  W-4,   hot=True)
+        # Auxiliary small chips on the outer buses (safely >120 px from center)
+        chip(4,     CY-72, 30,     CY-50)
+        chip(4,     CY+50, 30,     CY+72)
+        chip(W-30,  CY-72, W-4,    CY-50)
+        chip(W-30,  CY+50, W-4,    CY+72)
 
-        # ── Secondary inner buses ──────────────────────────────────────────
-        ln([0,    78,  76,   78],  T_MED)
-        ln([W,    78,  W-76, 78],  T_MED)
-        ln([0,    W-78, 76,  W-78], T_MED)
-        ln([W,    W-78, W-76, W-78], T_MED)
-        ln([78,   0,    78,   76],  T_MED)
-        ln([W-78, 0,    W-78, 76],  T_MED)
-        ln([78,   W,    78,   W-76], T_MED)
-        ln([W-78, W,    W-78, W-76], T_MED)
+        # ── 3. Main perimeter power/ground buses ───────────────────────────
+        ln([0,    44,   W,     44],   T_DEEP, 3)
+        ln([0,    W-44, W,     W-44], T_DEEP, 3)
+        ln([44,   0,    44,    W],    T_DEEP, 3)
+        ln([W-44, 0,    W-44,  W],    T_DEEP, 3)
 
-        # ── L-shaped corner routes ─────────────────────────────────────────
-        ln([38,   38,   78, 38, 78, 78],       T_BRIGHT)
-        ln([W-38, 38,   W-78, 38, W-78, 78],   T_BRIGHT)
-        ln([38,   W-38, 78, W-38, 78, W-78],   T_BRIGHT)
-        ln([W-38, W-38, W-78, W-38, W-78, W-78], T_BRIGHT)
+        # ── 4. Secondary signal buses (partial — stop at keep-out boundary) ─
+        # At y=90: keep-out boundary ≈ x=75 and x=225
+        ln([0,    90,   75,    90],   T_MED, 2)
+        ln([W,    90,   225,   90],   T_MED, 2)
+        ln([0,    W-90, 75,    W-90], T_MED, 2)
+        ln([W,    W-90, 225,   W-90], T_MED, 2)
+        # At x=90: keep-out boundary ≈ y=75 and y=225
+        ln([90,   0,    90,    75],   T_MED, 2)
+        ln([W-90, 0,    W-90,  75],   T_MED, 2)
+        ln([90,   W,    90,    225],  T_MED, 2)
+        ln([W-90, W,    W-90,  225],  T_MED, 2)
 
-        # ── Inner corner angles ────────────────────────────────────────────
-        ln([78, 78, 98, 78, 98, 98],         T_HOT)
-        ln([W-78, 78, W-98, 78, W-98, 98],   T_HOT)
-        ln([78, W-78, 98, W-78, 98, W-98],   T_HOT)
-        ln([W-78, W-78, W-98, W-78, W-98, W-98], T_HOT)
+        # ── 5. Corner L-route traces ────────────────────────────────────────
+        ln([44,   44,   90,   44,   90,   90],             T_BRIGHT, 2)
+        ln([W-44, 44,   W-90, 44,   W-90, 90],             T_BRIGHT, 2)
+        ln([44,   W-44, 90,   W-44, 90,   W-90],           T_BRIGHT, 2)
+        ln([W-44, W-44, W-90, W-44, W-90, W-90],           T_BRIGHT, 2)
 
-        # ── Cyan spokes toward the orb ─────────────────────────────────────
-        ln([78,   CY,   CX-KEEP, CY],   T_CYAN, 2)
-        ln([W-78, CY,   CX+KEEP, CY],   T_CYAN, 2)
-        ln([CX,   78,   CX, CY-KEEP],   T_CYAN, 2)
-        ln([CX,   W-78, CX, CY+KEEP],   T_CYAN, 2)
+        # ── 6. Connector traces from mid-edge chips to secondary buses ──────
+        ln([42,   CY,   75,   CY],   T_MED, 2)
+        ln([W-42, CY,   225,  CY],   T_MED, 2)
+        ln([CX,   30,   CX,   75],   T_MED, 2)
+        ln([CX,   W-30, CX,   225],  T_MED, 2)
 
-        # ── IC pin stubs (all four corner ICs) ────────────────────────────
-        for px in range(12, 48, 8):
-            ln([px, 36, px, 50], T_BRIGHT);  pad(px, 50)
-            ln([px, W-36, px, W-50], T_BRIGHT); pad(px, W-50)
-        for px in range(W-46, W-10, 8):
-            ln([px, 36, px, 50], T_BRIGHT);  pad(px, 50)
-            ln([px, W-36, px, W-50], T_BRIGHT); pad(px, W-50)
+        # ── 7. Data spokes to core (glow effect) ────────────────────────────
+        gln([75,  CY,  CX-KEEP, CY],  T_DIM, T_CYAN)
+        gln([225, CY,  CX+KEEP, CY],  T_DIM, T_CYAN)
+        gln([CX,  75,  CX, CY-KEEP],  T_DIM, T_CYAN)
+        gln([CX,  225, CX, CY+KEEP],  T_DIM, T_CYAN)
 
-        # Left/right mid IC pin stubs
-        for py in range(CY-22, CY+24, 8):
-            ln([38, py, 52, py], T_BRIGHT);    pad(52, py)
-            ln([W-38, py, W-52, py], T_BRIGHT); pad(W-52, py)
+        # ── 8. Orbital ring traces routing around the core ──────────────────
+        for r, col, w in [(KEEP+2, T_DIM, 1), (KEEP+7, T_MED, 1), (KEEP+14, T_BRIGHT, 2)]:
+            cv.create_oval(CX-r, CY-r, CX+r, CY+r,
+                           outline=col, width=w, fill="", tags="circuit")
 
-        # Top/bottom mid IC pin stubs
+        # ── 9. IC pin stubs ────────────────────────────────────────────────
+        # Corner chip bottom-edge pins
+        for px in range(10, 60, 8):
+            ln([px, 42, px, 58], T_BRIGHT); pad(px, 58)
+            ln([px, W-42, px, W-58], T_BRIGHT); pad(px, W-58)
+        for px in range(W-58, W-8, 8):
+            ln([px, 42, px, 58], T_BRIGHT); pad(px, 58)
+            ln([px, W-42, px, W-58], T_BRIGHT); pad(px, W-58)
+        # Mid-edge chip side pins
+        for py in range(CY-24, CY+26, 8):
+            ln([42, py, 58, py], T_BRIGHT); pad(58, py)
+            ln([W-42, py, W-58, py], T_BRIGHT); pad(W-58, py)
+        # Top/bottom mid chip bottom pins
         for px in range(CX-28, CX+30, 8):
-            ln([px, 28, px, 42], T_BRIGHT);    pad(px, 42)
-            ln([px, W-28, px, W-42], T_BRIGHT); pad(px, W-42)
+            ln([px, 30, px, 48], T_BRIGHT); pad(px, 48)
+            ln([px, W-30, px, W-48], T_BRIGHT); pad(px, W-48)
 
-        # ── Pads at main bus intersections ─────────────────────────────────
-        for x in [38, 78, CX, W-78, W-38]:
-            pad(x, 38, 3);   pad(x, W-38, 3)
-        for y in [38, 78, CY, W-78, W-38]:
-            pad(38, y, 3);   pad(W-38, y, 3)
+        # ── 10. Via pads at bus intersections ──────────────────────────────
+        for x in [44, 90, CX, W-90, W-44]:
+            via(x, 44); via(x, W-44)
+        for y in [90, CY, W-90]:
+            via(44, y); via(W-44, y)
+        # Corner L-route junction vias
+        via(90, 90); via(W-90, 90); via(90, W-90); via(W-90, W-90)
+        # Spoke terminus vias (at orbital ring boundary)
+        via(CX-KEEP, CY); via(CX+KEEP, CY)
+        via(CX, CY-KEEP); via(CX, CY+KEEP)
+        # Spoke root vias (at secondary bus ends)
+        via(75, CY); via(225, CY)
+        via(CX, 75); via(CX, 225)
 
-        # Spoke endpoint pads (vivid cyan)
-        pad(CX-KEEP, CY,   3, T_CYAN)
-        pad(CX+KEEP, CY,   3, T_CYAN)
-        pad(CX,  CY-KEEP,  3, T_CYAN)
-        pad(CX,  CY+KEEP,  3, T_CYAN)
+        # ── 11. Bus stub traces along perimeter buses ───────────────────────
+        for bx in range(66, W-65, 22):
+            ln([bx, 44, bx, 60], T_DIM); pad(bx, 60)
+            ln([bx, W-44, bx, W-60], T_DIM); pad(bx, W-60)
+        for by in range(66, W-65, 22):
+            ln([44, by, 60, by], T_DIM); pad(60, by)
+            ln([W-44, by, W-60, by], T_DIM); pad(W-60, by)
 
     # ── Icon loading ───────────────────────────────────────────────────────
 
@@ -1002,17 +1047,25 @@ class AlbedoGUI(ctk.CTk):
     # ── Whisper pre-warming ────────────────────────────────────────────────
 
     def _prewarm_whisper(self) -> None:
-        """Load WhisperModel on a background thread at startup.
-        The first MIC press is instant because the model is already resident."""
+        """Load WhisperModel from local cache only — never triggers a download.
+        If the cache is absent, logs a message and returns so the GUI stays
+        responsive. The Setup Wizard is responsible for the initial download."""
         try:
+            from albedo.audio.stt import is_cached, prewarm
+            if not is_cached():
+                self._ui(lambda: self._log_append(
+                    "system",
+                    "[SYS] Whisper model not in local cache. "
+                    "Run the Setup Wizard to download it before using MIC."))
+                return
             self._ui(lambda: self._log_append(
-                "system", "Loading Whisper STT model from local cache..."))
-            from albedo.audio.stt import prewarm
+                "system", "[SYS] Loading Whisper STT from cache..."))
             prewarm()
-            self._ui(lambda: self._log_append("system", "Whisper tiny model online."))
+            self._ui(lambda: self._log_append("system", "[SYS] Whisper tiny online."))
         except Exception as exc:
-            _prewarm_msg = f"Whisper pre-warm failed (will retry on first MIC press): {exc}"
-            self._ui(lambda: self._log_append("system", _prewarm_msg))
+            msg = str(exc)
+            self._ui(lambda: self._log_append(
+                "system", f"[SYS] Whisper pre-warm failed: {msg}"))
 
     # ── Visual scan ────────────────────────────────────────────────────────
 
