@@ -9,15 +9,36 @@ When open-interpreter is NOT installed (e.g. server / Docker deployments that
 don't need desktop control), bridge_chat() falls back to a direct Ollama HTTP
 call via httpx. The RAG-augmented prompt is sent as a plain chat message.
 
-direct_reply() is a lightweight bypass used by the conversational router in
-pipeline.py for simple exchanges (greetings, acknowledgements).  It always
-uses the direct Ollama path — never Open Interpreter — and caps tokens so
-there is no chain-of-thought loop on "hello".
+Loop-prevention architecture
+------------------------------
+num_ctx  (context window)  is fixed at 2048 — large enough to hold rolling
+         history without ever being set per-call.
+num_predict (output cap)   is kept deliberately small: 250 tokens for standard
+         answers, 150 tokens for conversational one-liners.  This is the hard
+         ceiling that stops runaway generation.
+stop     sequences are injected into every payload so the model cannot simulate
+         its own conversation by emitting "User:" or "Assistant:" turn labels.
 """
 
 from __future__ import annotations
 
 from albedo.config import OLLAMA_MODEL, OLLAMA_BASE_URL
+
+# ── Generation constants ───────────────────────────────────────────────────────
+_NUM_CTX              = 2048   # context window — covers system prompt + history
+_PREDICT_STANDARD     = 250    # hard output cap for normal answers
+_PREDICT_CONVERSATIONAL = 150  # hard output cap for greetings / one-liners
+
+# Stop sequences prevent the model from entering a self-simulated dialogue loop.
+# Llama 3.2 will stop generating the moment it would emit any of these tokens.
+_STOP_SEQUENCES = [
+    "\nAssistant:", "\nUser:", "\nassistant:", "\nuser:",
+    "Assistant:",   "User:",   "assistant:",   "user:",
+    "\nHuman:",     "Human:",
+    "\n\nUser:",    "\n\nAssistant:",
+]
+
+# ── System prompts ─────────────────────────────────────────────────────────────
 
 _BRIDGE_SYSTEM_ADDENDUM = """
 You are Albedo, a Spartan-Class local AI assistant with Cortana-inspired personality.
@@ -44,15 +65,25 @@ _SYSTEM_PROMPT = (
     "CRITICAL FORMAT RULE: Never use markdown formatting of any kind. "
     "No asterisks, no underscores, no backticks, no hash symbols, no bullet points, "
     "no numbered lists, no bold, no italics. Write in plain conversational prose only. "
-    "When given a directive, you execute it."
+    "CRITICAL LOOP PREVENTION: Never simulate a terminal session, conversation, or "
+    "multi-turn exchange. Never write 'User:', 'Assistant:', 'Human:', or any dialogue "
+    "labels. Never generate fake command output or pretend to run commands in your text. "
+    "Respond with exactly ONE direct answer and stop immediately."
 )
 
 
 # ── Direct Ollama HTTP call ────────────────────────────────────────────────────
 
 def _ollama_chat(message: str, history: list[dict] | None = None,
-                 max_tokens: int = 2048, temperature: float = 0.8) -> str:
-    """Direct Ollama /api/chat call — no open-interpreter dependency."""
+                 num_predict: int = _PREDICT_STANDARD,
+                 temperature: float = 0.8) -> str:
+    """
+    Direct Ollama /api/chat — no open-interpreter dependency.
+
+    num_ctx is always _NUM_CTX (2048) regardless of call site.
+    num_predict is the hard output token cap; callers set it per-use-case.
+    stop sequences are always injected to prevent self-dialogue loops.
+    """
     import httpx
 
     messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
@@ -65,9 +96,10 @@ def _ollama_chat(message: str, history: list[dict] | None = None,
         "messages": messages,
         "stream": False,
         "options": {
-            "num_ctx":     max_tokens,
-            "num_predict": max_tokens,
+            "num_ctx":     _NUM_CTX,
+            "num_predict": num_predict,
             "temperature": temperature,
+            "stop":        _STOP_SEQUENCES,
         },
     }
     try:
@@ -86,14 +118,11 @@ def _ollama_chat(message: str, history: list[dict] | None = None,
 
 def direct_reply(message: str, history: list[dict] | None = None) -> str:
     """
-    Lightweight conversational response path.
-
-    Always calls Ollama directly — never routes through Open Interpreter.
-    Caps context to 512 tokens and prediction to 150 tokens so a "hello"
-    cannot trigger a planning or code-execution loop.  History is included
-    so Albedo can resolve references like "do that again" or "what did you say".
+    Lightweight conversational path — always direct Ollama, never interpreter.
+    150-token output cap makes "hello" loops physically impossible.
     """
-    return _ollama_chat(message, history=history, max_tokens=512, temperature=0.7)
+    return _ollama_chat(message, history=history,
+                        num_predict=_PREDICT_CONVERSATIONAL, temperature=0.7)
 
 
 # ── Open Interpreter (Bridge Control) ────────────────────────────────────────
@@ -145,8 +174,8 @@ def bridge_chat(message: str, history: list[dict] | None = None) -> str:
     Send an augmented prompt to the LLM.
 
     Uses Open Interpreter (Bridge Control) when available.
-    Falls back to a direct Ollama HTTP call otherwise.
-    History is forwarded to the Ollama fallback path so context is preserved.
+    Falls back to direct Ollama (_ollama_chat) otherwise.
+    History is always forwarded so rolling context survives the fallback.
     """
     if not _interpreter_available():
         return _ollama_chat(message, history=history)
@@ -165,8 +194,6 @@ def bridge_chat(message: str, history: list[dict] | None = None) -> str:
         print(f"[bridge] Interpreter error: {exc} -- falling back to Ollama.")
         return _ollama_chat(message, history=history)
 
-    # Empty response from interpreter means it handled a tool-only exchange
-    # (code execution, file ops) -- fall back to direct Ollama for plain answers
     if not result:
         return _ollama_chat(message, history=history)
     return result

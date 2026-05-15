@@ -101,21 +101,22 @@ class _StdRedirector:
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-C_BG       = "#0A0E17"   # deep obsidian
-C_PANEL    = "#121824"   # dark graphite
-C_CYAN     = "#00F0FF"   # neon cyan
-C_CYAN_DIM = "#0088AA"   # dim accent
-C_BORDER   = "#1C2640"   # structural border
-C_TEXT     = "#C8D4E8"
-C_MUTED    = "#3A4870"
-C_GREEN    = "#00FF88"
-C_PURPLE   = "#9988FF"
-C_DANGER   = "#FF3A5C"
+C_BG         = "#0A0E17"   # deep obsidian
+C_PANEL      = "#121824"   # dark graphite
+C_CYAN       = "#00F0FF"   # electric laser cyan  (ALBEDO tags, borders)
+C_CYAN_DIM   = "#0099CC"   # dim cyan             (scrollbars, hovers)
+C_BORDER     = "#1C2640"   # structural border
+C_TEXT       = "#E2E8F0"   # bright silver-white  (body text)
+C_MUTED      = "#4A5880"   # subtle               (HUD decorative only)
+C_GREEN      = "#39FF14"   # intense neon green   (YOU / user tags)
+C_ORANGE     = "#FF9900"   # tactical orange       (SYS / system tags)
+C_PURPLE     = "#9988FF"   # scan hover
+C_DANGER     = "#FF3A5C"   # error
 
 _STATE_COLOR = {
     "standby":    C_MUTED,
-    "listening":  C_GREEN,
-    "processing": C_CYAN,
+    "listening":  C_GREEN,   # neon green
+    "processing": C_CYAN,    # electric cyan
     "speaking":   C_PURPLE,
 }
 _STATE_LABEL = {
@@ -552,9 +553,9 @@ class AlbedoGUI(ctk.CTk):
         self._log.pack(fill="both", expand=True, padx=4, pady=(2, 4))
 
         tb = self._log._textbox
-        tb.tag_config("albedo", foreground=C_CYAN)
-        tb.tag_config("user",   foreground=C_TEXT)
-        tb.tag_config("system", foreground=C_MUTED)
+        tb.tag_config("albedo", foreground=C_CYAN)        # Electric laser cyan
+        tb.tag_config("user",   foreground=C_GREEN)       # Intense neon green
+        tb.tag_config("system", foreground=C_ORANGE)      # Tactical orange
         tb.tag_config("error",  foreground=C_DANGER)
 
         # ── CMD_INPUT HUD tag above input row ───────────────────────────────
@@ -666,7 +667,8 @@ class AlbedoGUI(ctk.CTk):
 
     def _set_state(self, state: str) -> None:
         self._state = state
-        self._state_chip.configure(text=_STATE_LABEL[state])
+        chip_color = _STATE_COLOR[state]
+        self._state_chip.configure(text=_STATE_LABEL[state], text_color=chip_color)
         busy = state in ("processing", "speaking")
         locked = busy or state == "listening"
 
