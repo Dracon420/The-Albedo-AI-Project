@@ -101,13 +101,13 @@ class _StdRedirector:
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("blue")
 
-C_BG       = "#0A0F2C"
-C_PANEL    = "#0E1330"
-C_CYAN     = "#00F5FF"
-C_CYAN_DIM = "#0099BB"
-C_BORDER   = "#1A2050"
+C_BG       = "#0A0E17"   # deep obsidian
+C_PANEL    = "#121824"   # dark graphite
+C_CYAN     = "#00F0FF"   # neon cyan
+C_CYAN_DIM = "#0088AA"   # dim accent
+C_BORDER   = "#1C2640"   # structural border
 C_TEXT     = "#C8D4E8"
-C_MUTED    = "#3A4570"
+C_MUTED    = "#3A4870"
 C_GREEN    = "#00FF88"
 C_PURPLE   = "#9988FF"
 C_DANGER   = "#FF3A5C"
@@ -468,6 +468,8 @@ class AlbedoGUI(ctk.CTk):
         self._icon_photo   = None   # ImageTk ref kept alive
         self._settings     = _load_settings()
         self._scan_btn     = None   # set by _build_ui
+        # Rolling conversation context — last 10 turns (20 messages)
+        self._chat_history: list[dict] = []
 
         # Redirect stdout/stderr into the in-app console so nothing is lost
         # when running under pythonw.exe (no console window).
@@ -487,6 +489,7 @@ class AlbedoGUI(ctk.CTk):
     # ── UI construction ────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
+        # ── Header ─────────────────────────────────────────────────────────
         hdr = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=62)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
@@ -505,21 +508,48 @@ class AlbedoGUI(ctk.CTk):
                       fg_color=C_BORDER, hover_color=C_MUTED,
                       command=self._open_console).pack(side="right", padx=(0, 4), pady=16)
 
-        # Orb canvas
+        # ── Tactical HUD status bar ─────────────────────────────────────────
+        hud = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=22)
+        hud.pack(fill="x")
+        hud.pack_propagate(False)
+        ctk.CTkLabel(
+            hud,
+            text="// CORE_SYS: ACTIVE  |  BRIDGE: OK  |  MEM: ONLINE  |  VEC_DB: READY",
+            font=("Courier New", 9),
+            text_color=C_MUTED,
+        ).pack(side="left", padx=16)
+        ctk.CTkLabel(
+            hud,
+            text="[ NET_LINK: OK ]",
+            font=("Courier New", 9),
+            text_color=C_CYAN_DIM,
+        ).pack(side="right", padx=16)
+
+        # ── Orb canvas ─────────────────────────────────────────────────────
         self._canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE,
                                  bg=C_BG, highlightthickness=0)
-        self._canvas.pack(pady=(14, 0))
+        self._canvas.pack(pady=(10, 0))
         self._load_icon()
 
-        # Output log
-        log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8)
-        log_outer.pack(fill="both", expand=True, padx=16, pady=(12, 4))
+        # ── Output log (neon border + HUD corner tags) ──────────────────────
+        log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
+                                 border_width=1, border_color=C_CYAN)
+        log_outer.pack(fill="both", expand=True, padx=16, pady=(10, 2))
+
+        # HUD corner tags inside the log panel
+        log_hdr = ctk.CTkFrame(log_outer, fg_color="transparent", height=18)
+        log_hdr.pack(fill="x", padx=6, pady=(4, 0))
+        log_hdr.pack_propagate(False)
+        ctk.CTkLabel(log_hdr, text="// CHAT_FEED",
+                     font=("Courier New", 9), text_color=C_MUTED).pack(side="left")
+        ctk.CTkLabel(log_hdr, text="[ STREAM: ACTIVE ]",
+                     font=("Courier New", 9), text_color=C_CYAN_DIM).pack(side="right")
 
         self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 16),
                                    fg_color=C_PANEL, text_color=C_TEXT,
                                    wrap="word", state="disabled", border_width=0,
-                                   scrollbar_button_color=C_BORDER)
-        self._log.pack(fill="both", expand=True, padx=4, pady=4)
+                                   scrollbar_button_color=C_CYAN_DIM)
+        self._log.pack(fill="both", expand=True, padx=4, pady=(2, 4))
 
         tb = self._log._textbox
         tb.tag_config("albedo", foreground=C_CYAN)
@@ -527,9 +557,19 @@ class AlbedoGUI(ctk.CTk):
         tb.tag_config("system", foreground=C_MUTED)
         tb.tag_config("error",  foreground=C_DANGER)
 
-        # Input row
-        row = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8)
-        row.pack(fill="x", padx=16, pady=(4, 12))
+        # ── CMD_INPUT HUD tag above input row ───────────────────────────────
+        cmd_hdr = ctk.CTkFrame(self, fg_color="transparent", height=16)
+        cmd_hdr.pack(fill="x", padx=18)
+        cmd_hdr.pack_propagate(False)
+        ctk.CTkLabel(cmd_hdr, text="[ CMD_INPUT ]",
+                     font=("Courier New", 9), text_color=C_MUTED).pack(side="left")
+        ctk.CTkLabel(cmd_hdr, text="// INPUT_READY",
+                     font=("Courier New", 9), text_color=C_CYAN_DIM).pack(side="right")
+
+        # ── Input row (neon border on entry) ────────────────────────────────
+        row = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
+                           border_width=1, border_color=C_BORDER)
+        row.pack(fill="x", padx=16, pady=(2, 12))
 
         self._mic_btn = ctk.CTkButton(row, text="MIC", width=62, height=44,
                                       font=("Courier New", 11, "bold"),
@@ -546,13 +586,15 @@ class AlbedoGUI(ctk.CTk):
         self._entry = ctk.CTkEntry(row,
                                    placeholder_text="Type a query or press MIC...",
                                    font=("Consolas", 14),
-                                   fg_color=C_BG, border_color=C_BORDER,
+                                   fg_color=C_BG, border_color=C_CYAN,
                                    text_color=C_TEXT, height=44)
         self._entry.pack(side="left", fill="x", expand=True, padx=4, pady=10)
         self._entry.bind("<Return>", lambda _: self._handle_send())
 
         self._send_btn = ctk.CTkButton(row, text="SEND", width=72, height=44,
                                        font=("Courier New", 11, "bold"),
+                                       fg_color=C_CYAN_DIM, hover_color=C_CYAN,
+                                       text_color="#000000",
                                        command=self._handle_send)
         self._send_btn.pack(side="left", padx=4, pady=10)
 
@@ -786,11 +828,20 @@ class AlbedoGUI(ctk.CTk):
     def _run_pipeline(self, query: str, use_web: bool) -> None:
         try:
             from albedo.pipeline import run as pipeline_run
-            response = pipeline_run(query, use_web=use_web)
+
+            # Snapshot history so background thread has a stable copy
+            history_snapshot = list(self._chat_history)
+            response = pipeline_run(query, use_web=use_web, history=history_snapshot)
 
             # Guarantee response is always a non-empty string
             if not isinstance(response, str) or not response.strip():
                 response = "[Albedo] No response returned. Is Ollama running?"
+
+            # Update rolling context (trim to last 10 turns = 20 messages)
+            self._chat_history.append({"role": "user",      "content": query})
+            self._chat_history.append({"role": "assistant", "content": response})
+            if len(self._chat_history) > 20:
+                self._chat_history = self._chat_history[-20:]
 
             # Capture for closure
             resp = response

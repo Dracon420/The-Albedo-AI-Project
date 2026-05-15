@@ -132,16 +132,18 @@ def _build_standard_prompt(query: str, rag_results: dict,
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def run(query: str, use_web: bool = False) -> str:
+def run(query: str, use_web: bool = False,
+        history: list[dict] | None = None) -> str:
     # ── 0. Conversational bypass ─────────────────────────────────────────────
     if _is_conversational(query):
-        return _strip_markdown(direct_reply(query))
+        return _strip_markdown(direct_reply(query, history=history))
 
     # ── 1. Hardware Verify protocol ──────────────────────────────────────────
     if is_hardware_query(query):
         print("[Albedo] Verify protocol engaged.")
         verify_data = run_verify(query)
-        return _strip_markdown(bridge_chat(verify_data["synthesis_prompt"]))
+        return _strip_markdown(bridge_chat(verify_data["synthesis_prompt"],
+                                           history=history))
 
     # ── 2. Standard RAG + optional web search ────────────────────────────────
     # Skip RAG for very short inputs — no useful embedding match and can
@@ -150,4 +152,4 @@ def run(query: str, use_web: bool = False) -> str:
     web_results = web_search(query) if use_web else []
 
     prompt = _build_standard_prompt(query, rag_results, web_results)
-    return _strip_markdown(bridge_chat(prompt))
+    return _strip_markdown(bridge_chat(prompt, history=history))

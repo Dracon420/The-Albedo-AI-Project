@@ -50,17 +50,19 @@ _SYSTEM_PROMPT = (
 
 # ── Direct Ollama HTTP call ────────────────────────────────────────────────────
 
-def _ollama_chat(message: str, max_tokens: int = 2048,
-                 temperature: float = 0.8) -> str:
+def _ollama_chat(message: str, history: list[dict] | None = None,
+                 max_tokens: int = 2048, temperature: float = 0.8) -> str:
     """Direct Ollama /api/chat call — no open-interpreter dependency."""
     import httpx
 
+    messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": message})
+
     payload = {
         "model": OLLAMA_MODEL,
-        "messages": [
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user",   "content": message},
-        ],
+        "messages": messages,
         "stream": False,
         "options": {
             "num_ctx":     max_tokens,
@@ -82,15 +84,16 @@ def _ollama_chat(message: str, max_tokens: int = 2048,
         return f"Error contacting Ollama: {exc}"
 
 
-def direct_reply(message: str) -> str:
+def direct_reply(message: str, history: list[dict] | None = None) -> str:
     """
     Lightweight conversational response path.
 
     Always calls Ollama directly — never routes through Open Interpreter.
     Caps context to 512 tokens and prediction to 150 tokens so a "hello"
-    cannot trigger a planning or code-execution loop.
+    cannot trigger a planning or code-execution loop.  History is included
+    so Albedo can resolve references like "do that again" or "what did you say".
     """
-    return _ollama_chat(message, max_tokens=512, temperature=0.7)
+    return _ollama_chat(message, history=history, max_tokens=512, temperature=0.7)
 
 
 # ── Open Interpreter (Bridge Control) ────────────────────────────────────────
@@ -137,15 +140,16 @@ def get_interpreter():
 
 # ── Public API ────────────────────────────────────────────────────────────────
 
-def bridge_chat(message: str) -> str:
+def bridge_chat(message: str, history: list[dict] | None = None) -> str:
     """
     Send an augmented prompt to the LLM.
 
     Uses Open Interpreter (Bridge Control) when available.
     Falls back to a direct Ollama HTTP call otherwise.
+    History is forwarded to the Ollama fallback path so context is preserved.
     """
     if not _interpreter_available():
-        return _ollama_chat(message)
+        return _ollama_chat(message, history=history)
 
     interp = get_interpreter()
     try:
@@ -159,10 +163,10 @@ def bridge_chat(message: str) -> str:
         result = "".join(parts).strip()
     except Exception as exc:
         print(f"[bridge] Interpreter error: {exc} -- falling back to Ollama.")
-        return _ollama_chat(message)
+        return _ollama_chat(message, history=history)
 
     # Empty response from interpreter means it handled a tool-only exchange
     # (code execution, file ops) -- fall back to direct Ollama for plain answers
     if not result:
-        return _ollama_chat(message)
+        return _ollama_chat(message, history=history)
     return result
