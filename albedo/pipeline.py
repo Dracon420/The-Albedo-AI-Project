@@ -139,13 +139,22 @@ _AUDIT_EXACT = frozenset({
     "audit", "sitrep", "hardware audit", "system audit",
     "tactical audit", "system report", "hardware report",
     "run audit", "run sitrep",
+    "my hardware", "my specs", "my system specs", "my pc specs",
+    "my rig specs", "hardware info", "system info", "system specs",
+    "pc specs", "rig specs", "detect my hardware", "what is my hardware",
+    "what's my hardware", "whats my hardware", "my system info",
+    "show my hardware", "show my specs", "my computer specs",
 })
 _AUDIT_VERB = frozenset({
     "optimize", "optimise", "check", "scan",
     "diagnose", "analyse", "analyze", "clean", "audit",
+    "detect", "identify", "report", "display", "show",
+    "list", "find", "get", "tell", "give",
 })
 _AUDIT_NOUN = frozenset({
     "computer", "system", "pc", "rig", "machine", "hardware",
+    "specs", "spec", "specifications", "components", "info",
+    "vitals", "cpu", "gpu", "ram", "memory",
 })
 
 
