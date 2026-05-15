@@ -101,7 +101,7 @@ def vision_query(
                 "images": [img_b64],
             }
         ],
-        "options": {"temperature": temp},
+        "options": {"temperature": temp, "num_predict": 100},
         "stream": False,
     }
 

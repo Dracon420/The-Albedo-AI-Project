@@ -64,7 +64,7 @@ WAKEWORD_MODEL = os.getenv("WAKEWORD_MODEL", "hey_jarvis")
 # Faster-Whisper: CPU + int8 avoids the cublas64_12.dll CUDA dependency and
 # leaves the full 6 GB VRAM budget for Ollama. Transcription latency on CPU
 # with the small model is typically 1-3 s for a 30 s clip -- acceptable.
-WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
+WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "tiny")
 WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
 

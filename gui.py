@@ -799,9 +799,9 @@ class AlbedoGUI(ctk.CTk):
 
             # TTS runs on this background thread -- UI stays responsive
             try:
-                from albedo.audio.tts import speak
+                from albedo.audio.tts import speak_streamed
                 out_dev = self._settings.get("audio_output_device")
-                speak(response, device=out_dev, voice_model=self._get_tts_voice())
+                speak_streamed(response, device=out_dev, voice_model=self._get_tts_voice())
             except Exception as tts_err:
                 print(f"[gui] TTS error: {tts_err}")
 
@@ -863,9 +863,9 @@ class AlbedoGUI(ctk.CTk):
             self._ui(lambda: self._set_state("speaking"))
 
             try:
-                from albedo.audio.tts import speak
+                from albedo.audio.tts import speak_streamed
                 out_dev = self._settings.get("audio_output_device")
-                speak(result, device=out_dev, voice_model=self._get_tts_voice())
+                speak_streamed(result, device=out_dev, voice_model=self._get_tts_voice())
             except Exception as tts_err:
                 print(f"[gui] TTS error: {tts_err}")
 
