@@ -2,7 +2,11 @@
 albedo/vision.py  --  Webcam capture and moondream visual analysis.
 
 capture_vision() snaps one webcam frame and returns it as an RGB numpy array.
-vision_query()   sends that frame to Ollama moondream and returns the analysis.
+vision_query()   encodes that frame entirely in memory and sends it to the
+                 Ollama moondream endpoint, returning the analysis string.
+
+No temporary files are written to disk -- the JPEG is held in a bytes buffer
+and base64-encoded in memory before being POSTed to Ollama.
 
 Usage:
     from albedo.vision import capture_vision, vision_query
@@ -23,7 +27,6 @@ def capture_vision(device: int = 0) -> np.ndarray | None:
 
     Args:
         device: OpenCV camera index. 0 = first camera (usually the webcam).
-                Use 1 for a secondary USB camera.
 
     Returns:
         HxWx3 uint8 numpy array in RGB order, or None if capture fails.
@@ -60,13 +63,16 @@ def vision_query(
     """
     Send an RGB frame to Ollama moondream for visual analysis.
 
+    The frame is JPEG-encoded entirely in memory (no temp files) and
+    base64-encoded before being POSTed to the Ollama chat endpoint.
+
     Args:
         frame:  HxWx3 uint8 RGB array from capture_vision().
         prompt: Natural-language instruction for moondream.
 
     Returns:
-        Model response string. Returns an error message instead of raising
-        so callers can display it directly in the chat log.
+        Model response string. Returns a plain error message on failure so
+        callers can display it directly without catching exceptions.
 
     Prerequisite: ollama pull moondream
     """
@@ -75,7 +81,7 @@ def vision_query(
         import httpx
         from albedo.config import OLLAMA_BASE_URL
 
-        # Encode RGB frame as JPEG bytes then base64
+        # Encode RGB frame → JPEG bytes → base64, entirely in memory
         frame_bgr = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         ok, buf = cv2.imencode(".jpg", frame_bgr, [cv2.IMWRITE_JPEG_QUALITY, 85])
         if not ok:
@@ -103,8 +109,7 @@ def vision_query(
 
     except httpx.ConnectError:
         return "[vision] Ollama is not running. Start it with: ollama serve"
+    except httpx.HTTPStatusError as exc:
+        return f"[vision] Ollama returned HTTP {exc.response.status_code}. Is moondream pulled? Run: ollama pull moondream"
     except Exception as exc:
-        return (
-            f"[vision] Error: {exc}\n"
-            "Is moondream pulled? Run: ollama pull moondream"
-        )
+        return f"[vision] Unexpected error: {type(exc).__name__}: {exc}"

@@ -29,12 +29,12 @@ EXOTIC_OS_EXTENSIONS = {".py", ".sh", ".txt", ".md", ".log", ".json", ".yaml", "
 COLLECTION_CHAOTIC_3D = "chaotic_3d"
 COLLECTION_EXOTIC_OS = "exotic_os"
 
-# --- Audio / Voice ---
-# Path to the Piper TTS executable (download from github.com/rhasspy/piper/releases)
-PIPER_BINARY = os.getenv("PIPER_BINARY", str(_PROJECT_ROOT / "piper" / "piper.exe"))
-
 # Project root (two levels up: albedo/config.py → albedo/ → root)
 _PROJECT_ROOT = Path(__file__).parent.parent
+
+# --- Audio / Voice ---
+# Path to the Piper TTS executable (bundled in repo under piper/)
+PIPER_BINARY = os.getenv("PIPER_BINARY", str(_PROJECT_ROOT / "piper" / "piper.exe"))
 
 # Local voice model cache -- downloaded by setup_utility.py / Invoke-Update
 VOICES_DIR = Path(os.getenv("VOICES_DIR", str(_PROJECT_ROOT / "voices")))
