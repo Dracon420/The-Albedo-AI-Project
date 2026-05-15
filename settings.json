@@ -1,4 +1,5 @@
 {
-  "audio_input_device": 1,
-  "audio_output_device": 4
+  "audio_input_device": 11,
+  "audio_output_device": 4,
+  "vision_temperature": 0.2
 }

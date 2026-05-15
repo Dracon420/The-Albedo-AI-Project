@@ -80,6 +80,9 @@ VAD_MAX_RECORD_SECONDS = int(os.getenv("VAD_MAX_RECORD_SECONDS", "30"))
 # Short spoken acknowledgment played immediately on wake word detection
 WAKE_ACK_PHRASE = os.getenv("WAKE_ACK_PHRASE", "Yes?")
 
+# Moondream vision temperature — lower = more concise descriptions, less TTS lag
+VISION_TEMPERATURE = float(os.getenv("VISION_TEMPERATURE", "0.2"))
+
 # --- Keywords that trigger the Verify protocol ---
 HARDWARE_KEYWORDS = {
     "error", "crash", "driver", "temperature", "thermal", "overheat",

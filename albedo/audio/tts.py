@@ -14,12 +14,48 @@ Piper runs on CPU so it uses zero VRAM -- keeps the RTX 2060 budget clean.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
 from albedo.config import PIPER_BINARY, PIPER_VOICE_MODEL, AUDIO_SAMPLE_RATE
+
+# ---------------------------------------------------------------------------
+# Markdown sanitiser — strips formatting tokens before sending text to Piper.
+# Piper reads every character literally, so **bold** would be spoken as
+# "asterisk asterisk bold asterisk asterisk".
+# ---------------------------------------------------------------------------
+_MD_LINK      = re.compile(r'!\[([^\]]*)\]\([^)]*\)')          # ![alt](url) → ''
+_MD_LINK2     = re.compile(r'\[([^\]]+)\]\([^)]*\)')            # [text](url) → text
+_MD_BARE_LINK = re.compile(r'\[([^\]]*)\]')                     # [text] → text
+_MD_CODE_BLK  = re.compile(r'```[\s\S]*?```')                   # fenced code → ''
+_MD_CODE_INL  = re.compile(r'`([^`]*)`')                        # `code` → code
+_MD_BOLD_IT   = re.compile(r'\*{1,3}([^*\n]*)\*{1,3}')         # ***/**/*, → text
+_MD_UNDER     = re.compile(r'_{1,3}([^_\n]*)_{1,3}')           # ___/__/_, → text
+_MD_HEADER    = re.compile(r'^#{1,6}\s+', re.MULTILINE)         # ## Header → text
+_MD_BULLET    = re.compile(r'^\s*[-*+]\s+', re.MULTILINE)       # - item → text
+_MD_BLOCKQUOTE = re.compile(r'^\s*>\s*', re.MULTILINE)          # > text → text
+_MD_HR        = re.compile(r'^[-*_]{3,}\s*$', re.MULTILINE)     # --- → ''
+_MD_SPACES    = re.compile(r'\n{3,}')                           # collapse blank lines
+
+
+def _sanitize_for_tts(text: str) -> str:
+    """Strip all markdown formatting so Piper speaks clean prose."""
+    text = _MD_LINK.sub('', text)
+    text = _MD_LINK2.sub(r'\1', text)
+    text = _MD_BARE_LINK.sub(r'\1', text)
+    text = _MD_CODE_BLK.sub('', text)
+    text = _MD_CODE_INL.sub(r'\1', text)
+    text = _MD_BOLD_IT.sub(r'\1', text)
+    text = _MD_UNDER.sub(r'\1', text)
+    text = _MD_HEADER.sub('', text)
+    text = _MD_BULLET.sub('', text)
+    text = _MD_BLOCKQUOTE.sub('', text)
+    text = _MD_HR.sub('', text)
+    text = _MD_SPACES.sub('\n\n', text)
+    return text.strip()
 
 # Cache only the binary check -- voice model varies per persona call.
 _piper_binary_ok: bool | None = None
@@ -51,7 +87,7 @@ def speak(text: str, device: int | None = None,
     voice_model: path to .onnx voice file.  None → use PIPER_VOICE_MODEL.
     Falls back to print() if Piper binary or voice model is unavailable.
     """
-    text = text.strip()
+    text = _sanitize_for_tts(text)
     if not text:
         return
 
@@ -102,7 +138,7 @@ def synthesize_to_bytes(text: str,
     Used by the FastAPI server so the mobile client can play audio remotely.
     Returns None if Piper is not installed or the voice model is missing.
     """
-    text = text.strip()
+    text = _sanitize_for_tts(text)
     if not text or not _check_piper_binary():
         return None
 

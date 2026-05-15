@@ -55,6 +55,7 @@ def capture_vision(device: int = 0) -> np.ndarray | None:
 def vision_query(
     frame: np.ndarray,
     prompt: str = "Describe in detail everything you see in this image.",
+    temperature: float | None = None,
 ) -> str:
     """
     Send an RGB frame to Ollama moondream for visual analysis.
@@ -70,7 +71,7 @@ def vision_query(
     try:
         import cv2
         import httpx
-        from albedo.config import OLLAMA_BASE_URL
+        from albedo.config import OLLAMA_BASE_URL, VISION_TEMPERATURE
     except Exception as exc:
         return (
             f"[vision] Setup error -- {type(exc).__name__}: {exc}\n"
@@ -90,6 +91,7 @@ def vision_query(
         )
 
     # ── Phase 2: Ollama request ────────────────────────────────────────────
+    temp = temperature if temperature is not None else VISION_TEMPERATURE
     payload = {
         "model": "moondream",
         "messages": [
@@ -99,6 +101,7 @@ def vision_query(
                 "images": [img_b64],
             }
         ],
+        "options": {"temperature": temp},
         "stream": False,
     }
 

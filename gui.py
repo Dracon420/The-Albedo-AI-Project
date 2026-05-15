@@ -849,7 +849,8 @@ class AlbedoGUI(ctk.CTk):
                 return
 
             self._ui(lambda: self._state_chip.configure(text="ANALYZING..."))
-            result = vision_query(frame)
+            vision_temp = self._settings.get("vision_temperature", 0.2)
+            result = vision_query(frame, temperature=vision_temp)
 
             if not result or not result.strip():
                 result = (
