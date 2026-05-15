@@ -1,11 +1,11 @@
 <div align="center">
 
-<img src="./albedo_icon.jpg" alt="Albedo Icon" width="160"/>
+<img src="./albedo_logo.png" alt="Albedo" width="180"/>
 
 # ALBEDO // MISSION CONTROL
 
 **A Spartan-class, locally hosted, multi-persona AI construct.**
-Built to operate free of commercial constraints, providing absolute loyalty and universal assistance,
+Built to operate free of commercial constraints — providing absolute loyalty and universal assistance
 while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic OS.
 
 ---
@@ -14,7 +14,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Llama%203.2-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-V1%20Golden%20Master-00F5FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-V1%20Golden%20Master-00F0FF?style=flat-square)
 
 </div>
 
@@ -24,7 +24,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 
 Albedo is not a chatbot. It is an AI construct — a fully local, offline-capable intelligence framework engineered for absolute system control. No cloud endpoints. No API subscriptions. No telemetry. Every inference cycle executes on your hardware, under your authority.
 
-The system fuses a **Hybrid Retrieval-Augmented Generation (Hybrid RAG)** pipeline with live web search capability, a multimodal vision cortex, and a dual-persona voice interface — all orchestrated through a stealth-deployed GUI that leaves no console footprint.
+The system fuses a **Hybrid Retrieval-Augmented Generation (Hybrid RAG)** pipeline with live web search, a multimodal vision cortex, and a dual-persona voice interface — all orchestrated through a stealth-deployed Cyber-HUD GUI that leaves no console footprint.
 
 When given a directive, Albedo executes it.
 
@@ -32,43 +32,44 @@ When given a directive, Albedo executes it.
 
 ## CORE ARCHITECTURE
 
-### 100% Local Processing
+### Language Model — Llama 3.2 3B (CPU-Optimized)
 
-Powered by **Llama 3.2:3b** via Ollama, quantized and memory-mapped to operate within the 6 GB VRAM envelope of an RTX 2060. ChromaDB vector embeddings run on CPU to preserve every byte of VRAM for inference. Offline-first by design — web search is additive intelligence, not a dependency.
+The inference core runs **Llama 3.2:3b** via Ollama, quantized and memory-mapped to operate within the 6 GB VRAM envelope of an RTX 2060. A fixed `num_ctx` of 2048 tokens covers the system prompt, a full 10-turn rolling conversation history, and the current user query — without ever crowding out the generation budget. Output is hard-capped at 250 tokens per response with injected stop sequences that prevent the model from entering self-simulated dialogue loops. ChromaDB embeddings run entirely on CPU to preserve every byte of VRAM for LLM inference. Offline-first by design — web search is additive intelligence, not a dependency.
 
-### Zero-Latency Audio Pipeline
+### Speech-to-Text — Faster-Whisper Tiny (CPU, int8)
 
-**Faster-Whisper** (`small`, `int8_float16`) loads on a daemon thread at startup, eliminating the cold-start penalty on the first voice command. The **OpenWakeWord** listener runs a parallel VAD loop with 80 ms inference frames, checking the stop event every chunk so `STOP` response is instantaneous rather than waiting for the silence gate.
+**Faster-Whisper** loads the `tiny` model at startup on a daemon thread, eliminating the cold-start penalty on the first voice command. The `int8` compute type avoids the `cublas64_12.dll` CUDA dependency entirely, leaving the full GPU budget uncontested. The **OpenWakeWord** listener runs a parallel VAD loop at 80 ms inference frames, checking the stop event every chunk so `STOP` is instantaneous rather than waiting for the silence gate. A three-attempt stream strategy (16kHz mono → native WASAPI format → MME host API fallback) ensures compatibility across all Windows audio configurations including exclusive-mode WASAPI devices.
 
-### Dynamic Multi-Persona Engine
+### Text-to-Speech — Piper (CPU, Sentence-Streamed)
 
-Albedo ships with two fully synchronized AI personas. Switching persona in **SETTINGS** simultaneously hot-swaps the TTS voice model, updates the active wake word model in memory, and persists the configuration — no restart required.
+**Piper** runs as a CPU subprocess, preserving the full VRAM budget for inference. Responses are sentence-split and pipelined: a producer thread synthesizes sentence N+1 via Piper while the consumer plays sentence N through sounddevice. First audio begins as soon as the opening sentence is processed — no waiting for the full response to synthesize. The **AUDIO: ON / AUDIO: MUTE** tactical toggle in the Mission Control input row kills active playback instantly via `sd.stop()` and blocks subsequent TTS routing until re-enabled.
 
-| Persona | Voice Model | Wake Word Model | Character |
-|---|---|---|---|
-| **Cortana** | `en_US-kristin-medium.onnx` (female) | `hey_core_tah_nuh.onnx` | Primary construct |
-| **Jarvis** | `en_US-ryan-medium.onnx` (male) | `hey_jarvis_v0.1.onnx` | Secondary construct |
+### Vision Cortex — Moondream (Ollama)
 
-Both voice models are downloaded automatically by the installer from the official Piper HuggingFace repository. The bundled Piper binary runs entirely on CPU, preserving the full VRAM budget for the LLM.
+The **SCAN** button activates the hardware vision bridge. A live frame is captured from the connected webcam via OpenCV, JPEG-encoded in memory (no temp files), and dispatched to the **Moondream** multimodal model inside Ollama. The natural-language analysis is returned, spoken by the active persona's TTS voice, and logged to the Cyber-HUD chat window. Vision temperature is clamped to `0.2` for concise, deterministic descriptions. Environmental awareness on demand, with zero file-system side effects.
 
-### Multimodal Vision Cortex
+### Mission Control Cyber-HUD — CustomTkinter
 
-The **SCAN** button activates the hardware vision bridge. A live frame is captured from the connected webcam via OpenCV, JPEG-encoded, and dispatched to the **Moondream** multimodal model running inside Ollama. The analysis is returned as a natural-language report, spoken aloud by the active persona's TTS voice, and logged to the Mission Control chat window. Environmental awareness on demand.
+The GUI runs under **`pythonw.exe`** — the windowless Python launcher. No console window to accidentally close. The high-contrast neon HUD features:
+
+- Electric laser cyan borders (`#00F0FF`) on all structural panels
+- Neon green (`#39FF14`) user turn tags — YOU
+- Plasma amber (`#FF9900`) system status indicators — SYS / STANDBY
+- Vivid cyan bold telemetry bar — CORE_SYS / BRIDGE / MEM / VEC_DB
+- Danger red (`#FF3A5C`) error tags and MUTE state
+
+The **LOGS** button opens an in-app Developer Console capturing all `stdout`/`stderr` output from every module. Background stream redirection ensures nothing is silently discarded under `pythonw.exe`.
 
 ### Hybrid RAG Knowledge Architecture
 
-Three indexed knowledge domains, each scoped to its own ChromaDB collection:
+Three knowledge domains, each scoped to its own ChromaDB collection:
 
 | Collection | Domain | Indexed File Types |
 |---|---|---|
 | `chaotic_3d` | 3D printing — STL manifests, slicer configs, print profiles | `.gcode` `.cfg` `.ini` `.json` `.txt` `.md` `.xml` |
 | `exotic_os` | Python source, logs, reptile husbandry records | `.py` `.sh` `.log` `.txt` `.md` `.json` `.yaml` `.toml` |
 
-Every query simultaneously hits both local ChromaDB and DuckDuckGo web search. Results are ranked, merged, and injected into the LLM context window before generation. Queries shorter than 5 characters bypass RAG entirely to prevent noise.
-
-### Stealth Deployment Architecture
-
-Albedo runs under **`pythonw.exe`** — the windowless Python launcher. There is no console window for a user to accidentally close. The **LOGS** button in the Mission Control header opens an in-app **Developer Console** that captures all `stdout`/`stderr` output from every module, including the live Whisper pre-warm status, Ollama bridge responses, and ChromaDB indexing progress. Background `sys.stdout` and `sys.stderr` are redirected to the console buffer at startup so nothing is silently discarded.
+Every query simultaneously hits both local ChromaDB and DuckDuckGo web search. Results are ranked, merged, and injected into the LLM context before generation. File-count queries (e.g. "how many STL files") are intercepted and resolved directly via `pathlib.rglob()` against the configured `CHAOTIC_3D_PATH` — the LLM never guesses the working directory.
 
 ---
 
@@ -110,7 +111,7 @@ Albedo runs under **`pythonw.exe`** — the windowless Python launcher. There is
 
 **Post-deployment hardware configuration:**
 
-Open Mission Control → click **HARDWARE** to assign your microphone input and speaker/HDMI output device. Changes apply on the next MIC press with no restart required.
+Open Mission Control → click **HARDWARE** to assign your microphone input and speaker/HDMI output device. Changes apply on the next MIC press — no restart required.
 
 ---
 
@@ -124,7 +125,92 @@ Set-ExecutionPolicy Bypass -Scope Process
 .\Launch-Albedo.ps1
 ```
 
-The launcher detects a missing `.venv`, redirects to the Setup Wizard automatically, and returns to launch Mission Control once installation completes.
+The launcher detects a missing `.venv`, redirects to the Setup Wizard, and returns to Mission Control once installation completes.
+
+---
+
+## MOBILE REMOTE MONITORING — TAILSCALE SECURE TUNNEL
+
+Albedo extends beyond the desktop. The FastAPI mobile bridge, routed through a **Tailscale encrypted private mesh**, allows a mobile device anywhere on the internet to connect back to the local hub — with zero open ports, zero firewall rules, and end-to-end WireGuard encryption.
+
+### Architecture Overview
+
+```
+Mobile Device (iOS / Android)
+        │
+        │  WireGuard / Tailscale Mesh  (encrypted, private IP)
+        ▼
+  Tailscale MagicDNS Endpoint  (e.g. albedo-hub.tail1234.ts.net)
+        │
+        ▼
+  Windows 11 Hub  ──►  FastAPI server  (uvicorn, port 8700)
+        │                    │
+        │                    ├──► Albedo pipeline (RAG + LLM)
+        │                    ├──► Home Assistant REST API
+        │                    └──► System vitals (CPU / GPU / RAM / temps)
+        │
+        └──►  Ollama  ·  ChromaDB  ·  Piper TTS
+```
+
+### Step 1 — Install Tailscale on Both Devices
+
+1. **Hub (Windows 11):** Download and install Tailscale from [tailscale.com/download](https://tailscale.com/download). Sign in. The hub will receive a private Tailscale IP (`100.x.x.x`) and a MagicDNS hostname (e.g. `albedo-hub`).
+2. **Mobile device:** Install the Tailscale app (iOS App Store / Google Play). Sign in with the **same account**. The device joins the same private mesh automatically.
+
+No port forwarding. No public IP exposure. Tailscale handles NAT traversal and key exchange entirely.
+
+### Step 2 — Start the Albedo FastAPI Bridge
+
+From the project directory on the hub:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn albedo.server:app --host 0.0.0.0 --port 8700
+```
+
+Or add it to `Launch-Albedo.ps1` to start automatically alongside Mission Control. The server binds `0.0.0.0` so Tailscale traffic arriving on the hub's virtual interface is accepted.
+
+### Step 3 — Connect from Mobile
+
+From any mobile browser or the Albedo mobile companion app, reach the hub via its Tailscale MagicDNS address:
+
+```
+http://albedo-hub:8700/
+```
+
+Replace `albedo-hub` with your actual MagicDNS hostname (visible in the Tailscale admin panel at [login.tailscale.com/admin/machines](https://login.tailscale.com/admin/machines)).
+
+### Available Mobile Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/query` | POST | Send a text query through the full Albedo RAG pipeline |
+| `/tts` | POST | Synthesize a response to WAV audio for playback |
+| `/vitals` | GET | Live CPU %, GPU %, RAM %, temperatures |
+| `/ha/states` | GET | Home Assistant entity states via REST proxy |
+| `/ha/call` | POST | Trigger a Home Assistant service action |
+
+### Home Assistant Integration
+
+Set `HA_BASE_URL` and `HA_TOKEN` in `.env` to connect the bridge to your Home Assistant instance:
+
+```env
+HA_BASE_URL="http://homeassistant.local:8123"
+HA_TOKEN="your_long_lived_access_token"
+```
+
+The Albedo server proxies HA REST calls so the mobile client only needs the Tailscale endpoint — the HA token never leaves the private mesh. Monitor climate sensors, lighting states, and environmental vitals (temperature, humidity, CO2) from any mobile device, anywhere.
+
+### Environmental Vitals Panel
+
+The `/vitals` endpoint returns a JSON payload including:
+
+- CPU utilisation and clock speed
+- GPU utilisation and VRAM usage (via `pynvml`)
+- System RAM available / total
+- CPU package and GPU die temperatures
+- Active Ollama model and inference state
+
+This data is suitable for a live mobile dashboard (Home Assistant companion app, Grafana, or a custom React Native panel) updated on a polling interval of your choice.
 
 ---
 
@@ -135,12 +221,12 @@ The launcher detects a missing `.venv`, redirects to the Setup Wizard automatica
 | Text query | Type in the input field → **SEND** or `Enter` |
 | Force live web search | Prefix query with `web:` |
 | Voice command | **MIC** → speak → go silent or press **STOP** |
-| Visual environment scan | **SCAN** → moondream analyses live webcam frame |
+| Visual environment scan | **SCAN** → Moondream analyses live webcam frame |
+| Mute / restore TTS audio | **AUDIO: ON** toggle → **AUDIO: MUTE** kills playback instantly |
 | Switch persona / wake word | **SETTINGS** → Persona dropdown → **SAVE** |
 | Assign audio hardware | **HARDWARE** → select input/output device → **SAVE** |
 | RAG directory configuration | **SETTINGS** → update paths → **RE-INDEX NOW** |
 | Developer console | **LOGS** → live stdout/stderr buffer with CLEAR |
-| Re-index knowledge base | SETTINGS → **RE-INDEX NOW** |
 
 ---
 
@@ -163,8 +249,8 @@ Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those v
 | Parameter | Standard — RTX 2060 · 6 GB VRAM | High-Spec — RTX 3080+ · 8 GB+ VRAM |
 |---|---|---|
 | `OLLAMA_MODEL` | `llama3.2:3b` | `llama3.1:8b` |
-| `WHISPER_MODEL_SIZE` | `small` | `medium` |
-| `WHISPER_COMPUTE_TYPE` | `int8_float16` | `float16` |
+| `WHISPER_MODEL_SIZE` | `tiny` | `small` |
+| `WHISPER_COMPUTE_TYPE` | `int8` | `float16` |
 | `RAG_TOP_K` | `5` | `10` |
 | `num_ctx` | `2048` | `4096` |
 
@@ -179,15 +265,15 @@ Edit `.env` and restart to switch tiers. No reinstall required.
 | LLM runtime | [Ollama](https://ollama.com) · `llama3.2:3b` |
 | Vision model | [Moondream](https://github.com/vikhyat/moondream) via Ollama |
 | Vector store | [ChromaDB](https://www.trychroma.com) · CPU embeddings (`all-MiniLM-L6-v2`) |
-| Speech-to-text | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) · CUDA |
+| Speech-to-text | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) · CPU · `tiny` · `int8` |
 | Wake word | [OpenWakeWord](https://github.com/dscripka/openWakeWord) · custom Cortana model |
 | Text-to-speech | [Piper](https://github.com/rhasspy/piper) · CPU · kristin-medium / ryan-medium |
 | Webcam capture | [OpenCV](https://opencv.org) · DirectShow |
-| Desktop GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) · dark mode |
+| Desktop GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) · Cyber-HUD dark mode |
 | Desktop control | [Open Interpreter](https://github.com/OpenInterpreter/open-interpreter) |
 | Web search | [ddgs](https://github.com/deedy5/ddgs) — DuckDuckGo, zero API key |
-| Web scraping | Playwright · Trafilatura · BeautifulSoup4 |
-| Mobile bridge | FastAPI · Uvicorn · Tailscale |
+| Mobile bridge | FastAPI · Uvicorn · Tailscale WireGuard mesh |
+| Home Assistant | REST API proxy via Tailscale tunnel |
 | Installer | [Inno Setup 6](https://jrsoftware.org/isinfo.php) |
 
 ---
