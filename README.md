@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./albedo_logo.png" alt="Albedo" width="180"/>
+<img src="./albedo_icon.jpg" alt="Albedo" width="180"/>
 
 # ALBEDO // MISSION CONTROL
 
