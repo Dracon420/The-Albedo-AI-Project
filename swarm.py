@@ -101,7 +101,10 @@ def query_gemini(prompt: str) -> str:
     if _gemini_module is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
-        model    = _gemini_module.GenerativeModel("gemini-1.5-flash")
+        model    = _gemini_module.GenerativeModel(
+            "gemini-1.5-flash",
+            tools="google_search_retrieval",
+        )
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as exc:
@@ -190,6 +193,7 @@ def autonomous_commander(user_prompt: str) -> dict:
         model = _gemini_module.GenerativeModel(
             "gemini-1.5-flash",
             system_instruction=_SYSTEM_INSTRUCTION,
+            tools="google_search_retrieval",
         )
         raw = model.generate_content(user_prompt).text.strip()
 
@@ -208,5 +212,5 @@ def autonomous_commander(user_prompt: str) -> dict:
         return {"route": route, "payload": payload or user_prompt}
 
     except Exception as exc:
-        print(f"[swarm] Commander routing failed: {exc}")
+        print(f"[ROUTER EXCEPTION]: {exc}")
         return fallback

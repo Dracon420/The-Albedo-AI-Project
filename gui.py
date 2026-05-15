@@ -542,9 +542,9 @@ class AlbedoGUI(ctk.CTk):
         self._canvas.pack(pady=(10, 0))
         self._load_icon()
 
-        # ── Output log (neon border + HUD corner tags) ──────────────────────
+        # ── Output log (borderless; only CMD_INPUT row carries the cyan border) ─
         log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
-                                 border_width=2, border_color=C_CYAN)
+                                 border_width=0)
         log_outer.pack(fill="both", expand=True, padx=16, pady=(10, 2))
 
         # HUD corner tags inside the log panel
@@ -556,7 +556,7 @@ class AlbedoGUI(ctk.CTk):
         ctk.CTkLabel(log_hdr, text="[ STREAM: ACTIVE ]",
                      font=("Courier New", 12, "bold"), text_color=C_ORANGE).pack(side="right")
 
-        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 20),
+        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 15),
                                    fg_color=C_PANEL, text_color=C_TEXT,
                                    wrap="word", state="disabled", border_width=0,
                                    scrollbar_button_color=C_CYAN_DIM)
@@ -930,8 +930,13 @@ class AlbedoGUI(ctk.CTk):
                          args=(query, use_web), daemon=True).start()
 
     def _handle_abort(self) -> None:
-        """Set the abort flag; the pipeline thread drops its payload cleanly."""
+        """Hard-kill TTS audio, set the abort flag, reset state."""
         self._abort_flag.set()
+        try:
+            from albedo.audio.tts import stop_audio
+            stop_audio()
+        except Exception:
+            pass
         self._log_append("system", "[SYS] Process aborted by user.")
         self._set_state("standby")
 

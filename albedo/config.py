@@ -74,7 +74,7 @@ WAKEWORD_THRESHOLD = float(os.getenv("WAKEWORD_THRESHOLD", "0.5"))
 
 # VAD — silence detection after wake word
 VAD_SILENCE_THRESHOLD = float(os.getenv("VAD_SILENCE_THRESHOLD", "0.01"))  # RMS energy
-VAD_SILENCE_DURATION = float(os.getenv("VAD_SILENCE_DURATION", "1.5"))     # seconds
+VAD_SILENCE_DURATION = float(os.getenv("VAD_SILENCE_DURATION", "1.2"))     # seconds
 VAD_MAX_RECORD_SECONDS = int(os.getenv("VAD_MAX_RECORD_SECONDS", "30"))
 
 # Short spoken acknowledgment played immediately on wake word detection

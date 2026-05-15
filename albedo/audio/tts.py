@@ -83,6 +83,34 @@ def _split_sentences(text: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Active-process tracker (enables hard-kill on abort)
+# ---------------------------------------------------------------------------
+
+_active_proc: subprocess.Popen | None = None
+_proc_lock   = threading.Lock()
+
+
+def stop_audio() -> None:
+    """
+    Hard-kill any active Piper synthesis subprocess and stop sounddevice
+    playback immediately.  Safe to call from any thread at any time.
+    sd.stop() unblocks a blocking sd.play() so speak_streamed() exits cleanly.
+    """
+    global _active_proc
+    with _proc_lock:
+        proc = _active_proc
+    if proc is not None:
+        try:
+            proc.kill()
+        except Exception:
+            pass
+    try:
+        sd.stop()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
 # Binary / voice checks
 # ---------------------------------------------------------------------------
 _piper_binary_ok: bool | None = None
@@ -125,26 +153,50 @@ def _resampled(audio: np.ndarray, sr: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 def _synthesize(text: str, model: str) -> tuple[np.ndarray, int] | None:
-    """Run Piper for a single text fragment and return (float32 audio, sr)."""
+    """
+    Run Piper for a single text fragment and return (float32 audio, sr).
+    The Popen object is stored in _active_proc so stop_audio() can kill it
+    instantly from any thread.
+    """
+    global _active_proc
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp_path = tmp.name
+    proc: subprocess.Popen | None = None
     try:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             [PIPER_BINARY, "--model", model, "--output_file", tmp_path],
-            input=text.encode("utf-8"),
-            capture_output=True,
-            timeout=20,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             creationflags=subprocess.CREATE_NO_WINDOW,
         )
-        if proc.returncode != 0:
-            print(f"[tts] Piper error: {proc.stderr.decode().strip()}")
+        with _proc_lock:
+            _active_proc = proc
+
+        try:
+            _, stderr_bytes = proc.communicate(
+                input=text.encode("utf-8"), timeout=20
+            )
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
             return None
+
+        if proc.returncode not in (0, -9, -15):   # -9/-15 = killed by stop_audio
+            print(f"[tts] Piper error: {stderr_bytes.decode().strip()}")
+            return None
+        if proc.returncode != 0:                   # killed — drop silently
+            return None
+
         audio, sr = sf.read(tmp_path, dtype="float32")
         return audio, sr
     except Exception as exc:
         print(f"[tts] Synthesis error: {exc}")
         return None
     finally:
+        with _proc_lock:
+            if _active_proc is proc:
+                _active_proc = None
         try:
             os.unlink(tmp_path)
         except OSError:
