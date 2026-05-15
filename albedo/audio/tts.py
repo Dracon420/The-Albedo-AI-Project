@@ -134,6 +134,7 @@ def _synthesize(text: str, model: str) -> tuple[np.ndarray, int] | None:
             input=text.encode("utf-8"),
             capture_output=True,
             timeout=20,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if proc.returncode != 0:
             print(f"[tts] Piper error: {proc.stderr.decode().strip()}")
@@ -265,6 +266,7 @@ def synthesize_to_bytes(text: str,
             input=text.encode("utf-8"),
             capture_output=True,
             timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if proc.returncode != 0:
             print(f"[tts] Piper error: {proc.stderr.decode().strip()}")

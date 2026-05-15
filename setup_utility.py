@@ -63,7 +63,8 @@ VENV_PIP = VENV / "Scripts" / "pip.exe"
 # ---------------------------------------------------------------------------
 
 def _run(cmd: list, **kw) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, capture_output=True, text=True, timeout=30, **kw)
+    return subprocess.run(cmd, capture_output=True, text=True, timeout=30,
+                          creationflags=subprocess.CREATE_NO_WINDOW, **kw)
 
 
 def _find_python312() -> str | None:
@@ -106,6 +107,7 @@ def _check_ollama() -> bool:
         r = subprocess.run(
             "ollama --version",
             capture_output=True, text=True, timeout=10, shell=True,
+            creationflags=subprocess.CREATE_NO_WINDOW,
         )
         if r.returncode == 0:
             return True
@@ -117,7 +119,8 @@ def _check_ollama() -> bool:
     if exe:
         try:
             r = subprocess.run([exe, "--version"],
-                               capture_output=True, text=True, timeout=10)
+                               capture_output=True, text=True, timeout=10,
+                               creationflags=subprocess.CREATE_NO_WINDOW)
             if r.returncode == 0:
                 return True
         except Exception:
@@ -157,7 +160,8 @@ def _kill_locked_processes() -> None:
     for name in ("pythonw.exe",):
         try:
             subprocess.run(["taskkill", "/F", "/IM", name],
-                           capture_output=True, timeout=5)
+                           capture_output=True, timeout=5,
+                           creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception:
             pass
 
@@ -364,7 +368,8 @@ class SystemCheckPage(Page):
                             ["winget", "install", "Ollama.Ollama",
                              "--accept-source-agreements",
                              "--accept-package-agreements", "--silent"],
-                            timeout=120)
+                            timeout=120,
+                            creationflags=subprocess.CREATE_NO_WINDOW)
                     except Exception:
                         pass
             if not self._results.get("Python 3.12"):
@@ -373,7 +378,8 @@ class SystemCheckPage(Page):
                         ["winget", "install", "Python.Python.3.12",
                          "--accept-source-agreements",
                          "--accept-package-agreements", "--silent"],
-                        timeout=180)
+                        timeout=180,
+                        creationflags=subprocess.CREATE_NO_WINDOW)
                 except Exception:
                     pass
             self.after(0, self.on_enter)
@@ -572,7 +578,8 @@ class InstallPage(Page):
             self._push("Creating virtual environment...", "info", 0.10)
             r = subprocess.run([py, "-m", "venv", str(VENV)],
                                capture_output=True, text=True,
-                               encoding="utf-8", errors="replace")
+                               encoding="utf-8", errors="replace",
+                               creationflags=subprocess.CREATE_NO_WINDOW)
             if r.returncode != 0:
                 raise RuntimeError(f"venv creation failed:\n{r.stderr}")
             self._push("  .venv created.", "ok")
@@ -601,7 +608,8 @@ class InstallPage(Page):
             r = subprocess.run(
                 [str(VENV_PY), "-m", "playwright", "install", "chromium"],
                 capture_output=True, text=True, timeout=120,
-                encoding="utf-8", errors="replace")
+                encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW)
             if r.returncode == 0:
                 self._push("  Playwright Chromium ready.", "ok")
             else:
@@ -629,7 +637,8 @@ class InstallPage(Page):
                 [str(VENV_PY), "-c",
                  "import openwakeword; openwakeword.utils.download_models()"],
                 capture_output=True, text=True, timeout=120,
-                encoding="utf-8", errors="replace")
+                encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW)
             if r.returncode == 0:
                 self._push("  Wake word models ready.", "ok")
             else:
@@ -652,6 +661,7 @@ class InstallPage(Page):
                 [str(VENV_PY), "-c", script],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW,
             )
             for line in proc.stdout:
                 stripped = line.strip()
@@ -698,7 +708,8 @@ class InstallPage(Page):
             proc = subprocess.Popen(
                 ["ollama", "pull", "llama3.2:3b"],
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace")
+                text=True, encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW)
             for line in proc.stdout:
                 self._push(f"  {line.rstrip()}", "info")
             proc.wait()
@@ -718,7 +729,8 @@ class InstallPage(Page):
         try:
             proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace")
+                text=True, encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW)
             for line in proc.stdout:
                 stripped = line.strip()
                 if stripped:
@@ -779,7 +791,8 @@ class CompletePage(Page):
             subprocess.Popen(
                 ["powershell.exe", "-ExecutionPolicy", "Bypass",
                  "-WindowStyle", "Normal", "-File",
-                 str(ROOT / "Launch-Albedo.ps1")])
+                 str(ROOT / "Launch-Albedo.ps1")],
+                creationflags=subprocess.CREATE_NO_WINDOW)
         except Exception:
             pass
         self.wizard.destroy()
