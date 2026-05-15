@@ -223,7 +223,7 @@ def _write_env(chaotic: str, exotic: str, piper_bin: str, persona: str) -> None:
         "PIPER_VOICE_JARVIS":   jarvis_voice,
         "WAKEWORD_MODEL":       active_wakeword,
         "OLLAMA_MODEL":         "llama3.2:3b",
-        "WHISPER_MODEL_SIZE":   "small",
+        "WHISPER_MODEL_SIZE":   "tiny",
         "WHISPER_DEVICE":       "cpu",
         "WHISPER_COMPUTE_TYPE": "int8",
     }

@@ -1,15 +1,17 @@
 """
-Speech-to-text via Faster-Whisper on CUDA.
+Speech-to-text via Faster-Whisper (CPU, tiny, int8).
 
 RTX 2060 VRAM budget:
-  Ollama (mistral Q4)   ~4.0 GB
-  Whisper small int8f16 ~0.5 GB
-  headroom              ~1.5 GB
+  Ollama llama3.2:3b    ~4.0 GB
+  Whisper tiny (CPU)     0.0 GB  -- zero VRAM; runs entirely on CPU
+  headroom              ~2.0 GB
   ──────────────────────────────
-  total                 ~6.0 GB  ✓
+  total                 ~4.0 GB  ✓
 
 The model is loaded once at first call and kept resident to avoid
-the ~2-second reload penalty on every query.
+the reload penalty on every query. device=cpu and compute_type=int8
+are locked — do not change; CUDA builds require cublas64_12.dll which
+is absent on most gaming rigs and causes a hard import failure.
 """
 from __future__ import annotations
 

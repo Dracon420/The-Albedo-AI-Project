@@ -131,11 +131,16 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM pythonw.exe"; \
   Flags: runhidden skipifdoesntexist
 
 [UninstallDelete]
-; Clean up generated directories that were not part of the original install
+; Scorch protocol: wipe all runtime-generated content then the directory itself.
+; filesandordirs on {app}\* removes everything the installer did not track
+; (chroma_db, .venv, __pycache__, .env, voices, logs, etc.).
+; dirifempty on {app} then removes the now-empty installation folder.
 Type: filesandordirs; Name: "{app}\.venv"
 Type: filesandordirs; Name: "{app}\chroma_db"
 Type: filesandordirs; Name: "{app}\__pycache__"
 Type: files;          Name: "{app}\.env"
+Type: filesandordirs; Name: "{app}\*"
+Type: dirifempty;     Name: "{app}"
 
 ; ── Pre-install Python check ───────────────────────────────────────────────
 [Code]
