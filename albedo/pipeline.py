@@ -130,6 +130,36 @@ def _build_standard_prompt(query: str, rag_results: dict,
 
 
 # ---------------------------------------------------------------------------
+# Tactical Hardware Audit intercept
+# Bypasses Ollama entirely; run_tactical_audit() returns a plain-prose
+# SitRep string that goes straight to the chat log and TTS.
+# ---------------------------------------------------------------------------
+
+_AUDIT_EXACT = frozenset({
+    "audit", "sitrep", "hardware audit", "system audit",
+    "tactical audit", "system report", "hardware report",
+    "run audit", "run sitrep",
+})
+_AUDIT_VERB = frozenset({
+    "optimize", "optimise", "check", "scan",
+    "diagnose", "analyse", "analyze", "clean", "audit",
+})
+_AUDIT_NOUN = frozenset({
+    "computer", "system", "pc", "rig", "machine", "hardware",
+})
+
+
+def _is_audit_query(query: str) -> bool:
+    """True when the user wants a hardware audit / system optimisation."""
+    q = query.lower()
+    if any(s in q for s in _AUDIT_EXACT):
+        return True
+    has_verb = any(s in q for s in _AUDIT_VERB)
+    has_noun = any(s in q for s in _AUDIT_NOUN)
+    return has_verb and has_noun
+
+
+# ---------------------------------------------------------------------------
 # STL file count interceptor
 # Resolves the real count directly in Python — never lets the LLM guess CWD.
 # ---------------------------------------------------------------------------
@@ -176,7 +206,23 @@ def run(query: str, use_web: bool = False,
     if _is_conversational(query):
         return _strip_markdown(direct_reply(query, history=history))
 
-    # ── 0b. STL file count — resolve in Python, present via direct_reply ─────
+    # ── 0b. Tactical Hardware Audit — bypass Ollama, return SitRep directly ──
+    if _is_audit_query(query):
+        try:
+            import sys as _sys
+            import os as _os
+            _sys.path.insert(0, str(_os.path.dirname(_os.path.dirname(__file__))))
+            from diagnostics import run_tactical_audit
+            return _strip_markdown(run_tactical_audit())
+        except ImportError:
+            return (
+                "Tactical audit unavailable: diagnostics.py not found. "
+                "Ensure the file is present in the project root."
+            )
+        except Exception as _exc:
+            return f"Audit error: {_exc}"
+
+    # ── 0c. STL file count — resolve in Python, present via direct_reply ─────
     if _is_stl_count_query(query):
         count, path = _count_stl_files()
         if count < 0:

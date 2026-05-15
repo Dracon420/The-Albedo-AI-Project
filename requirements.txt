@@ -27,3 +27,7 @@ beautifulsoup4>=4.12.0
 trafilatura>=1.10.0
 httpx>=0.27.0
 lxml>=5.2.0
+
+# Hardware telemetry (tactical audit, system vitals)
+psutil>=5.9.0
+WMI>=1.5.1
