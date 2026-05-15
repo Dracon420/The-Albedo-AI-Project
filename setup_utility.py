@@ -88,10 +88,49 @@ def _find_python312() -> str | None:
 
 
 def _check_ollama() -> bool:
+    """
+    Detect Ollama via three escalating strategies so pythonw.exe's stripped
+    PATH never causes a false-negative:
+
+    1. shutil.which — honours the current PATH (works in normal terminals).
+    2. Known Windows install path — %LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe
+    3. REST probe — if the daemon is already running, the /api/version endpoint
+       responds even when the binary isn't on PATH at all.
+    """
+    # Strategy 1: PATH lookup
+    exe = shutil.which("ollama")
+    if exe:
+        try:
+            r = subprocess.run([exe, "--version"], capture_output=True,
+                               text=True, timeout=10)
+            if r.returncode == 0:
+                return True
+        except Exception:
+            pass
+
+    # Strategy 2: well-known Windows install location
+    local_app = os.environ.get("LOCALAPPDATA", "")
+    if local_app:
+        candidate = Path(local_app) / "Programs" / "Ollama" / "ollama.exe"
+        if candidate.is_file():
+            try:
+                r = subprocess.run([str(candidate), "--version"],
+                                   capture_output=True, text=True, timeout=10)
+                if r.returncode == 0:
+                    return True
+            except Exception:
+                pass
+
+    # Strategy 3: REST probe — daemon already running?
     try:
-        return _run(["ollama", "--version"]).returncode == 0
-    except FileNotFoundError:
-        return False
+        import urllib.request as _ur
+        with _ur.urlopen("http://localhost:11434/api/version", timeout=3) as resp:
+            if resp.status == 200:
+                return True
+    except Exception:
+        pass
+
+    return False
 
 
 def _check_git() -> bool:
