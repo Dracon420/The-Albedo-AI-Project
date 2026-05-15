@@ -155,14 +155,17 @@ _SYSTEM_INSTRUCTION = (
     "2. 'together': For complex debugging or logic puzzles.\n"
     "3. 'local': For local system tasks (e.g., 'scan hardware', 'optimize PC').\n"
     "4. 'direct': If the user asks a general question, for the weather, or casual "
-    "conversation, answer it yourself directly.\n\n"
+    "conversation, answer it yourself directly.\n"
+    "5. 'memory': If the user asks about past projects, specific Albedo configurations, "
+    "notes, or anything that implies retrieving personal stored knowledge. "
+    "The payload must be the specific search query to look up.\n\n"
     "You MUST respond ONLY in valid JSON format: "
     '{"route": "agent_name", "payload": "The prompt to send to the agent, or your direct answer"}'
 )
 
 _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 
-_VALID_ROUTES = frozenset({"direct", "groq", "together", "local"})
+_VALID_ROUTES = frozenset({"direct", "groq", "together", "local", "memory"})
 
 
 def autonomous_commander(user_prompt: str) -> dict:

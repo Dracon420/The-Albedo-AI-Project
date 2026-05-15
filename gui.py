@@ -1006,11 +1006,26 @@ class AlbedoGUI(ctk.CTk):
           'direct'   → Gemini answers directly; skip all local processing.
           'groq'     → forward the refined payload to Groq (fast scripting).
           'together' → forward to Together AI (complex reasoning / debug).
+          'memory'   → semantic search against the Obsidian vault index.
           'local'    → existing Ollama + RAG pipeline (default fallback).
+
+        "index vault" / "reindex vault" typed by the user triggers a fresh
+        ChromaDB index of the Obsidian vault before routing completes.
 
         On any import error, API failure, or missing key the method falls
         through silently to the local pipeline so Albedo never goes dark.
         """
+        # Vault index intercept — runs before the Commander so it always fires.
+        q_lower = query.strip().lower()
+        if any(q_lower == kw or q_lower.startswith(kw + " ")
+               for kw in ("index vault", "reindex vault", "re-index vault")):
+            try:
+                from memory import index_obsidian_vault
+                status = index_obsidian_vault()
+                return f"[OBSIDIAN VAULT]\n{status}"
+            except Exception as exc:
+                return f"[OBSIDIAN VAULT] Indexing failed: {exc}"
+
         try:
             from swarm import autonomous_commander, query_groq, query_together
             result  = autonomous_commander(query)
@@ -1023,6 +1038,16 @@ class AlbedoGUI(ctk.CTk):
                 return "[GROQ EXECUTING]\n" + query_groq(payload)
             if route == "together":
                 return "[TOGETHER EVALUATING]\n" + query_together(payload)
+            if route == "memory":
+                try:
+                    from memory import search_memory
+                    chunks = search_memory(payload)
+                    if chunks:
+                        body = "\n\n---\n\n".join(chunks)
+                        return f"[OBSIDIAN VAULT]\n{body}"
+                    return "[OBSIDIAN VAULT] No relevant notes found. Try 'index vault' first."
+                except Exception as exc:
+                    print(f"[gui] Memory search error: {exc}")
             # route == "local" — fall through to Ollama below
         except Exception as exc:
             print(f"[gui] Commander routing error (falling back to local): {exc}")
