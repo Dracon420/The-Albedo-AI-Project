@@ -31,6 +31,12 @@ models/
 whisper_models/
 *.pt
 
+# Piper TTS voice models (downloaded by installer — not committed)
+voices/
+
+# Claude Code local settings
+.claude/
+
 # Audio scratch files
 *.wav
 *.mp3
