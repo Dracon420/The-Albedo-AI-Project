@@ -997,13 +997,45 @@ class AlbedoGUI(ctk.CTk):
 
     # ── Pipeline runner (always on a background thread) ────────────────────
 
+    # ── Swarm Commander routing ────────────────────────────────────────────
+
+    def _route_query(self, query: str, use_web: bool) -> str:
+        """
+        Route the query through the Gemini Commander when GEMINI_API_KEY is
+        set.  The Commander returns a JSON decision:
+          'direct'   → Gemini answers directly; skip all local processing.
+          'groq'     → forward the refined payload to Groq (fast scripting).
+          'together' → forward to Together AI (complex reasoning / debug).
+          'local'    → existing Ollama + RAG pipeline (default fallback).
+
+        On any import error, API failure, or missing key the method falls
+        through silently to the local pipeline so Albedo never goes dark.
+        """
+        try:
+            from swarm import autonomous_commander, query_groq, query_together
+            result  = autonomous_commander(query)
+            route   = result["route"]
+            payload = result["payload"]
+
+            if route == "direct":
+                return payload
+            if route == "groq":
+                return "[GROQ EXECUTING]\n" + query_groq(payload)
+            if route == "together":
+                return "[TOGETHER EVALUATING]\n" + query_together(payload)
+            # route == "local" — fall through to Ollama below
+        except Exception as exc:
+            print(f"[gui] Commander routing error (falling back to local): {exc}")
+
+        from albedo.pipeline import run as pipeline_run
+        history_snapshot = list(self._chat_history)
+        return pipeline_run(query, use_web=use_web, history=history_snapshot)
+
+    # ── Pipeline runner (always on a background thread) ────────────────────
+
     def _run_pipeline(self, query: str, use_web: bool) -> None:
         try:
-            from albedo.pipeline import run as pipeline_run
-
-            # Snapshot history so background thread has a stable copy
-            history_snapshot = list(self._chat_history)
-            response = pipeline_run(query, use_web=use_web, history=history_snapshot)
+            response = self._route_query(query, use_web)
 
             # Guarantee response is always a non-empty string
             if not isinstance(response, str) or not response.strip():

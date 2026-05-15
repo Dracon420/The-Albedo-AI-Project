@@ -29,7 +29,9 @@ Usage:
 """
 from __future__ import annotations
 
+import json
 import os
+import re
 
 from dotenv import load_dotenv
 
@@ -140,3 +142,68 @@ def query_together(prompt: str) -> str:
         return response.choices[0].message.content.strip()
     except Exception as exc:
         return f"[swarm] Together AI error: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Autonomous Commander
+# ---------------------------------------------------------------------------
+
+_SYSTEM_INSTRUCTION = (
+    "You are the Master Router for the Albedo construct. Analyze the user's prompt. "
+    "You have a team of agents.\n"
+    "1. 'groq': For writing heavy Python scripts or formatting data fast.\n"
+    "2. 'together': For complex debugging or logic puzzles.\n"
+    "3. 'local': For local system tasks (e.g., 'scan hardware', 'optimize PC').\n"
+    "4. 'direct': If the user asks a general question, for the weather, or casual "
+    "conversation, answer it yourself directly.\n\n"
+    "You MUST respond ONLY in valid JSON format: "
+    '{"route": "agent_name", "payload": "The prompt to send to the agent, or your direct answer"}'
+)
+
+_RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
+
+_VALID_ROUTES = frozenset({"direct", "groq", "together", "local"})
+
+
+def autonomous_commander(user_prompt: str) -> dict:
+    """
+    Send user_prompt to Gemini 1.5 Flash acting as the Master Commander.
+
+    Returns a dict with keys:
+        route   -- one of 'direct', 'groq', 'together', 'local'
+        payload -- the text to forward to the chosen agent (or the direct answer)
+
+    Never raises. On any failure (missing key, API error, bad JSON) returns
+        {"route": "local", "payload": user_prompt}
+    so the local Ollama+RAG pipeline always has a safe fallback.
+    """
+    load_swarm_keys()
+    fallback = {"route": "local", "payload": user_prompt}
+
+    if _gemini_module is None:
+        return fallback
+
+    try:
+        model = _gemini_module.GenerativeModel(
+            "gemini-1.5-flash",
+            system_instruction=_SYSTEM_INSTRUCTION,
+        )
+        raw = model.generate_content(user_prompt).text.strip()
+
+        # Strip markdown code fences Gemini sometimes wraps JSON in
+        m = _RE_JSON_BLOCK.search(raw)
+        if m:
+            raw = m.group(1).strip()
+
+        data    = json.loads(raw)
+        route   = str(data.get("route",   "local")).lower().strip()
+        payload = str(data.get("payload", user_prompt)).strip()
+
+        if route not in _VALID_ROUTES:
+            route = "local"
+
+        return {"route": route, "payload": payload or user_prompt}
+
+    except Exception as exc:
+        print(f"[swarm] Commander routing failed: {exc}")
+        return fallback
