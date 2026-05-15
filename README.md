@@ -1,16 +1,82 @@
-# ALBEDO: Spartan-Class Local Assistant
+<div align="center">
 
-> **Wake Word:** `Cortana` · **Architecture:** Hybrid RAG · **Ecosystem:** Exotic OS · Chaotic 3D Solutions
+<img src="./albedo_icon.jpg" alt="Albedo Icon" width="160"/>
 
-Albedo is a fully local AI assistant. No cloud. No API keys. No subscription. It fuses a persistent local knowledge base (ChromaDB) with live web search, runs on your GPU via Ollama, and takes direct command of your Windows desktop through Open Interpreter. Say *Cortana* — it answers.
+# ALBEDO // MISSION CONTROL
+
+**A Spartan-class, locally hosted, multi-persona AI construct.**
+Built to operate free of commercial constraints, providing absolute loyalty and universal assistance,
+while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic OS.
 
 ---
 
-## Installation
+![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D4?style=flat-square&logo=windows)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
+![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Llama%203.2-black?style=flat-square)
+![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![Status](https://img.shields.io/badge/Status-V1%20Golden%20Master-00F5FF?style=flat-square)
 
-### Path A — Standard Deployment *(Recommended)*
+</div>
 
-**No terminal required. One download, one click.**
+---
+
+## OPERATIONAL BRIEFING
+
+Albedo is not a chatbot. It is an AI construct — a fully local, offline-capable intelligence framework engineered for absolute system control. No cloud endpoints. No API subscriptions. No telemetry. Every inference cycle executes on your hardware, under your authority.
+
+The system fuses a **Hybrid Retrieval-Augmented Generation (Hybrid RAG)** pipeline with live web search capability, a multimodal vision cortex, and a dual-persona voice interface — all orchestrated through a stealth-deployed GUI that leaves no console footprint.
+
+When given a directive, Albedo executes it.
+
+---
+
+## CORE ARCHITECTURE
+
+### 100% Local Processing
+
+Powered by **Llama 3.2:3b** via Ollama, quantized and memory-mapped to operate within the 6 GB VRAM envelope of an RTX 2060. ChromaDB vector embeddings run on CPU to preserve every byte of VRAM for inference. Offline-first by design — web search is additive intelligence, not a dependency.
+
+### Zero-Latency Audio Pipeline
+
+**Faster-Whisper** (`small`, `int8_float16`) loads on a daemon thread at startup, eliminating the cold-start penalty on the first voice command. The **OpenWakeWord** listener runs a parallel VAD loop with 80 ms inference frames, checking the stop event every chunk so `STOP` response is instantaneous rather than waiting for the silence gate.
+
+### Dynamic Multi-Persona Engine
+
+Albedo ships with two fully synchronized AI personas. Switching persona in **SETTINGS** simultaneously hot-swaps the TTS voice model, updates the active wake word model in memory, and persists the configuration — no restart required.
+
+| Persona | Voice Model | Wake Word Model | Character |
+|---|---|---|---|
+| **Cortana** | `en_US-kristin-medium.onnx` (female) | `hey_core_tah_nuh.onnx` | Primary construct |
+| **Jarvis** | `en_US-ryan-medium.onnx` (male) | `hey_jarvis_v0.1.onnx` | Secondary construct |
+
+Both voice models are downloaded automatically by the installer from the official Piper HuggingFace repository. The bundled Piper binary runs entirely on CPU, preserving the full VRAM budget for the LLM.
+
+### Multimodal Vision Cortex
+
+The **SCAN** button activates the hardware vision bridge. A live frame is captured from the connected webcam via OpenCV, JPEG-encoded, and dispatched to the **Moondream** multimodal model running inside Ollama. The analysis is returned as a natural-language report, spoken aloud by the active persona's TTS voice, and logged to the Mission Control chat window. Environmental awareness on demand.
+
+### Hybrid RAG Knowledge Architecture
+
+Three indexed knowledge domains, each scoped to its own ChromaDB collection:
+
+| Collection | Domain | Indexed File Types |
+|---|---|---|
+| `chaotic_3d` | 3D printing — STL manifests, slicer configs, print profiles | `.gcode` `.cfg` `.ini` `.json` `.txt` `.md` `.xml` |
+| `exotic_os` | Python source, logs, reptile husbandry records | `.py` `.sh` `.log` `.txt` `.md` `.json` `.yaml` `.toml` |
+
+Every query simultaneously hits both local ChromaDB and DuckDuckGo web search. Results are ranked, merged, and injected into the LLM context window before generation. Queries shorter than 5 characters bypass RAG entirely to prevent noise.
+
+### Stealth Deployment Architecture
+
+Albedo runs under **`pythonw.exe`** — the windowless Python launcher. There is no console window for a user to accidentally close. The **LOGS** button in the Mission Control header opens an in-app **Developer Console** that captures all `stdout`/`stderr` output from every module, including the live Whisper pre-warm status, Ollama bridge responses, and ChromaDB indexing progress. Background `sys.stdout` and `sys.stderr` are redirected to the console buffer at startup so nothing is silently discarded.
+
+---
+
+## QUICK START — DEPLOYMENT
+
+### Standard Deployment *(Recommended)*
+
+**No terminal. No configuration. One installer.**
 
 <div align="center">
 
@@ -18,234 +84,119 @@ Albedo is a fully local AI assistant. No cloud. No API keys. No subscription. It
 
 </div>
 
-**Pre-requisites (installer checks these automatically):**
+**Pre-flight requirements — the installer verifies all of these automatically:**
 
-| Requirement | Why | Auto-install? |
+| Requirement | Specification | Auto-install |
 |---|---|---|
-| Windows 10 / 11 (64-bit) | Platform target | — |
-| Python 3.12 | Albedo's runtime | Guided prompt |
-| Ollama | Local LLM engine | Yes, via winget |
-| GPU with 4 GB+ VRAM | Whisper + Ollama inference | — |
+| OS | Windows 10 / 11 (64-bit) | — |
+| Python | 3.12 | Guided via winget |
+| Ollama | Latest | Yes, via winget |
+| GPU VRAM | 4 GB minimum · 6 GB recommended | — |
 
-**Steps:**
+**Deployment sequence:**
 
 1. **Download** `Albedo-Setup.exe` from the link above
-2. **Run** the installer — accept the UAC prompt (needed to write to Program Files)
-3. The **Setup Wizard** opens automatically after installation and walks you through:
-   - Confirming Python 3.12 and Ollama are ready
-   - Selecting your 3D printing and knowledge-base folders
-   - Running the pip dependency install with a live progress bar
-   - Pulling the Ollama model (`llama3.2:3b`)
-   - Creating the **Albedo Mission Control** desktop shortcut
-4. **Double-click** the Albedo shortcut — Mission Control opens
+2. **Run** the installer — accept the UAC prompt
+3. The **Setup Wizard** launches automatically and executes:
+   - System dependency verification (Python 3.12 + Ollama)
+   - Virtual environment creation and full pip dependency installation
+   - Piper voice model download (Kristin + Ryan from HuggingFace)
+   - OpenWakeWord base model pre-cache
+   - `.env` configuration write with persona, voice, and wake word paths
+   - Ollama model pull (`llama3.2:3b`) with live progress output
+   - Desktop shortcut creation
+4. **Select your initial persona** (Cortana or Jarvis) in the wizard
+5. **Double-click** the Albedo shortcut — Mission Control is online
 
-> **Piper TTS (optional):** Albedo works without voice output. To enable Kristin's voice, download the [Piper binary](https://github.com/rhasspy/piper/releases) and the `en_US-kristin-medium.onnx` voice model, then point the Setup Wizard to them.
+**Post-deployment hardware configuration:**
+
+Open Mission Control → click **HARDWARE** to assign your microphone input and speaker/HDMI output device. Changes apply on the next MIC press with no restart required.
 
 ---
 
-### Path B — Developer Deployment *(Build from Source)*
-
-For users who want to inspect, modify, or contribute to Albedo.
-
-#### B.1 — Clone the repository
+### Developer Deployment *(Build from Source)*
 
 ```powershell
 cd "$env:USERPROFILE\Desktop"
 git clone https://github.com/Dracon420/Albedo-Local-AI.git
 cd Albedo-Local-AI
-```
-
-#### B.2 — Authorize and run the installer
-
-Open **Terminal (Admin)** and run:
-
-```powershell
 Set-ExecutionPolicy Bypass -Scope Process
-.\install.ps1
-```
-
-The script auto-detects your Python version, installs Python 3.12 if needed, creates `.venv`, installs all dependencies, pulls the Ollama model, and creates the desktop shortcut. Answer the prompts using the table below.
-
-| Prompt | Recommended answer |
-|---|---|
-| Hardware tier | `1` — Standard (RTX 2060 / 16 GB RAM) |
-| Chaotic 3D path | Your 3D printing folder, or blank to skip |
-| Exotic OS path | Your code / log folder, or blank to skip |
-| Piper paths | Press Enter for defaults |
-| Wake word model | Press Enter (`hey_jarvis` placeholder) |
-| Pull Ollama model now? | `y` |
-| Run initial indexing? | `y` if you entered folder paths, else `n` |
-
-#### B.3 — Launch
-
-```powershell
 .\Launch-Albedo.ps1
 ```
 
-Or double-click the **Albedo** shortcut created on your Desktop.
+The launcher detects a missing `.venv`, redirects to the Setup Wizard automatically, and returns to launch Mission Control once installation completes.
 
 ---
 
-## Mission Control — Quick Reference
+## MISSION CONTROL — OPERATOR REFERENCE
 
-| Action | How |
+| Action | Input |
 |---|---|
-| Text query | Type in the input box, press **Enter** or **SEND** |
-| Force web search | Prefix query with `web:` |
-| Voice input | Press **MIC**, speak, then go silent or press **STOP** |
-| Toggle TTS audio | Press **MIC** while text mode is active |
-| RAG directories | Click **SETTINGS** in the Mission Control window |
-| Re-index knowledge base | SETTINGS → RE-INDEX NOW, or `python main.py --index` |
-| Terminal (text only) | `python main.py` |
-| Terminal (voice mode) | `python main.py --voice` |
-| Generate 3D inventory | `python generate_stl_manifest.py` then re-index |
+| Text query | Type in the input field → **SEND** or `Enter` |
+| Force live web search | Prefix query with `web:` |
+| Voice command | **MIC** → speak → go silent or press **STOP** |
+| Visual environment scan | **SCAN** → moondream analyses live webcam frame |
+| Switch persona / wake word | **SETTINGS** → Persona dropdown → **SAVE** |
+| Assign audio hardware | **HARDWARE** → select input/output device → **SAVE** |
+| RAG directory configuration | **SETTINGS** → update paths → **RE-INDEX NOW** |
+| Developer console | **LOGS** → live stdout/stderr buffer with CLEAR |
+| Re-index knowledge base | SETTINGS → **RE-INDEX NOW** |
 
 ---
 
-## Maintenance & Uninstallation
+## LIFECYCLE MANAGEMENT
 
-`Albedo-Maintenance.ps1` is a menu-driven utility for keeping Albedo current.
+Three Start Menu shortcuts manage the full Albedo lifecycle:
 
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process
-.\Albedo-Maintenance.ps1
-```
+| Shortcut | Action |
+|---|---|
+| **Launch Albedo** | Starts Ollama silently, then opens Mission Control via pythonw |
+| **Update Albedo** | `git pull` + pip upgrade + voice model sync (non-interactive) |
+| **Uninstall Albedo** | Removes `.venv`, shortcuts, optional ChromaDB wipe |
 
-```
-[1]  Update Albedo      -- git pull + pip upgrade
-[2]  Uninstall Albedo   -- removes .venv, shortcut, optional chroma_db wipe
-[3]  Exit
-```
-
-Python, Ollama, and Piper are **not** removed by the uninstaller. Remove those via **Settings → Apps** if needed.
+Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.
 
 ---
 
-## Hardware Tiers
+## HARDWARE TIERS
 
-| Setting | Standard (RTX 2060 · 6 GB VRAM) | High-Spec (RTX 3080+ · 8 GB+ VRAM) |
+| Parameter | Standard — RTX 2060 · 6 GB VRAM | High-Spec — RTX 3080+ · 8 GB+ VRAM |
 |---|---|---|
 | `OLLAMA_MODEL` | `llama3.2:3b` | `llama3.1:8b` |
 | `WHISPER_MODEL_SIZE` | `small` | `medium` |
 | `WHISPER_COMPUTE_TYPE` | `int8_float16` | `float16` |
 | `RAG_TOP_K` | `5` | `10` |
+| `num_ctx` | `2048` | `4096` |
 
-Edit `.env` directly and restart Albedo to switch tiers. No reinstall needed.
-
----
-
-## RAG Initialization
-
-Albedo's knowledge base indexes your own files into ChromaDB.
-
-### Configure directories
-
-Open `.env` and set:
-
-```env
-CHAOTIC_3D_PATH=D:\Chaotic 3D
-EXOTIC_OS_PATH=D:\Exotic OS
-```
-
-**What gets indexed:**
-
-| Collection | File types |
-|---|---|
-| Chaotic 3D | `.gcode` `.cfg` `.ini` `.json` `.txt` `.md` `.xml` |
-| Exotic OS | `.py` `.sh` `.log` `.txt` `.md` `.json` `.yaml` `.toml` |
-
-For reptile husbandry records, store feeding logs and enclosure notes as `.txt` or `.md` inside `EXOTIC_OS_PATH`.
-
-### 3D model inventory (STL / 3MF / OBJ)
-
-Binary geometry files cannot be indexed directly. Generate a text manifest first:
-
-```powershell
-python generate_stl_manifest.py
-python main.py --index
-```
-
-### Run the indexer
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-python main.py --index
-```
-
-> **Indexing appears stalled?** Close any running 3D slicer (PrusaSlicer, Bambu Studio, Cura) — they hold file handles that saturate disk I/O. Wait at least 60 seconds before concluding it has frozen.
+Edit `.env` and restart to switch tiers. No reinstall required.
 
 ---
 
-## Custom Wake Word (Cortana)
-
-The default wake word (`hey_jarvis`) is a placeholder. To activate Albedo with **"Cortana"**, train a personal acoustic model:
-
-1. Record 150–500 samples of yourself saying "Cortana" in varied conditions
-2. Follow the [openWakeWord training guide](https://github.com/dscripka/openWakeWord#training-new-models) → output: `cortana.onnx`
-3. Update `.env`:
-
-```env
-WAKEWORD_MODEL=C:\path\to\cortana.onnx
-```
-
----
-
-## Custom Desktop Icon
-
-Place a file named **`albedo_icon.ico`** in the project root before running the installer. The Setup Wizard and `install.ps1` both detect it automatically and apply it to the shortcut. To update the icon after installation, replace the file and re-run the installer.
-
----
-
-## Albedo Mobile HUD *(Optional)*
-
-A React Native companion app that extends Albedo to your phone over Tailscale. No ports exposed to the internet.
-
-**Prerequisites:** Expo Go ([iOS](https://apps.apple.com/app/expo-go/id982107779) · [Android](https://play.google.com/store/apps/details?id=host.exp.exponent)) · Tailscale on both devices
-
-**Configuration:**
-
-```powershell
-tailscale ip -4   # note your desktop's IP
-```
-
-Edit `albedo-mobile/src/api/client.ts` line 6:
-
-```typescript
-export const SERVER_BASE = 'http://100.64.0.1:8000';  // replace with your Tailscale IP
-```
-
-**Launch:**
-
-```powershell
-# Terminal 1
-python server.py
-
-# Terminal 2
-cd albedo-mobile
-npx expo start
-```
-
-Scan the QR code with Expo Go. Tap the **AUDIO** chip to suppress TTS and receive text-only responses.
-
----
-
-## Stack Reference
+## FULL STACK REFERENCE
 
 | Layer | Technology |
 |---|---|
-| LLM runtime | [Ollama](https://ollama.com) |
+| LLM runtime | [Ollama](https://ollama.com) · `llama3.2:3b` |
+| Vision model | [Moondream](https://github.com/vikhyat/moondream) via Ollama |
+| Vector store | [ChromaDB](https://www.trychroma.com) · CPU embeddings (`all-MiniLM-L6-v2`) |
+| Speech-to-text | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) · CUDA |
+| Wake word | [OpenWakeWord](https://github.com/dscripka/openWakeWord) · custom Cortana model |
+| Text-to-speech | [Piper](https://github.com/rhasspy/piper) · CPU · kristin-medium / ryan-medium |
+| Webcam capture | [OpenCV](https://opencv.org) · DirectShow |
+| Desktop GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) · dark mode |
 | Desktop control | [Open Interpreter](https://github.com/OpenInterpreter/open-interpreter) |
-| Vector store | [ChromaDB](https://www.trychroma.com) |
-| Speech-to-text | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) |
-| Wake word | [OpenWakeWord](https://github.com/dscripka/openWakeWord) |
-| Text-to-speech | [Piper](https://github.com/rhasspy/piper) · voice: en_US-kristin-medium |
-| Web search | [ddgs](https://github.com/deedy5/ddgs) — DuckDuckGo, no API key |
+| Web search | [ddgs](https://github.com/deedy5/ddgs) — DuckDuckGo, zero API key |
 | Web scraping | Playwright · Trafilatura · BeautifulSoup4 |
-| Desktop GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) |
-| Mobile client | React Native · Expo 51 · Tailscale |
-| Mobile bridge | FastAPI · Uvicorn |
+| Mobile bridge | FastAPI · Uvicorn · Tailscale |
 | Installer | [Inno Setup 6](https://jrsoftware.org/isinfo.php) |
 
 ---
 
+<div align="center">
+
 *Albedo is a local system. It does not call home.*
+*No telemetry. No cloud. No compromise.*
+
+**[ MISSION CONTROL ONLINE ]**
+
+</div>
