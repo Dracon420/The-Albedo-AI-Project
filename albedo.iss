@@ -82,6 +82,7 @@ Source: "server.py";            DestDir: "{app}"; Flags: ignoreversion
 Source: "setup_utility.py";     DestDir: "{app}"; Flags: ignoreversion
 Source: "generate_stl_manifest.py"; DestDir: "{app}"; Flags: ignoreversion
 Source: "diagnostics.py";          DestDir: "{app}"; Flags: ignoreversion
+Source: "swarm.py";                DestDir: "{app}"; Flags: ignoreversion
 Source: "requirements.txt";     DestDir: "{app}"; Flags: ignoreversion
 Source: ".env.example";         DestDir: "{app}"; Flags: ignoreversion
 Source: "Launch-Albedo.ps1";    DestDir: "{app}"; Flags: ignoreversion
