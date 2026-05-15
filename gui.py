@@ -128,8 +128,8 @@ _STATE_LABEL = {
     "speaking":   "SPEAKING",
 }
 
-CANVAS_SIZE = 220
-ICON_RADIUS = 56
+CANVAS_SIZE = 260
+ICON_RADIUS = 64
 CENTER      = CANVAS_SIZE // 2
 
 
@@ -455,8 +455,8 @@ class AlbedoGUI(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ALBEDO  //  MISSION CONTROL")
-        self.geometry("720x860")
-        self.minsize(600, 700)
+        self.geometry("760x960")
+        self.minsize(640, 780)
         self.configure(fg_color=C_BG)
 
         self._state        = "standby"
@@ -495,39 +495,39 @@ class AlbedoGUI(ctk.CTk):
 
     def _build_ui(self) -> None:
         # ── Header ─────────────────────────────────────────────────────────
-        hdr = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=62)
+        hdr = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=72)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
         ctk.CTkLabel(hdr, text="ALBEDO  //  MISSION CONTROL",
-                     font=("Courier New", 19, "bold"),
+                     font=("Courier New", 22, "bold"),
                      text_color=C_CYAN).pack(side="left", padx=22, pady=14)
 
         self._state_chip = ctk.CTkLabel(hdr, text="STANDBY",
-                                        font=("Courier New", 13, "bold"),
+                                        font=("Courier New", 15, "bold"),
                                         text_color=C_ORANGE)
         self._state_chip.pack(side="right", padx=22)
 
-        ctk.CTkButton(hdr, text="LOGS", width=60, height=30,
-                      font=("Courier New", 10, "bold"),
+        ctk.CTkButton(hdr, text="LOGS", width=68, height=34,
+                      font=("Courier New", 11, "bold"),
                       fg_color=C_BORDER, hover_color=C_CYAN_DIM,
                       text_color=C_CYAN,
                       command=self._open_console).pack(side="right", padx=(0, 4), pady=16)
 
         # ── Tactical HUD status bar ─────────────────────────────────────────
-        hud = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=22)
+        hud = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=26)
         hud.pack(fill="x")
         hud.pack_propagate(False)
         ctk.CTkLabel(
             hud,
             text="// CORE_SYS: ACTIVE  |  BRIDGE: OK  |  MEM: ONLINE  |  VEC_DB: READY",
-            font=("Courier New", 9, "bold"),
+            font=("Courier New", 10, "bold"),
             text_color=C_CYAN,
         ).pack(side="left", padx=16)
         ctk.CTkLabel(
             hud,
             text="[ NET_LINK: OK ]",
-            font=("Courier New", 9, "bold"),
+            font=("Courier New", 10, "bold"),
             text_color=C_ORANGE,
         ).pack(side="right", padx=16)
 
@@ -539,19 +539,19 @@ class AlbedoGUI(ctk.CTk):
 
         # ── Output log (neon border + HUD corner tags) ──────────────────────
         log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
-                                 border_width=1, border_color=C_CYAN)
+                                 border_width=2, border_color=C_CYAN)
         log_outer.pack(fill="both", expand=True, padx=16, pady=(10, 2))
 
         # HUD corner tags inside the log panel
-        log_hdr = ctk.CTkFrame(log_outer, fg_color="transparent", height=18)
+        log_hdr = ctk.CTkFrame(log_outer, fg_color="transparent", height=20)
         log_hdr.pack(fill="x", padx=6, pady=(4, 0))
         log_hdr.pack_propagate(False)
         ctk.CTkLabel(log_hdr, text="// CHAT_FEED",
-                     font=("Courier New", 9, "bold"), text_color=C_CYAN).pack(side="left")
+                     font=("Courier New", 10, "bold"), text_color=C_CYAN).pack(side="left")
         ctk.CTkLabel(log_hdr, text="[ STREAM: ACTIVE ]",
-                     font=("Courier New", 9, "bold"), text_color=C_ORANGE).pack(side="right")
+                     font=("Courier New", 10, "bold"), text_color=C_ORANGE).pack(side="right")
 
-        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 16),
+        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 18),
                                    fg_color=C_PANEL, text_color=C_TEXT,
                                    wrap="word", state="disabled", border_width=0,
                                    scrollbar_button_color=C_CYAN_DIM)
@@ -564,68 +564,187 @@ class AlbedoGUI(ctk.CTk):
         tb.tag_config("error",  foreground=C_DANGER)
 
         # ── CMD_INPUT HUD tag above input row ───────────────────────────────
-        cmd_hdr = ctk.CTkFrame(self, fg_color="transparent", height=16)
+        cmd_hdr = ctk.CTkFrame(self, fg_color="transparent", height=18)
         cmd_hdr.pack(fill="x", padx=18)
         cmd_hdr.pack_propagate(False)
         ctk.CTkLabel(cmd_hdr, text="[ CMD_INPUT ]",
-                     font=("Courier New", 9, "bold"), text_color=C_CYAN).pack(side="left")
+                     font=("Courier New", 10, "bold"), text_color=C_CYAN).pack(side="left")
         ctk.CTkLabel(cmd_hdr, text="// INPUT_READY",
-                     font=("Courier New", 9, "bold"), text_color=C_GREEN).pack(side="right")
+                     font=("Courier New", 10, "bold"), text_color=C_GREEN).pack(side="right")
 
         # ── Input row (neon border on entry) ────────────────────────────────
         row = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
-                           border_width=1, border_color=C_BORDER)
+                           border_width=2, border_color=C_CYAN)
         row.pack(fill="x", padx=16, pady=(2, 12))
 
-        self._mic_btn = ctk.CTkButton(row, text="MIC", width=62, height=44,
-                                      font=("Courier New", 11, "bold"),
-                                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+        self._mic_btn = ctk.CTkButton(row, text="MIC", width=68, height=48,
+                                      font=("Courier New", 13, "bold"),
+                                      fg_color=C_BORDER, hover_color=C_CYAN,
                                       command=self._handle_mic)
         self._mic_btn.pack(side="left", padx=(10, 4), pady=10)
 
-        self._scan_btn = ctk.CTkButton(row, text="SCAN", width=62, height=44,
-                                       font=("Courier New", 11, "bold"),
-                                       fg_color=C_BORDER, hover_color=C_PURPLE,
+        self._scan_btn = ctk.CTkButton(row, text="SCAN", width=68, height=48,
+                                       font=("Courier New", 13, "bold"),
+                                       fg_color=C_BORDER, hover_color=C_CYAN,
                                        command=self._handle_scan)
         self._scan_btn.pack(side="left", padx=(0, 4), pady=10)
 
         self._entry = ctk.CTkEntry(row,
                                    placeholder_text="Type a query or press MIC...",
-                                   font=("Consolas", 14),
+                                   font=("Consolas", 16),
                                    fg_color=C_BG, border_color=C_CYAN,
-                                   text_color=C_TEXT, height=44)
+                                   text_color=C_TEXT, height=48)
         self._entry.pack(side="left", fill="x", expand=True, padx=4, pady=10)
         self._entry.bind("<Return>", lambda _: self._handle_send())
 
-        self._send_btn = ctk.CTkButton(row, text="SEND", width=72, height=44,
-                                       font=("Courier New", 11, "bold"),
+        self._send_btn = ctk.CTkButton(row, text="SEND", width=78, height=48,
+                                       font=("Courier New", 13, "bold"),
                                        fg_color=C_CYAN_DIM, hover_color=C_CYAN,
                                        text_color="#000000",
                                        command=self._handle_send)
         self._send_btn.pack(side="left", padx=4, pady=10)
 
-        ctk.CTkButton(row, text="SETTINGS", width=88, height=44,
-                      font=("Courier New", 10, "bold"),
-                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+        ctk.CTkButton(row, text="SETTINGS", width=92, height=48,
+                      font=("Courier New", 11, "bold"),
+                      fg_color=C_BORDER, hover_color=C_CYAN,
                       command=self._open_settings).pack(side="left", padx=4, pady=10)
 
-        ctk.CTkButton(row, text="HARDWARE", width=88, height=44,
-                      font=("Courier New", 10, "bold"),
-                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+        ctk.CTkButton(row, text="HARDWARE", width=92, height=48,
+                      font=("Courier New", 11, "bold"),
+                      fg_color=C_BORDER, hover_color=C_CYAN,
                       command=self._open_hardware_settings).pack(side="left", padx=(4, 4), pady=10)
 
         self._audio_btn = ctk.CTkButton(
-            row, text="AUDIO: ON", width=100, height=44,
-            font=("Courier New", 10, "bold"),
+            row, text="AUDIO: ON", width=110, height=48,
+            font=("Courier New", 11, "bold"),
             fg_color=C_GREEN, hover_color="#22CC00",
             text_color="#000000",
             command=self._toggle_audio_mute,
         )
         self._audio_btn.pack(side="left", padx=(0, 10), pady=10)
 
+    # ── Circuit board background ───────────────────────────────────────────
+
+    def _draw_circuit_board(self) -> None:
+        """
+        Draw PCB-style circuit traces on the canvas, behind the orb icon.
+        All elements use tag='circuit' so they sit below 'ring' and 'icon'.
+        """
+        cv = self._canvas
+        W  = CANVAS_SIZE
+
+        # Palette — all blended toward C_BG (#0A0E17)
+        T_GRID   = "#0C1A2A"   # barely-visible dot grid
+        T_DIM    = "#0A2848"   # dim bus traces
+        T_MED    = "#0D4080"   # medium routed traces
+        T_BRIGHT = "#0B60A8"   # bright traces
+        T_HOT    = "#0088C0"   # hot highlight traces
+        T_CYAN   = "#00A0C0"   # cyan spokes toward the orb
+        PAD_C    = "#005080"   # via / pad fill
+        CHIP_F   = "#080D18"   # IC body fill
+        CHIP_O   = "#0A2A50"   # IC body outline
+
+        def ln(pts, col=T_MED, w=1):
+            cv.create_line(*pts, fill=col, width=w,
+                           tags="circuit", capstyle="round", joinstyle="round")
+
+        def pad(x, y, r=2, col=PAD_C):
+            cv.create_oval(x-r, y-r, x+r, y+r,
+                           fill=col, outline="", tags="circuit")
+
+        def chip(x1, y1, x2, y2):
+            cv.create_rectangle(x1, y1, x2, y2,
+                                fill=CHIP_F, outline=CHIP_O,
+                                width=1, tags="circuit")
+
+        CX = CY = W // 2   # canvas centre
+        KEEP = ICON_RADIUS + 10   # keep-out radius around the icon
+
+        # ── IC bodies ─────────────────────────────────────────────────────
+        chip(4,     4,     52,    36)       # top-left
+        chip(W-52,  4,     W-4,   36)       # top-right
+        chip(4,     W-36,  52,    W-4)      # bottom-left
+        chip(W-52,  W-36,  W-4,   W-4)     # bottom-right
+        chip(4,     CY-26, 38,    CY+26)    # left-mid
+        chip(W-38,  CY-26, W-4,   CY+26)   # right-mid
+        chip(CX-32, 4,     CX+32, 28)       # top-mid
+        chip(CX-32, W-28,  CX+32, W-4)     # bottom-mid
+
+        # ── Background dot grid (skips keep-out zone) ─────────────────────
+        for gx in range(20, W, 20):
+            for gy in range(20, W, 20):
+                if (gx - CX)**2 + (gy - CY)**2 > KEEP**2:
+                    cv.create_oval(gx-1, gy-1, gx+1, gy+1,
+                                   fill=T_GRID, outline="", tags="circuit")
+
+        # ── Main perimeter buses ───────────────────────────────────────────
+        ln([0, 38,   W, 38],   T_DIM, 2)
+        ln([0, W-38, W, W-38], T_DIM, 2)
+        ln([38,   0, 38,   W], T_DIM, 2)
+        ln([W-38, 0, W-38, W], T_DIM, 2)
+
+        # ── Secondary inner buses ──────────────────────────────────────────
+        ln([0,    78,  76,   78],  T_MED)
+        ln([W,    78,  W-76, 78],  T_MED)
+        ln([0,    W-78, 76,  W-78], T_MED)
+        ln([W,    W-78, W-76, W-78], T_MED)
+        ln([78,   0,    78,   76],  T_MED)
+        ln([W-78, 0,    W-78, 76],  T_MED)
+        ln([78,   W,    78,   W-76], T_MED)
+        ln([W-78, W,    W-78, W-76], T_MED)
+
+        # ── L-shaped corner routes ─────────────────────────────────────────
+        ln([38,   38,   78, 38, 78, 78],       T_BRIGHT)
+        ln([W-38, 38,   W-78, 38, W-78, 78],   T_BRIGHT)
+        ln([38,   W-38, 78, W-38, 78, W-78],   T_BRIGHT)
+        ln([W-38, W-38, W-78, W-38, W-78, W-78], T_BRIGHT)
+
+        # ── Inner corner angles ────────────────────────────────────────────
+        ln([78, 78, 98, 78, 98, 98],         T_HOT)
+        ln([W-78, 78, W-98, 78, W-98, 98],   T_HOT)
+        ln([78, W-78, 98, W-78, 98, W-98],   T_HOT)
+        ln([W-78, W-78, W-98, W-78, W-98, W-98], T_HOT)
+
+        # ── Cyan spokes toward the orb ─────────────────────────────────────
+        ln([78,   CY,   CX-KEEP, CY],   T_CYAN, 2)
+        ln([W-78, CY,   CX+KEEP, CY],   T_CYAN, 2)
+        ln([CX,   78,   CX, CY-KEEP],   T_CYAN, 2)
+        ln([CX,   W-78, CX, CY+KEEP],   T_CYAN, 2)
+
+        # ── IC pin stubs (all four corner ICs) ────────────────────────────
+        for px in range(12, 48, 8):
+            ln([px, 36, px, 50], T_BRIGHT);  pad(px, 50)
+            ln([px, W-36, px, W-50], T_BRIGHT); pad(px, W-50)
+        for px in range(W-46, W-10, 8):
+            ln([px, 36, px, 50], T_BRIGHT);  pad(px, 50)
+            ln([px, W-36, px, W-50], T_BRIGHT); pad(px, W-50)
+
+        # Left/right mid IC pin stubs
+        for py in range(CY-22, CY+24, 8):
+            ln([38, py, 52, py], T_BRIGHT);    pad(52, py)
+            ln([W-38, py, W-52, py], T_BRIGHT); pad(W-52, py)
+
+        # Top/bottom mid IC pin stubs
+        for px in range(CX-28, CX+30, 8):
+            ln([px, 28, px, 42], T_BRIGHT);    pad(px, 42)
+            ln([px, W-28, px, W-42], T_BRIGHT); pad(px, W-42)
+
+        # ── Pads at main bus intersections ─────────────────────────────────
+        for x in [38, 78, CX, W-78, W-38]:
+            pad(x, 38, 3);   pad(x, W-38, 3)
+        for y in [38, 78, CY, W-78, W-38]:
+            pad(38, y, 3);   pad(W-38, y, 3)
+
+        # Spoke endpoint pads (vivid cyan)
+        pad(CX-KEEP, CY,   3, T_CYAN)
+        pad(CX+KEEP, CY,   3, T_CYAN)
+        pad(CX,  CY-KEEP,  3, T_CYAN)
+        pad(CX,  CY+KEEP,  3, T_CYAN)
+
     # ── Icon loading ───────────────────────────────────────────────────────
 
     def _load_icon(self) -> None:
+        self._draw_circuit_board()   # PCB traces behind the icon
         ico = ROOT / "albedo_icon.ico"
         if ico.exists():
             try:
@@ -887,10 +1006,10 @@ class AlbedoGUI(ctk.CTk):
         The first MIC press is instant because the model is already resident."""
         try:
             self._ui(lambda: self._log_append(
-                "system", "Loading Whisper STT model in background..."))
+                "system", "Loading Whisper STT model from local cache..."))
             from albedo.audio.stt import prewarm
             prewarm()
-            self._ui(lambda: self._log_append("system", "Whisper ready."))
+            self._ui(lambda: self._log_append("system", "Whisper tiny model online."))
         except Exception as exc:
             _prewarm_msg = f"Whisper pre-warm failed (will retry on first MIC press): {exc}"
             self._ui(lambda: self._log_append("system", _prewarm_msg))

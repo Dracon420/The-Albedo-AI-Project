@@ -583,6 +583,7 @@ class InstallPage(Page):
             self._step_playwright()
             self._step_wakeword_models()
             self._step_download_voices()
+            self._step_whisper_model()
             self._step_env(dirs)
             self._step_shortcut()
             self._step_ollama()
@@ -675,6 +676,35 @@ class InstallPage(Page):
                 self._push("  Wake word pre-download skipped (non-fatal).", "info")
         except Exception:
             self._push("  OpenWakeWord models skipped (non-fatal).", "info")
+
+    def _step_whisper_model(self) -> None:
+        self._push("Pre-downloading Whisper 'tiny' STT model...", "info", 0.85)
+        self._push("  Model: tiny  |  device: cpu  |  compute_type: int8", "info")
+        self._push("  Initializing model — downloads to HuggingFace cache on first run.", "info")
+        script = (
+            "from faster_whisper import WhisperModel; "
+            "print('[whisper] Verifying model cache...', flush=True); "
+            "WhisperModel('tiny', device='cpu', compute_type='int8'); "
+            "print('[whisper] Model verified and cached.', flush=True)"
+        )
+        try:
+            proc = subprocess.Popen(
+                [str(VENV_PY), "-c", script],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+            )
+            for line in proc.stdout:
+                stripped = line.strip()
+                if stripped:
+                    self._push(f"  {stripped}", "info")
+            proc.wait(timeout=300)
+            if proc.returncode == 0:
+                self._push("  Whisper tiny model ready.", "ok", 0.86)
+            else:
+                self._push(
+                    "  Whisper cache step returned non-zero (non-fatal).", "info", 0.86)
+        except Exception as exc:
+            self._push(f"  Whisper pre-download skipped (non-fatal): {exc}", "info", 0.86)
 
     def _step_env(self, dirs: dict[str, str]) -> None:
         self._push("Writing .env configuration...", "info", 0.84)

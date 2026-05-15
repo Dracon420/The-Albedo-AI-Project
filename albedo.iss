@@ -102,13 +102,11 @@ Source: "wakewords\*";          DestDir: "{app}\wakewords";         Flags: ignor
 Source: "albedo_icon.ico";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Icons]
-; Start Menu group -- 3 shortcuts only
-Name: "{group}\Launch Albedo";          Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Comment: "Launch Albedo Spartan-Class AI"
-Name: "{group}\Update Albedo";          Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Normal -File ""{app}\Albedo-Maintenance.ps1"" -AutoUpdate"; WorkingDir: "{app}"; Comment: "Pull latest code and upgrade packages"
-Name: "{group}\Uninstall Albedo";       Filename: "{uninstallexe}"; Comment: "Remove Albedo from this computer"
+; Exactly ONE Start Menu entry — launch only.
+Name: "{group}\{#AppFullName}";         Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Comment: "Launch Albedo Spartan-Class AI"
 
-; Desktop shortcut (only when the user selected the task above)
-Name: "{autodesktop}\Albedo";           Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Tasks: desktopicon; Comment: "Launch Albedo Spartan-Class AI"
+; Exactly ONE Desktop shortcut (task-gated — only when user selects the option).
+Name: "{autodesktop}\{#AppFullName}";   Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Launch-Albedo.ps1"""; WorkingDir: "{app}"; IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; Tasks: desktopicon; Comment: "Launch Albedo Spartan-Class AI"
 
 [Run]
 ; Run the setup wizard after files are copied.
