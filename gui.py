@@ -41,6 +41,10 @@ except ImportError as _import_err:
     )
     raise SystemExit(1)
 
+# Force 1:1 pixel mapping — prevents Windows display scaling from bloating the window.
+ctk.set_window_scaling(1.0)
+ctk.set_widget_scaling(1.0)
+
 ROOT          = Path(__file__).parent
 SETTINGS_PATH = ROOT / "settings.json"
 
@@ -455,13 +459,14 @@ class AlbedoGUI(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ALBEDO  //  MISSION CONTROL")
-        self.geometry("800x1040")
-        self.minsize(680, 860)
+        self.geometry("1000x800")
+        self.minsize(800, 640)
         self.configure(fg_color=C_BG)
 
         self._state        = "standby"
         self._ui_queue: queue.Queue = queue.Queue()
         self._voice_stop   = threading.Event()
+        self._abort_flag   = threading.Event()
         self._audio_stream = None   # AudioStream, lazy-init
         self._settings_win = None
         self._hardware_win = None
@@ -842,7 +847,20 @@ class AlbedoGUI(ctk.CTk):
         busy = state in ("processing", "speaking")
         locked = busy or state == "listening"
 
-        self._send_btn.configure(state="disabled" if busy else "normal")
+        # SEND ↔ ABORT transformation
+        if state == "standby":
+            self._send_btn.configure(
+                text="SEND", fg_color=C_CYAN_DIM, hover_color=C_CYAN,
+                text_color="#000000", command=self._handle_send, state="normal",
+            )
+        elif busy:
+            self._send_btn.configure(
+                text="ABORT", fg_color="#8B0000", hover_color="#AA0000",
+                text_color="#ffffff", command=self._handle_abort, state="normal",
+            )
+        elif state == "listening":
+            self._send_btn.configure(state="disabled")
+
         if self._scan_btn:
             self._scan_btn.configure(state="disabled" if locked else "normal")
 
@@ -906,9 +924,16 @@ class AlbedoGUI(ctk.CTk):
         use_web = text.lower().startswith("web:")
         query   = text[4:].strip() if use_web else text
         self._log_append("user", query)
+        self._abort_flag.clear()
         self._set_state("processing")
         threading.Thread(target=self._run_pipeline,
                          args=(query, use_web), daemon=True).start()
+
+    def _handle_abort(self) -> None:
+        """Set the abort flag; the pipeline thread drops its payload cleanly."""
+        self._abort_flag.set()
+        self._log_append("system", "[SYS] Process aborted by user.")
+        self._set_state("standby")
 
     # ── Voice input ────────────────────────────────────────────────────────
 
@@ -1085,7 +1110,13 @@ class AlbedoGUI(ctk.CTk):
 
     def _run_pipeline(self, query: str, use_web: bool) -> None:
         try:
+            if self._abort_flag.is_set():
+                return
+
             response = self._route_query(query, use_web)
+
+            if self._abort_flag.is_set():
+                return
 
             # Guarantee response is always a non-empty string
             if not isinstance(response, str) or not response.strip():
@@ -1097,13 +1128,12 @@ class AlbedoGUI(ctk.CTk):
             if len(self._chat_history) > 20:
                 self._chat_history = self._chat_history[-20:]
 
-            # Capture for closure
             resp = response
             self._ui(lambda: self._log_append("albedo", resp))
             self._ui(lambda: self._set_state("speaking"))
 
-            # TTS runs on this background thread -- UI stays responsive
-            if not self._audio_muted:
+            # TTS — skip entirely if aborted during generation
+            if not self._audio_muted and not self._abort_flag.is_set():
                 try:
                     from albedo.audio.tts import speak_streamed
                     out_dev = self._settings.get("audio_output_device")

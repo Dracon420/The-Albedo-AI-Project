@@ -11,6 +11,7 @@ the main GUI boots normally.
 from __future__ import annotations
 
 import os
+import tkinter as tk
 import webbrowser
 from pathlib import Path
 from tkinter import filedialog
@@ -62,13 +63,15 @@ class _OnboardingWindow(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ALBEDO // FIRST-TIME CONFIGURATION")
-        self.geometry("680x620")
-        self.minsize(620, 580)
+        self.geometry("720x680")
+        self.minsize(640, 620)
         self.configure(fg_color=_BG)
         self.resizable(True, True)
 
-        self._vault_path: str = ""
-        self._saved       = False
+        self._vault_path:  str  = ""
+        self._saved              = False
+        self._entries:     dict  = {}   # key → CTkEntry
+        self._show_states: dict  = {}   # key → bool (True = visible)
 
         self._build_ui()
 
@@ -95,8 +98,8 @@ class _OnboardingWindow(ctk.CTk):
         # ── Preflight instructions ───────────────────────────────────────
         ctk.CTkTextbox(
             self,
-            height=72,
-            font=_FONT_LBL,
+            height=90,
+            font=("Courier New", 14),
             fg_color=_PANEL,
             text_color=_FG,
             border_color=_CYAN_DIM,
@@ -179,14 +182,14 @@ class _OnboardingWindow(ctk.CTk):
         ).pack(fill="x", padx=24, pady=(14, 20))
 
     def _api_row(self, label: str, var: ctk.StringVar, key: str) -> None:
-        """One labelled entry row with a trailing [?] help button."""
+        """Labelled entry row with right-click paste, SHOW toggle, and [?] link."""
         ctk.CTkLabel(self, text=label, font=_FONT_HUD, text_color=_CYAN,
                      anchor="w").pack(fill="x", padx=24, pady=(10, 2))
 
         row = ctk.CTkFrame(self, fg_color="transparent")
         row.pack(fill="x", padx=24, pady=(0, 2))
 
-        ctk.CTkEntry(
+        entry = ctk.CTkEntry(
             row,
             textvariable=var,
             placeholder_text="paste key here...",
@@ -196,21 +199,65 @@ class _OnboardingWindow(ctk.CTk):
             text_color=_FG,
             show="•",
             height=32,
-        ).pack(side="left", expand=True, fill="x")
+        )
+        entry.pack(side="left", expand=True, fill="x")
 
+        self._entries[key]     = entry
+        self._show_states[key] = False
+        self._bind_paste(entry)
+
+        # Pack right-to-left: [?] outermost, then SHOW to its left.
         url = _HELP_URLS[key]
         ctk.CTkButton(
-            row,
-            text=" ? ",
-            width=34,
-            font=_FONT_BTN,
-            fg_color=_PANEL,
-            hover_color="#1a2332",
-            border_color=_CYAN_DIM,
-            border_width=1,
-            text_color=_CYAN_DIM,
+            row, text=" ? ", width=34, font=_FONT_BTN,
+            fg_color=_PANEL, hover_color="#1a2332",
+            border_color=_CYAN_DIM, border_width=1, text_color=_CYAN_DIM,
             command=lambda u=url: webbrowser.open(u),
-        ).pack(side="right", padx=(6, 0))
+        ).pack(side="right", padx=(4, 0))
+
+        show_btn = ctk.CTkButton(
+            row, text="SHOW", width=56, font=_FONT_BTN,
+            fg_color=_PANEL, hover_color="#1a2332",
+            border_color=_CYAN_DIM, border_width=1, text_color=_CYAN_DIM,
+        )
+        show_btn.configure(command=lambda k=key, b=show_btn: self._toggle_show(k, b))
+        show_btn.pack(side="right", padx=(4, 0))
+
+    def _toggle_show(self, key: str, btn: ctk.CTkButton) -> None:
+        """Toggle the password-masking on the entry for `key`."""
+        entry = self._entries[key]
+        visible = self._show_states[key]
+        if visible:
+            entry._entry.configure(show="•")
+            btn.configure(text="SHOW")
+        else:
+            entry._entry.configure(show="")
+            btn.configure(text="HIDE")
+        self._show_states[key] = not visible
+
+    def _bind_paste(self, entry: ctk.CTkEntry) -> None:
+        """Attach a right-click context menu with a Paste command to entry."""
+        menu = tk.Menu(self, tearoff=0,
+                       bg=_PANEL, fg=_FG, activebackground=_CYAN_DIM,
+                       activeforeground="#000000", relief="flat",
+                       font=("Courier New", 10))
+        menu.add_command(
+            label="Paste",
+            command=lambda: self._paste_into(entry),
+        )
+        # Bind to both the CTkEntry wrapper and its inner tk.Entry
+        for widget in (entry, entry._entry):
+            widget.bind("<Button-3>",
+                        lambda e, m=menu: m.tk_popup(e.x_root, e.y_root),
+                        add=True)
+
+    def _paste_into(self, entry: ctk.CTkEntry) -> None:
+        try:
+            text = self.clipboard_get()
+        except tk.TclError:
+            return
+        entry.delete(0, "end")
+        entry.insert(0, text)
 
     # ── Callbacks ──────────────────────────────────────────────────────────
 
