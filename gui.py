@@ -1306,7 +1306,34 @@ class AlbedoGUI(ctk.CTk):
 
 # ── Entry point ────────────────────────────────────────────────────────────
 
+def _check_first_boot() -> None:
+    """
+    Inspect .env for GEMINI_API_KEY and OBSIDIAN_VAULT_PATH.
+    If either is absent or blank, run the onboarding wizard and block
+    until it completes, then reload the environment so the rest of the
+    process sees the freshly-written values.
+    """
+    from pathlib import Path as _Path
+    env_file = _Path(__file__).parent / ".env"
+
+    def _env_complete() -> bool:
+        if not env_file.exists():
+            return False
+        from dotenv import dotenv_values
+        cfg = dotenv_values(env_file)
+        return bool(cfg.get("GEMINI_API_KEY", "").strip()) and \
+               bool(cfg.get("OBSIDIAN_VAULT_PATH", "").strip())
+
+    if not _env_complete():
+        from onboarding import run_onboarding
+        run_onboarding()
+        # Reload so swarm.py, memory.py etc. pick up the new values.
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=env_file, override=True)
+
+
 def main() -> None:
+    _check_first_boot()
     app = AlbedoGUI()
     app._log_append("system", "Albedo Mission Control online.")
     app._log_append("system",

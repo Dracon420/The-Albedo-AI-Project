@@ -86,6 +86,7 @@ Source: "swarm.py";                DestDir: "{app}"; Flags: ignoreversion
 Source: "memory.py";               DestDir: "{app}"; Flags: ignoreversion
 Source: "telemetry.py";            DestDir: "{app}"; Flags: ignoreversion
 Source: "operative_dream.py";      DestDir: "{app}"; Flags: ignoreversion
+Source: "onboarding.py";           DestDir: "{app}"; Flags: ignoreversion
 Source: "logs\*";                  DestDir: "{app}\logs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "requirements.txt";     DestDir: "{app}"; Flags: ignoreversion
 Source: ".env.example";         DestDir: "{app}"; Flags: ignoreversion

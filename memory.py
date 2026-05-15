@@ -31,7 +31,11 @@ from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunct
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_VAULT = r"C:\Users\demon\Desktop\Albedo Project Brain"
+# Resolved at call time so a freshly-written .env is picked up without restart.
+def _default_vault() -> str:
+    from dotenv import load_dotenv
+    load_dotenv(override=False)
+    return os.getenv("OBSIDIAN_VAULT_PATH", "")
 DB_PATH       = str(Path(__file__).parent / "albedo_memory_db")
 COLLECTION    = "obsidian_vault"
 CHUNK_SIZE    = 1000
@@ -78,7 +82,7 @@ def _chunk_id(path: Path, idx: int) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def index_obsidian_vault(vault_path: str = DEFAULT_VAULT) -> str:
+def index_obsidian_vault(vault_path: str = "") -> str:
     """
     Recursively read all .md and .txt files under vault_path, split them
     into overlapping chunks, and upsert them into the persistent ChromaDB
@@ -87,6 +91,10 @@ def index_obsidian_vault(vault_path: str = DEFAULT_VAULT) -> str:
     Returns a human-readable status string suitable for display in the
     Albedo chat log.
     """
+    if not vault_path:
+        vault_path = _default_vault()
+    if not vault_path:
+        return "[memory] OBSIDIAN_VAULT_PATH is not set. Run the onboarding wizard or set it in .env."
     root = Path(vault_path)
     if not root.exists():
         return f"[memory] Vault path not found: {vault_path}"

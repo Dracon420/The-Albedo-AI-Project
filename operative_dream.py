@@ -15,17 +15,29 @@ initiate_rem_cycle()  -- run one full dream consolidation pass
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-TRACE_LOG   = Path(__file__).parent / "logs" / "daily_traces.json"
-VAULT_DIR   = Path(r"C:\Users\demon\Desktop\Albedo Project Brain\Core Directives")
-INSIGHT_FILE = VAULT_DIR / "Albedo_Daily_Insights.md"
+TRACE_LOG = Path(__file__).parent / "logs" / "daily_traces.json"
+
+
+def _vault_insight_file() -> Path:
+    """Resolve vault insight path at call time so .env changes take effect."""
+    load_dotenv(override=False)
+    vault_root = os.getenv("OBSIDIAN_VAULT_PATH", "")
+    if not vault_root:
+        raise RuntimeError(
+            "OBSIDIAN_VAULT_PATH is not set. Run the onboarding wizard or set it in .env."
+        )
+    return Path(vault_root) / "Core Directives" / "Albedo_Daily_Insights.md"
 
 _DREAM_PROMPT = (
     "You are Albedo's subconscious. Review these daily interaction traces. "
@@ -94,14 +106,15 @@ def _generate_summary(traces: list[dict]) -> str:
 
 
 def _append_to_vault(summary: str) -> None:
-    VAULT_DIR.mkdir(parents=True, exist_ok=True)
+    insight_file = _vault_insight_file()
+    insight_file.parent.mkdir(parents=True, exist_ok=True)
     date_stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     block = (
         f"\n\n---\n\n"
         f"## Dream Cycle — {date_stamp}\n\n"
         f"{summary}\n"
     )
-    with INSIGHT_FILE.open("a", encoding="utf-8") as fh:
+    with insight_file.open("a", encoding="utf-8") as fh:
         fh.write(block)
 
 
@@ -142,7 +155,7 @@ def initiate_rem_cycle() -> str:
     date_stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     return (
         f"[dream] REM cycle complete for {date_stamp}. "
-        f"{len(traces)} traces consolidated → {INSIGHT_FILE}"
+        f"{len(traces)} traces consolidated → {_vault_insight_file()}"
     )
 
 
