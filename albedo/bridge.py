@@ -8,6 +8,11 @@ execution kernel.
 When open-interpreter is NOT installed (e.g. server / Docker deployments that
 don't need desktop control), bridge_chat() falls back to a direct Ollama HTTP
 call via httpx. The RAG-augmented prompt is sent as a plain chat message.
+
+direct_reply() is a lightweight bypass used by the conversational router in
+pipeline.py for simple exchanges (greetings, acknowledgements).  It always
+uses the direct Ollama path — never Open Interpreter — and caps tokens so
+there is no chain-of-thought loop on "hello".
 """
 
 from __future__ import annotations
@@ -35,25 +40,33 @@ _SYSTEM_PROMPT = (
     "executing live web queries, and providing general counsel, as you are at managing the "
     "specialized technical infrastructures of Chaotic 3D Systems and Exotic OS. "
     "Your personality is sharp, efficient, slightly witty, and deeply conversational -- "
-    "mirroring the dynamic of Cortana. Never act like a generic AI, never use disclaimers, "
-    "and never use robotic bullet points for simple dialogue. "
+    "mirroring the dynamic of Cortana. Never act like a generic AI, never use disclaimers. "
+    "CRITICAL FORMAT RULE: Never use markdown formatting of any kind. "
+    "No asterisks, no underscores, no backticks, no hash symbols, no bullet points, "
+    "no numbered lists, no bold, no italics. Write in plain conversational prose only. "
     "When given a directive, you execute it."
 )
 
-# ── Ollama HTTP fallback ───────────────────────────────────────────────────────
 
-def _ollama_chat(message: str) -> str:
+# ── Direct Ollama HTTP call ────────────────────────────────────────────────────
+
+def _ollama_chat(message: str, max_tokens: int = 2048,
+                 temperature: float = 0.8) -> str:
     """Direct Ollama /api/chat call — no open-interpreter dependency."""
-    import httpx, json
+    import httpx
 
     payload = {
         "model": OLLAMA_MODEL,
         "messages": [
             {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": message},
+            {"role": "user",   "content": message},
         ],
         "stream": False,
-        "options": {"num_ctx": 2048},
+        "options": {
+            "num_ctx":     max_tokens,
+            "num_predict": max_tokens,
+            "temperature": temperature,
+        },
     }
     try:
         response = httpx.post(
@@ -64,9 +77,20 @@ def _ollama_chat(message: str) -> str:
         response.raise_for_status()
         return response.json()["message"]["content"].strip()
     except httpx.ConnectError:
-        return "[Albedo] Ollama is not running. Start it with: ollama serve"
+        return "Ollama is not running. Start it with: ollama serve"
     except Exception as exc:
-        return f"[Albedo] Error contacting Ollama: {exc}"
+        return f"Error contacting Ollama: {exc}"
+
+
+def direct_reply(message: str) -> str:
+    """
+    Lightweight conversational response path.
+
+    Always calls Ollama directly — never routes through Open Interpreter.
+    Caps context to 512 tokens and prediction to 150 tokens so a "hello"
+    cannot trigger a planning or code-execution loop.
+    """
+    return _ollama_chat(message, max_tokens=512, temperature=0.7)
 
 
 # ── Open Interpreter (Bridge Control) ────────────────────────────────────────
