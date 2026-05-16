@@ -37,20 +37,26 @@ import warnings
 
 from dotenv import load_dotenv
 
-# Suppress deprecation noise from SDK internals at import time.
+# Suppress deprecation noise from SDK internals.
 warnings.filterwarnings("ignore", category=FutureWarning,      module="google")
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="google")
-# duckduckgo_search emits a RuntimeWarning at call time (not import time) about
-# its package rename to 'ddgs'. Suppress it globally — it fires on every query.
-warnings.filterwarnings("ignore", category=RuntimeWarning, module="duckduckgo_search")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="GPUtil")
+# duckduckgo_search uses stacklevel=2 in its rename warning, so Python attributes
+# it to the *caller* (swarm.py), not to duckduckgo_search. Module filter never
+# fires; filter by message text instead.
+warnings.filterwarnings("ignore", message=".*duckduckgo.search.*renamed.*ddgs.*",
+                        category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*renamed.*`ddgs`.*",
+                        category=RuntimeWarning)
 
 # Load .env now so all env vars are available before any function is called.
 load_dotenv()
 
 _location     = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
-# gemini-1.5-flash is the correct model string for the google-genai SDK v1beta endpoint.
-# The -latest alias caused 404s — v1beta requires the bare version string.
-_gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip() or "gemini-1.5-flash"
+# The google-genai SDK targets the v1beta endpoint. Gemini 1.5 models only exist
+# on v1 — they 404 on v1beta. gemini-2.0-flash-lite is the correct free-tier
+# model for v1beta: 1500 req/day, no grounding quota, resolves correctly.
+_gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite").strip() or "gemini-2.0-flash-lite"
 
 # ---------------------------------------------------------------------------
 # Semantic location interceptor
@@ -105,7 +111,9 @@ def native_web_search(query: str, max_results: int = 3) -> str:
     """
     try:
         from duckduckgo_search import DDGS
-        results = DDGS().text(query, max_results=max_results)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            results = DDGS().text(query, max_results=max_results)
         if not results:
             return "Local search node offline."
         parts = []
