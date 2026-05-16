@@ -190,10 +190,12 @@ _SYSTEM_INSTRUCTION = (
     "2. 'together': For complex debugging or logic puzzles.\n"
     "3. 'local': For local system tasks (e.g., 'scan hardware', 'optimize PC').\n"
     "4. 'direct': If the user asks a general question, for the weather, or casual "
-    "conversation, answer it yourself directly.\n"
+    "conversation, answer it yourself directly. "
+    "Always use the Google Search tool for current events, weather, or any time-sensitive query.\n"
     "5. 'memory': If the user asks about past projects, specific Albedo configurations, "
     "notes, or anything that implies retrieving personal stored knowledge. "
     "The payload must be the specific search query to look up.\n\n"
+    "Keep all responses strictly under 3 sentences unless explicitly asked for detail.\n"
     "You MUST respond ONLY in valid JSON format: "
     '{"route": "agent_name", "payload": "The prompt to send to the agent, or your direct answer"}'
 )

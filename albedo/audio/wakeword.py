@@ -67,10 +67,9 @@ def _word_set() -> set[str]:
 def _get_recognizer() -> "KaldiRecognizer":
     global _recognizer
     if _recognizer is None:
-        words   = sorted(_word_set())
-        grammar = json.dumps(words + ["[unk]"])
-        model   = _get_model()
-        _recognizer = KaldiRecognizer(model, AUDIO_SAMPLE_RATE, grammar)
+        words = sorted(_word_set())
+        model = _get_model()
+        _recognizer = KaldiRecognizer(model, AUDIO_SAMPLE_RATE)
         print(f"[wakeword] Vosk recognizer armed for: {words}")
     return _recognizer
 

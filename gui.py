@@ -521,6 +521,7 @@ class AlbedoGUI(ctk.CTk):
         self._ui_queue: queue.Queue = queue.Queue()
         self._voice_stop   = threading.Event()
         self._abort_flag   = threading.Event()
+        self._canvas       = None   # no orb canvas in dashboard layout
         self._audio_stream = None   # AudioStream, lazy-init
         self._settings_win = None
         self._hardware_win = None
@@ -547,7 +548,6 @@ class AlbedoGUI(ctk.CTk):
 
         self._build_ui()
         self._start_queue_poll()
-        self._animate()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         # Pre-warm Vosk in background so first MIC press is instant
@@ -615,26 +615,22 @@ class AlbedoGUI(ctk.CTk):
 
     def _build_ui(self) -> None:
         # ══════════════════════════════════════════════════════════════════
-        # CYBERDECK HEADER — Three-panel grid
+        # UNIFIED DASHBOARD — 3-column grid above chat feed
         # ══════════════════════════════════════════════════════════════════
-        hdr = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0, height=110)
-        hdr.pack(fill="x")
-        hdr.pack_propagate(False)
+        dash = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0)
+        dash.pack(fill="x", expand=False)
 
-        # Five columns: left panel | divider | center | divider | right panel
-        hdr.grid_columnconfigure(0, weight=3)
-        hdr.grid_columnconfigure(1, weight=0, minsize=1)
-        hdr.grid_columnconfigure(2, weight=4)
-        hdr.grid_columnconfigure(3, weight=0, minsize=1)
-        hdr.grid_columnconfigure(4, weight=3)
-        hdr.grid_rowconfigure(0, weight=1)
+        dash.grid_columnconfigure(0, weight=1)
+        dash.grid_columnconfigure(1, weight=0)
+        dash.grid_columnconfigure(2, weight=1)
+        dash.grid_rowconfigure(0, weight=1)
 
-        # ── Left panel — radial hardware telemetry dials ──────────────────
-        left = ctk.CTkFrame(hdr, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(12, 0), pady=6)
+        # ── Col 0 — Left flank: radial hardware telemetry dials ──────────
+        left = ctk.CTkFrame(dash, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="e", padx=(16, 12), pady=10)
 
         dials_row = ctk.CTkFrame(left, fg_color="transparent")
-        dials_row.pack(anchor="center")
+        dials_row.pack(anchor="e")
 
         cpu_col = ctk.CTkFrame(dials_row, fg_color="transparent")
         cpu_col.pack(side="left", padx=(0, 6))
@@ -656,40 +652,35 @@ class AlbedoGUI(ctk.CTk):
 
         ctk.CTkLabel(left, text="LOCAL NODE: STABLE",
                      font=("Consolas", 9), text_color=C_GREEN,
-                     anchor="center").pack(pady=(3, 0))
+                     anchor="e").pack(fill="x", pady=(3, 0))
 
-        # ── Divider (left) ────────────────────────────────────────────────
-        ctk.CTkFrame(hdr, fg_color=C_BORDER, width=1).grid(
-            row=0, column=1, sticky="ns", pady=6)
+        # ── Col 1 — Center: logo + title + state chip + LOGS ─────────────
+        center = ctk.CTkFrame(dash, fg_color="transparent")
+        center.grid(row=0, column=1, sticky="nsew", pady=10)
 
-        # ── Center panel — identity + state chip + LOGS ───────────────────
-        center = ctk.CTkFrame(hdr, fg_color="transparent")
-        center.grid(row=0, column=2, sticky="nsew", padx=8, pady=6)
-
-        # Logo image (44×44) or fallback glyph
         logo_path = ROOT / "albedo_logo.png"
         _logo_shown = False
         if logo_path.exists():
             try:
                 _pil = Image.open(logo_path).convert("RGBA").resize(
-                    (44, 44), Image.LANCZOS)
-                self._hdr_logo = ctk.CTkImage(_pil, size=(44, 44))
+                    (100, 100), Image.LANCZOS)
+                self._hdr_logo = ctk.CTkImage(_pil, size=(100, 100))
                 ctk.CTkLabel(center, image=self._hdr_logo,
-                             text="").pack(pady=(4, 0))
+                             text="").pack(pady=(4, 2))
                 _logo_shown = True
             except Exception:
                 pass
         if not _logo_shown:
             ctk.CTkLabel(center, text="▸ A",
-                         font=("Courier New", 26, "bold"),
-                         text_color=C_CYAN).pack(pady=(4, 0))
+                         font=("Courier New", 48, "bold"),
+                         text_color=C_CYAN).pack(pady=(4, 2))
 
         ctk.CTkLabel(center, text="ALBEDO  //  MISSION CONTROL",
                      font=("Courier New", 12, "bold"),
                      text_color=C_CYAN).pack()
 
         chip_row = ctk.CTkFrame(center, fg_color="transparent")
-        chip_row.pack(pady=(2, 0))
+        chip_row.pack(pady=(2, 4))
         self._state_chip = ctk.CTkLabel(
             chip_row, text="STANDBY",
             font=("Courier New", 12, "bold"), text_color=C_ORANGE)
@@ -700,15 +691,11 @@ class AlbedoGUI(ctk.CTk):
             fg_color=C_BORDER, hover_color=C_CYAN_DIM, text_color=C_CYAN,
             command=self._open_console).pack(side="left")
 
-        # ── Divider (right) ───────────────────────────────────────────────
-        ctk.CTkFrame(hdr, fg_color=C_BORDER, width=1).grid(
-            row=0, column=3, sticky="ns", pady=6)
+        # ── Col 2 — Right flank: swarm uplink telemetry ───────────────────
+        right = ctk.CTkFrame(dash, fg_color="transparent")
+        right.grid(row=0, column=2, sticky="w", padx=(12, 16), pady=10)
 
-        # ── Right panel — swarm uplink telemetry ──────────────────────────
-        right = ctk.CTkFrame(hdr, fg_color="transparent")
-        right.grid(row=0, column=4, sticky="nsew", padx=(0, 16), pady=10)
-
-        _rlbl = {"font": ("Consolas", 10), "anchor": "e"}
+        _rlbl = {"font": ("Consolas", 10), "anchor": "w"}
         ctk.CTkLabel(right, text="UPLINK: SECURE",
                      text_color=C_CYAN,   **_rlbl).pack(fill="x")
         ctk.CTkLabel(right, text="GEMINI: STANDBY",
@@ -718,14 +705,8 @@ class AlbedoGUI(ctk.CTk):
         ctk.CTkLabel(right, text="VEC_DB: ONLINE",
                      text_color=C_CYAN,   **_rlbl).pack(fill="x")
 
-        # Thin 1 px structural border below the header
-        ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x")
-
-        # ── Orb canvas (borderless, generous breathing room) ─────────────────
-        self._canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE,
-                                 bg=C_BG, highlightthickness=0)
-        self._canvas.pack(pady=(20, 10))
-        self._load_icon()
+        # Thin 1 px structural border below the dashboard
+        ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x", expand=False)
 
         # ── Output log (borderless; only CMD_INPUT row carries the cyan border) ─
         log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
@@ -755,7 +736,7 @@ class AlbedoGUI(ctk.CTk):
 
         # ── CMD_INPUT HUD tag above input row ───────────────────────────────
         cmd_hdr = ctk.CTkFrame(self, fg_color="transparent", height=18)
-        cmd_hdr.pack(fill="x", padx=18)
+        cmd_hdr.pack(fill="x", expand=False, padx=18)
         cmd_hdr.pack_propagate(False)
         ctk.CTkLabel(cmd_hdr, text="[ CMD_INPUT ]",
                      font=("Courier New", 12, "bold"), text_color=C_CYAN).pack(side="left")
@@ -765,7 +746,7 @@ class AlbedoGUI(ctk.CTk):
         # ── Input row (neon border on entry) ────────────────────────────────
         row = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
                            border_width=2, border_color=C_CYAN)
-        row.pack(fill="x", padx=16, pady=(2, 12))
+        row.pack(fill="x", expand=False, padx=16, pady=(2, 12))
 
         self._mic_btn = ctk.CTkButton(row, text="MIC", width=68, height=48,
                                       font=("Courier New", 15, "bold"),
@@ -1000,6 +981,8 @@ class AlbedoGUI(ctk.CTk):
     # ── Pulse animation ────────────────────────────────────────────────────
 
     def _animate(self) -> None:
+        if self._canvas is None:
+            return
         self._pulse_phase = (self._pulse_phase + 0.07) % (2 * math.pi)
         self._canvas.delete("ring")
         color = _STATE_COLOR[self._state]

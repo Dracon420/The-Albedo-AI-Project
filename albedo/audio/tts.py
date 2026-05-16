@@ -107,18 +107,15 @@ def stop_audio() -> None:
     current sd.play() returns (which sd.stop() unblocks instantly).
     """
     global _active_proc
-    _stop_event.set()           # Signal speak / speak_streamed to halt
-    with _proc_lock:
-        proc = _active_proc
-    if proc is not None:
-        try:
-            proc.kill()
-        except Exception:
-            pass
     try:
-        sd.stop()               # Unblocks any blocking sd.play() immediately
-    except Exception:
-        pass
+        _stop_event.set()
+        with _proc_lock:
+            proc = _active_proc
+        if proc is not None:
+            proc.kill()
+        sd.stop()
+    except Exception as e:
+        print(f"[tts] stop_audio error: {e}")
 
 
 # ---------------------------------------------------------------------------
