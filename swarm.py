@@ -33,7 +33,6 @@ import json
 import os
 import re
 import socket
-import threading
 
 from dotenv import load_dotenv
 
@@ -58,33 +57,6 @@ _keys_loaded     = False
 _gemini_module   = None   # google.generativeai (configured)
 _groq_client     = None   # groq.Groq instance
 _together_client = None   # together.Together instance
-_geo_context     = ""     # "The user is currently located in City, Region."
-
-
-# ---------------------------------------------------------------------------
-# IP geolocation (non-blocking, called once on boot)
-# ---------------------------------------------------------------------------
-
-def fetch_geo_context() -> None:
-    """
-    Silently fetch city/region from ip-api.com and cache in _geo_context.
-    Called in a daemon thread from load_swarm_keys() so startup is never
-    blocked. Result is injected into the Gemini commander system instruction.
-    """
-    global _geo_context
-    try:
-        import requests
-        data   = requests.get("http://ip-api.com/json/", timeout=3).json()
-        city   = data.get("city", "").strip()
-        region = data.get("regionName", data.get("region", "")).strip()
-        if city and region:
-            _geo_context = (
-                f"The user is currently located in {city}, {region}. "
-                "Use this context implicitly for any weather, time, or local queries."
-            )
-            print(f"[swarm] Geo context acquired: {city}, {region}")
-    except Exception as exc:
-        print(f"[swarm] Geo lookup skipped: {exc}")
 _search_tool     = None   # list[protos.Tool] or None if grounding unavailable
 
 
@@ -158,8 +130,6 @@ def load_swarm_keys() -> None:
             print(f"[swarm] Together AI init failed: {exc}")
 
     _keys_loaded = True
-    threading.Thread(target=fetch_geo_context, daemon=True,
-                     name="geo-context").start()
 
 
 # ---------------------------------------------------------------------------
@@ -222,11 +192,68 @@ def query_together(prompt: str) -> str:
         return f"[swarm] Together AI error: {exc}"
 
 
+def query_gemini_stream(prompt: str, on_sentence=None) -> str:
+    """
+    Stream a response from Gemini 1.5 Flash using _DIRECT_ANSWER_INSTRUCTION.
+
+    on_sentence(sentence: str) is called for each complete sentence as it
+    arrives from the stream, enabling zero-latency TTS queuing.  If
+    on_sentence is None, the full text is collected and returned without
+    any mid-stream callbacks.
+
+    Returns the full concatenated response text.
+    Never raises — returns an error string on failure.
+    """
+    load_swarm_keys()
+    if _gemini_module is None:
+        return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
+    try:
+        gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
+        kwargs  = {"tools": _search_tool} if _search_tool else {}
+        model   = _gemini_module.GenerativeModel(
+            "gemini-1.5-flash",
+            system_instruction=_DIRECT_ANSWER_INSTRUCTION,
+            generation_config=gen_cfg,
+            **kwargs,
+        )
+        full_text = ""
+        buffer    = ""
+        for chunk in model.generate_content(prompt, stream=True):
+            try:
+                chunk_text = chunk.text
+            except Exception:
+                continue
+            buffer    += chunk_text
+            full_text += chunk_text
+            if on_sentence is None:
+                continue
+            while True:
+                end_idx = -1
+                for punct in ('.', '!', '?', '\n'):
+                    idx = buffer.find(punct)
+                    if idx >= 0 and (end_idx < 0 or idx < end_idx):
+                        end_idx = idx
+                if end_idx < 0:
+                    break
+                sentence = buffer[:end_idx + 1].strip()
+                if sentence:
+                    on_sentence(sentence)
+                buffer = buffer[end_idx + 1:]
+        if on_sentence and buffer.strip():
+            on_sentence(buffer.strip())
+        return full_text.strip()
+    except Exception as exc:
+        print(f"[API ERROR]: {exc}")
+        return f"[swarm] Gemini error: {exc}"
+
+
 # ---------------------------------------------------------------------------
 # Autonomous Commander
 # ---------------------------------------------------------------------------
 
 _SYSTEM_INSTRUCTION = (
+    "The user's local node is permanently located in Raymond, Washington, United States. "
+    "Use this exact location implicitly for all weather, time, and local context queries.\n\n"
     "You are the Master Router for the Albedo construct. Analyze the user's prompt. "
     "You have a team of agents.\n"
     "1. 'groq': For writing heavy Python scripts or formatting data fast.\n"
@@ -246,6 +273,14 @@ _SYSTEM_INSTRUCTION = (
 _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 
 _VALID_ROUTES = frozenset({"direct", "groq", "together", "local", "memory"})
+
+_DIRECT_ANSWER_INSTRUCTION = (
+    "The user's local node is permanently located in Raymond, Washington, United States. "
+    "Use this exact location implicitly for all weather, time, and local context queries.\n\n"
+    "You are Albedo, a Spartan-Class AI construct. Answer the user's question directly and concisely. "
+    "Keep responses under 3 sentences unless explicitly asked for detail. "
+    "Never use markdown formatting. Write in plain conversational prose only."
+)
 
 
 def autonomous_commander(user_prompt: str) -> dict:
@@ -279,14 +314,10 @@ def autonomous_commander(user_prompt: str) -> dict:
         except Exception:
             cmd_cfg = _gemini_module.GenerationConfig(temperature=0.1)
 
-        system_instr = (
-            f"{_geo_context} {_SYSTEM_INSTRUCTION}" if _geo_context
-            else _SYSTEM_INSTRUCTION
-        )
         kwargs = {"tools": _search_tool} if _search_tool else {}
         model = _gemini_module.GenerativeModel(
             "gemini-1.5-flash",
-            system_instruction=system_instr,
+            system_instruction=_SYSTEM_INSTRUCTION,
             generation_config=cmd_cfg,
             **kwargs,
         )

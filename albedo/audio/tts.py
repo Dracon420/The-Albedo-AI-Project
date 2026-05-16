@@ -29,7 +29,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import queue
+import queue as _queue_mod
 import re
 import subprocess
 import tempfile
@@ -96,19 +96,54 @@ _active_proc: subprocess.Popen | None = None
 _proc_lock   = threading.Lock()
 _stop_event  = threading.Event()   # set by stop_audio(); cleared at each new utterance
 
+# ---------------------------------------------------------------------------
+# Global async audio queue — sentences are enqueued as (text, voice, device)
+# tuples and played by a single persistent daemon thread so synthesis and
+# playback are fully decoupled from the response pipeline.
+# ---------------------------------------------------------------------------
+audio_queue: _queue_mod.Queue = _queue_mod.Queue()
+
+
+def _audio_worker() -> None:
+    while True:
+        item = audio_queue.get()
+        try:
+            if item is None or _stop_event.is_set():
+                continue
+            text, voice, device = item
+            text = _sanitize_for_tts(text)
+            if not text or _stop_event.is_set():
+                continue
+            edge_voice = _piper_to_edge_voice(voice or PIPER_VOICE_MODEL)
+            result = _synthesize_sentence(text, voice or PIPER_VOICE_MODEL, edge_voice)
+            if result and not _stop_event.is_set():
+                audio_arr, sr = result
+                sd.play(_resampled(audio_arr, sr), samplerate=AUDIO_SAMPLE_RATE,
+                        blocking=True, device=device)
+        except Exception as exc:
+            print(f"[tts] audio_worker error: {exc}")
+        finally:
+            audio_queue.task_done()
+
+
+threading.Thread(target=_audio_worker, daemon=True, name="audio-worker").start()
+
 
 def stop_audio() -> None:
     """
-    Immediately halt all TTS activity — edge-tts synthesis queue, any active
-    Piper subprocess, and sounddevice playback.  Safe to call from any thread.
-
-    Sets _stop_event so the producer thread in speak_streamed() stops
-    synthesising further sentences and the consumer loop exits after the
-    current sd.play() returns (which sd.stop() unblocks instantly).
+    Immediately halt all TTS activity — drains the audio queue, kills any
+    active Piper subprocess, and unblocks the current sounddevice playback.
+    Safe to call from any thread.
     """
     global _active_proc
     try:
         _stop_event.set()
+        while not audio_queue.empty():
+            try:
+                audio_queue.get_nowait()
+                audio_queue.task_done()
+            except Exception:
+                pass
         with _proc_lock:
             proc = _active_proc
         if proc is not None:
@@ -343,7 +378,7 @@ def speak_streamed(text: str, device: int | None = None,
             print(f"[Albedo] {text}")
         return
 
-    audio_q: queue.Queue = queue.Queue(maxsize=2)
+    audio_q: _queue_mod.Queue = _queue_mod.Queue(maxsize=2)
 
     def _producer() -> None:
         for sentence in sentences:
@@ -400,3 +435,20 @@ def synthesize_to_bytes(text: str,
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def enqueue_speech(text: str, voice_model: str | None = None,
+                   device: int | None = None) -> None:
+    """
+    Split text into sentences and push each as a (text, voice, device) tuple
+    onto the global audio_queue for the persistent _audio_worker to play.
+    Returns immediately — synthesis and playback happen asynchronously.
+    """
+    _stop_event.clear()
+    text = _sanitize_for_tts(text)
+    if not text:
+        return
+    model = _resolve_voice(voice_model)
+    for sentence in _split_sentences(text):
+        if sentence:
+            audio_queue.put((sentence, model, device))

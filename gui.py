@@ -539,6 +539,7 @@ class AlbedoGUI(ctk.CTk):
         self._scan_btn     = None   # set by _build_ui
         self._audio_btn    = None   # AUDIO ON/MUTE toggle — set by _build_ui
         self._audio_muted  = False  # TTS kill-switch
+        self._audio_streamed_for_current_response = False
         # Rolling conversation context — last 10 turns (20 messages)
         self._chat_history: list[dict] = []
 
@@ -1252,7 +1253,7 @@ class AlbedoGUI(ctk.CTk):
 
         _offline_mode = False
         try:
-            from swarm import autonomous_commander, query_groq, query_together
+            from swarm import autonomous_commander, query_gemini_stream, query_groq, query_together
             result       = autonomous_commander(query)
             route        = result["route"]
             payload      = result["payload"]
@@ -1260,7 +1261,18 @@ class AlbedoGUI(ctk.CTk):
 
             if route == "direct":
                 log_trace(query, route, success=True)
-                return payload
+                if not self._audio_muted and not self._abort_flag.is_set():
+                    from albedo.audio.tts import audio_queue, _stop_event
+                    _stop_event.clear()
+                    _voice = self._get_tts_voice()
+                    _dev   = self._settings.get("audio_output_device")
+                    def _on_sent(sentence: str) -> None:
+                        if not self._abort_flag.is_set():
+                            audio_queue.put((sentence, _voice, _dev))
+                    self._audio_streamed_for_current_response = True
+                    self._ui(lambda: self._set_state("speaking"))
+                    return query_gemini_stream(payload, on_sentence=_on_sent)
+                return query_gemini_stream(payload)
             if route == "groq":
                 response = "[GROQ EXECUTING]\n" + query_groq(payload)
                 log_trace(query, route, success=not response.startswith("[swarm]"))
@@ -1309,6 +1321,7 @@ class AlbedoGUI(ctk.CTk):
             if self._abort_flag.is_set():
                 return
 
+            self._audio_streamed_for_current_response = False
             response = self._route_query(query, use_web)
 
             if self._abort_flag.is_set():
@@ -1328,24 +1341,26 @@ class AlbedoGUI(ctk.CTk):
             resp = response
             self._ui(lambda: self._log_append("albedo", resp))
 
-            # TTS — fire in a daemon thread so the pipeline returns immediately
-            # and the UI never blocks on audio synthesis or network latency.
             if not self._audio_muted and not self._abort_flag.is_set():
-                self._ui(lambda: self._set_state("speaking"))
-                _voice = self._get_tts_voice()
-                _dev   = self._settings.get("audio_output_device")
+                if not self._audio_streamed_for_current_response:
+                    # Non-streaming route — enqueue full response now
+                    self._ui(lambda: self._set_state("speaking"))
+                    _voice = self._get_tts_voice()
+                    _dev   = self._settings.get("audio_output_device")
+                    from albedo.audio.tts import enqueue_speech
+                    enqueue_speech(resp, voice_model=_voice, device=_dev)
 
-                def _play_tts(_r=resp, _v=_voice, _d=_dev) -> None:
+                def _wait_for_audio() -> None:
                     try:
-                        from albedo.audio.tts import speak_streamed
-                        speak_streamed(_r, device=_d, voice_model=_v)
-                    except Exception as tts_err:
-                        print(f"[gui] TTS error: {tts_err}")
+                        from albedo.audio.tts import audio_queue
+                        audio_queue.join()
+                    except Exception as e:
+                        print(f"[gui] audio_queue.join error: {e}")
                     finally:
                         self._ui(lambda: self._set_state("standby"))
 
-                threading.Thread(target=_play_tts, daemon=True,
-                                 name="tts-playback").start()
+                threading.Thread(target=_wait_for_audio, daemon=True,
+                                 name="tts-drain").start()
             else:
                 self._ui(lambda: self._set_state("standby"))
 
