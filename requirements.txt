@@ -6,8 +6,7 @@ ddgs>=1.0.0
 open-interpreter>=0.3.17
 python-dotenv>=1.0.0
 sentence-transformers>=3.0.0
-faster-whisper>=1.0.0
-openwakeword>=0.6.0
+vosk>=0.3.45
 requests>=2.31.0
 
 # Audio stack

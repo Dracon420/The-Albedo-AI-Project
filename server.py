@@ -29,6 +29,7 @@ import base64
 import io
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Annotated
 
 import numpy as np
@@ -38,13 +39,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from albedo.audio.tts import synthesize_to_bytes
-from albedo.config import OLLAMA_MODEL, WHISPER_MODEL_SIZE, WHISPER_DEVICE
+from albedo.config import OLLAMA_MODEL, VOSK_MODEL_PATH
 from albedo.pipeline import run as pipeline_run
 from albedo.verify import is_hardware_query
 
 # STT is lazily imported inside _load_and_transcribe() so the server starts
-# successfully even when faster-whisper / CUDA are not yet installed.
-# /api/voice returns 503 if Whisper is unavailable at call time.
+# successfully even when vosk is not yet installed.
+# /api/voice returns 503 if Vosk is unavailable at call time.
 _transcribe_fn = None
 
 
@@ -57,7 +58,7 @@ def _get_transcribe():
         except ImportError as exc:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail=f"Whisper STT not available: {exc}. Run: pip install faster-whisper",
+                detail=f"Vosk STT not available: {exc}. Run: pip install vosk",
             ) from exc
     return _transcribe_fn
 
@@ -83,7 +84,7 @@ app.add_middleware(
 # Requests queue rather than race for VRAM.
 _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="albedo-worker")
 
-TARGET_SR = 16_000  # Hz — Whisper and Piper both expect 16 kHz
+TARGET_SR = 16_000  # Hz — Vosk and Piper both expect 16 kHz
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -125,8 +126,8 @@ def _run_pipeline(text: str, use_web: bool) -> tuple[str, str | None]:
 class StatusResponse(BaseModel):
     status: str
     llm_model: str
-    whisper_model: str
-    whisper_device: str
+    stt_engine: str
+    stt_model: str
 
 
 class ChatRequest(BaseModel):
@@ -154,8 +155,8 @@ async def get_status():
     return StatusResponse(
         status="online",
         llm_model=OLLAMA_MODEL,
-        whisper_model=WHISPER_MODEL_SIZE,
-        whisper_device=WHISPER_DEVICE,
+        stt_engine="vosk",
+        stt_model=Path(VOSK_MODEL_PATH).name,
     )
 
 
@@ -222,5 +223,5 @@ if __name__ == "__main__":
     import uvicorn
 
     log.info("Starting Albedo Bridge on 0.0.0.0:8000")
-    log.info("LLM: %s | Whisper: %s (%s)", OLLAMA_MODEL, WHISPER_MODEL_SIZE, WHISPER_DEVICE)
+    log.info("LLM: %s | STT: vosk (%s)", OLLAMA_MODEL, Path(VOSK_MODEL_PATH).name)
     uvicorn.run("server:app", host="0.0.0.0", port=8000, reload=False, log_level="info")

@@ -101,8 +101,8 @@ Source: "piper\*";              DestDir: "{app}\piper";             Flags: ignor
 ; ── Piper voice models (downloaded by setup_utility.py; include if present) ─
 Source: "voices\*";             DestDir: "{app}\voices";            Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── OpenWakeWord models (bundled in repo under wakewords/) ────────────────
-Source: "wakewords\*";          DestDir: "{app}\wakewords";         Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+; ── Vosk STT model (downloaded by setup_utility.py; bundle if cached) ────
+Source: "vosk_models\*";        DestDir: "{app}\vosk_models";       Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; ── Icon (optional -- installer skips gracefully if absent) ───────────────
 Source: "albedo_icon.ico";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist

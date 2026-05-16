@@ -22,13 +22,17 @@ dist/
 build/
 .eggs/
 
+# Inno Setup build artifacts
+Output/
+Albedo-Setup.exe
+
 # Ollama model cache (large binaries)
 models/
 *.gguf
 *.bin
 
-# Faster-Whisper / Whisper model weights
-whisper_models/
+# Vosk STT model (downloaded by setup_utility.py)
+vosk_models/
 *.pt
 
 # Piper TTS voice models (downloaded by installer — not committed)

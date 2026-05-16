@@ -2,17 +2,17 @@
 Voice loop: wake word → acknowledge → record → STT → pipeline → TTS.
 
                   ┌─────────────────────────────────────┐
-  [mic] ──────────► OpenWakeWord                        │
+  [mic] ──────────► Vosk (restricted-grammar wake)      │
                   │  "Cortana" detected                  │
                   │        │                             │
                   │        ▼                             │
                   │  Piper TTS: "Yes?"                   │
                   │        │                             │
                   │        ▼                             │
-                  │  record_utterance (VAD gate)          │
+                  │  record_utterance (VAD gate, 1.2 s)  │
                   │        │                             │
                   │        ▼                             │
-                  │  Faster-Whisper (CUDA) → text        │
+                  │  Vosk full transcription → text      │
                   │        │                             │
                   │        ▼                             │
                   │  pipeline.run() → response text      │

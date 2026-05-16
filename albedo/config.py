@@ -52,25 +52,22 @@ PIPER_VOICE_JARVIS = os.getenv(
 # Legacy single-model path (used as fallback when per-persona paths aren't set)
 PIPER_VOICE_MODEL = os.getenv("PIPER_VOICE_MODEL", PIPER_VOICE_CORTANA)
 
-# Local wake word model cache (bundled in repo under wakewords/)
-WAKEWORD_MODELS_DIR = Path(os.getenv(
-    "WAKEWORD_MODELS_DIR", str(_PROJECT_ROOT / "wakewords")
-))
+# --- Vosk STT (replaces faster-whisper + openwakeword) ---
+# Default model is vosk-model-small-en-us-0.15 (~40 MB) downloaded by
+# setup_utility.py into <project_root>/vosk_models/.  Override the
+# location with VOSK_MODEL_PATH in .env.
+VOSK_MODEL_PATH = os.getenv(
+    "VOSK_MODEL_PATH",
+    str(_PROJECT_ROOT / "vosk_models" / "vosk-model-small-en-us-0.15"),
+)
 
-# OpenWakeWord model — set to path of a custom .onnx, or use a built-in label.
-# Train a custom model: github.com/dscripka/openWakeWord#training-new-models
-WAKEWORD_MODEL = os.getenv("WAKEWORD_MODEL", "hey_jarvis")
+# Wake word(s) — comma-separated list matched against Vosk transcription.
+# Vosk listens with a restricted grammar of just these words plus "[unk]"
+# so the CPU footprint stays low even during continuous listening.
+WAKE_WORDS = os.getenv("WAKE_WORDS", "cortana,jarvis")
 
-# Faster-Whisper: CPU + int8 avoids the cublas64_12.dll CUDA dependency and
-# leaves the full 6 GB VRAM budget for Ollama. Transcription latency on CPU
-# with the small model is typically 1-3 s for a 30 s clip -- acceptable.
-WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "tiny")   # locked: tiny/cpu/int8
-WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
-WHISPER_COMPUTE_TYPE = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
-
-AUDIO_SAMPLE_RATE = 16000          # Hz — required by both OpenWakeWord and Whisper
-AUDIO_CHUNK_MS = 80                # ms per OpenWakeWord inference frame (1280 samples)
-WAKEWORD_THRESHOLD = float(os.getenv("WAKEWORD_THRESHOLD", "0.5"))
+AUDIO_SAMPLE_RATE = 16000          # Hz — required by Vosk
+AUDIO_CHUNK_MS = 80                # ms per audio inference frame (1280 samples)
 
 # VAD — silence detection after wake word
 VAD_SILENCE_THRESHOLD = float(os.getenv("VAD_SILENCE_THRESHOLD", "0.01"))  # RMS energy

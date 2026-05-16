@@ -1,114 +1,79 @@
 """
-Speech-to-text via Faster-Whisper (CPU, tiny, int8).
+Speech-to-text via Vosk (offline, CPU, zero VRAM).
 
-RTX 2060 VRAM budget:
-  Ollama llama3.2:3b    ~4.0 GB
-  Whisper tiny (CPU)     0.0 GB  -- zero VRAM; runs entirely on CPU
-  headroom              ~2.0 GB
-  ──────────────────────────────
-  total                 ~4.0 GB  ✓
+Default model:
+  vosk-model-small-en-us-0.15 (~40 MB)
 
-The model is loaded once at first call and kept resident to avoid
-the reload penalty on every query. device=cpu and compute_type=int8
-are locked — do not change; CUDA builds require cublas64_12.dll which
-is absent on most gaming rigs and causes a hard import failure.
+Downloaded by setup_utility.py into <project_root>/vosk_models/.
+Override the location with VOSK_MODEL_PATH in .env.
 
-Cache recovery: if the HuggingFace snapshot is corrupt (e.g. model.bin
-missing after a partial download), _get_model() wipes the cache entry
-and retries once so the user gets a clean re-download rather than a
-hard crash.
+The model is loaded once at first call and kept resident, so first MIC
+press has the load latency (~1 s) and every subsequent transcription
+is instant.
 """
 from __future__ import annotations
 
-import os
-import shutil
+import json
 from pathlib import Path
 
 import numpy as np
-from faster_whisper import WhisperModel
-from albedo.config import (
-    AUDIO_SAMPLE_RATE,
-    WHISPER_MODEL_SIZE,
-    WHISPER_DEVICE,
-    WHISPER_COMPUTE_TYPE,
-)
+from vosk import KaldiRecognizer, Model, SetLogLevel
 
-_model: WhisperModel | None = None
+from albedo.config import AUDIO_SAMPLE_RATE, VOSK_MODEL_PATH
+
+# Silence Vosk's verbose Kaldi logs
+SetLogLevel(-1)
+
+_model: Model | None = None
 
 
-def _clear_whisper_cache() -> None:
-    """Delete corrupt faster-whisper HuggingFace cache entries and force a clean re-download."""
-    hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
-    hub_dir = hf_home / "hub"
-    if not hub_dir.exists():
-        return
-    for entry in hub_dir.glob("models--Systran--faster-whisper*"):
-        try:
-            shutil.rmtree(entry)
-            print(f"[stt] Cleared corrupt cache: {entry.name}")
-        except Exception as exc:
-            print(f"[stt] Cache clear skipped ({entry.name}): {exc}")
+def _resolve_model_path() -> Path:
+    return Path(VOSK_MODEL_PATH).expanduser()
 
 
 def is_cached() -> bool:
-    """Return True if the Whisper model snapshot is present in the HuggingFace cache."""
-    hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
-    hub_dir = hf_home / "hub"
-    slug = f"models--Systran--faster-whisper-{WHISPER_MODEL_SIZE}"
-    return (hub_dir / slug).exists()
+    """True if the Vosk model directory exists locally."""
+    return _resolve_model_path().exists()
 
 
-def _get_model() -> WhisperModel:
+def _get_model() -> Model:
     global _model
-    if _model is not None:
-        return _model
-
-    for attempt in range(2):
-        try:
-            print(
-                f"[stt] Loading Whisper {WHISPER_MODEL_SIZE} "
-                f"on {WHISPER_DEVICE} ({WHISPER_COMPUTE_TYPE})"
-                f"{' — retrying after cache clear' if attempt else ''}..."
+    if _model is None:
+        path = _resolve_model_path()
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Vosk model not found at {path}. "
+                "Run setup_utility.py to download it, "
+                "or set VOSK_MODEL_PATH in .env."
             )
-            _model = WhisperModel(
-                WHISPER_MODEL_SIZE,
-                device=WHISPER_DEVICE,
-                compute_type=WHISPER_COMPUTE_TYPE,
-            )
-            print("[stt] Whisper ready.")
-            return _model
-        except Exception as exc:
-            if attempt == 0:
-                print(f"[stt] Load failed: {exc}")
-                print("[stt] Clearing corrupt HuggingFace cache and retrying...")
-                _clear_whisper_cache()
-            else:
-                raise RuntimeError(
-                    f"Whisper model failed to load after cache clear: {exc}"
-                ) from exc
-
-    raise RuntimeError("Whisper model failed to load.")
+        print(f"[stt] Loading Vosk model: {path.name}")
+        _model = Model(str(path))
+        print("[stt] Vosk ready.")
+    return _model
 
 
 def prewarm() -> None:
-    """Load the Whisper model now so the first MIC press is instant."""
+    """Load the Vosk model now so the first transcription is instant."""
     _get_model()
 
 
 def transcribe(audio: np.ndarray) -> str:
     """
-    Transcribe a float32 numpy array (16 kHz mono) to text.
+    Transcribe a numpy array (16 kHz mono) to text.
+
+    Accepts float32 in the range [-1, 1] or int16 directly.
     Returns an empty string if the audio is too short or silent.
     """
     if audio is None or len(audio) < AUDIO_SAMPLE_RATE * 0.3:
         return ""
 
+    if audio.dtype != np.int16:
+        audio = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
+
     model = _get_model()
-    segments, _ = model.transcribe(
-        audio,
-        language="en",
-        beam_size=5,
-        vad_filter=True,               # built-in Silero VAD — skips silent segments
-        vad_parameters={"min_silence_duration_ms": 500},
-    )
-    return " ".join(seg.text.strip() for seg in segments).strip()
+    recognizer = KaldiRecognizer(model, AUDIO_SAMPLE_RATE)
+    recognizer.SetWords(False)
+    recognizer.AcceptWaveform(audio.tobytes())
+
+    result = json.loads(recognizer.FinalResult())
+    return result.get("text", "").strip()

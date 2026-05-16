@@ -31,7 +31,7 @@ _HELP_URLS = {
 # Aesthetic constants (matches Albedo Mission Control palette)
 _BG       = "#0a0a0f"
 _PANEL    = "#0d1117"
-_CYAN     = "#00e5ff"
+_CYAN     = "#00FFFF"
 _CYAN_DIM = "#007a99"
 _GREEN    = "#39ff14"
 _RED      = "#ff3131"
@@ -63,8 +63,8 @@ class _OnboardingWindow(ctk.CTk):
     def __init__(self) -> None:
         super().__init__()
         self.title("ALBEDO // FIRST-TIME CONFIGURATION")
-        self.geometry("720x680")
-        self.minsize(640, 620)
+        self.geometry("780x740")
+        self.minsize(700, 680)
         self.configure(fg_color=_BG)
         self.resizable(True, True)
 
@@ -98,10 +98,10 @@ class _OnboardingWindow(ctk.CTk):
         # ── Preflight instructions ───────────────────────────────────────
         ctk.CTkTextbox(
             self,
-            height=90,
-            font=("Courier New", 14),
+            height=110,
+            font=("Courier New", 16, "bold"),
             fg_color=_PANEL,
-            text_color=_FG,
+            text_color=_CYAN,
             border_color=_CYAN_DIM,
             border_width=1,
             wrap="word",
@@ -193,12 +193,12 @@ class _OnboardingWindow(ctk.CTk):
             row,
             textvariable=var,
             placeholder_text="paste key here...",
-            font=_FONT_LBL,
+            font=("Courier New", 14),
             fg_color=_PANEL,
             border_color=_CYAN_DIM,
-            text_color=_FG,
+            text_color=_CYAN,
             show="•",
-            height=32,
+            height=36,
         )
         entry.pack(side="left", expand=True, fill="x")
 
@@ -289,7 +289,19 @@ class _OnboardingWindow(ctk.CTk):
         self._status.configure(
             text="✔  Core initialized. Booting Albedo...", text_color=_GREEN)
         self._saved = True
-        self.after(900, self.destroy)
+        # quit() before destroy() — breaks mainloop cleanly so CTk's
+        # check_dpi_scaling poll doesn't fire after the window is gone.
+        self.after(900, self._safe_shutdown)
+
+    def _safe_shutdown(self) -> None:
+        try:
+            self.quit()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
 
     def _write_env(
         self,

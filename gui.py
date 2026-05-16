@@ -51,17 +51,16 @@ SETTINGS_PATH = ROOT / "settings.json"
 # ── Persona constants ──────────────────────────────────────────────────────
 
 _VOICES_DIR   = ROOT / "voices"
-_WAKEWORD_DIR = ROOT / "wakewords"  # bundled in repo
 
-# Display-name → voice file + wakeword model
+# Display-name → Piper voice file + Vosk wake word string
 PERSONA_MAP: dict[str, dict[str, str]] = {
     "Cortana": {
-        "voice":    str(_VOICES_DIR / "en_US-kristin-medium.onnx"),
-        "wakeword": str(_WAKEWORD_DIR / "hey_core_tah_nuh.onnx"),
+        "voice":     str(_VOICES_DIR / "en_US-kristin-medium.onnx"),
+        "wake_word": "cortana",
     },
     "Jarvis": {
-        "voice":    str(_VOICES_DIR / "en_US-ryan-medium.onnx"),
-        "wakeword": str(_WAKEWORD_DIR / "hey_jarvis_v0.1.onnx"),
+        "voice":     str(_VOICES_DIR / "en_US-ryan-medium.onnx"),
+        "wake_word": "jarvis",
     },
 }
 _PERSONA_DISPLAY = list(PERSONA_MAP.keys())  # ["Cortana", "Jarvis"]
@@ -472,6 +471,9 @@ class AlbedoGUI(ctk.CTk):
         self._hardware_win = None
         self._console_win  = None
         self._console_buf: list[str] = []
+        # Event-loop hygiene — tracked so _on_close() can cancel cleanly
+        self._closing       = False
+        self._poll_after_id = None
         self._pulse_phase  = 0.0
         self._icon_photo   = None   # ImageTk ref kept alive
         self._settings     = _load_settings()
@@ -493,8 +495,8 @@ class AlbedoGUI(ctk.CTk):
         self._animate()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # Pre-warm Whisper in background so first MIC press is instant
-        threading.Thread(target=self._prewarm_whisper, daemon=True).start()
+        # Pre-warm Vosk in background so first MIC press is instant
+        threading.Thread(target=self._prewarm_vosk, daemon=True).start()
 
     # ── UI construction ────────────────────────────────────────────────────
 
@@ -536,16 +538,16 @@ class AlbedoGUI(ctk.CTk):
             text_color=C_ORANGE,
         ).pack(side="right", padx=16)
 
-        # ── Orb canvas ─────────────────────────────────────────────────────
+        # ── Orb canvas (borderless, generous breathing room) ─────────────────
         self._canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE,
                                  bg=C_BG, highlightthickness=0)
-        self._canvas.pack(pady=(10, 0))
+        self._canvas.pack(pady=(20, 10))
         self._load_icon()
 
         # ── Output log (borderless; only CMD_INPUT row carries the cyan border) ─
         log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
                                  border_width=0)
-        log_outer.pack(fill="both", expand=True, padx=16, pady=(10, 2))
+        log_outer.pack(fill="both", expand=True, padx=16, pady=(14, 6))
 
         # HUD corner tags inside the log panel
         log_hdr = ctk.CTkFrame(log_outer, fg_color="transparent", height=20)
@@ -556,7 +558,7 @@ class AlbedoGUI(ctk.CTk):
         ctk.CTkLabel(log_hdr, text="[ STREAM: ACTIVE ]",
                      font=("Courier New", 12, "bold"), text_color=C_ORANGE).pack(side="right")
 
-        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 15),
+        self._log = ctk.CTkTextbox(log_outer, font=("Consolas", 14),
                                    fg_color=C_PANEL, text_color=C_TEXT,
                                    wrap="word", state="disabled", border_width=0,
                                    scrollbar_button_color=C_CYAN_DIM)
@@ -899,17 +901,24 @@ class AlbedoGUI(ctk.CTk):
 
     def _start_queue_poll(self) -> None:
         def _poll() -> None:
+            # Bail out if the root window is destroyed — background threads
+            # may still be flushing the queue after the user closed the GUI.
+            if self._closing or not self.winfo_exists():
+                return
             try:
                 while True:
                     fn = self._ui_queue.get_nowait()
+                    if self._closing or not self.winfo_exists():
+                        return
                     try:
                         fn()
                     except Exception as exc:
                         print(f"[gui] UI callable error: {exc}")
             except queue.Empty:
                 pass
-            self.after(40, _poll)
-        self.after(40, _poll)
+            if not self._closing and self.winfo_exists():
+                self._poll_after_id = self.after(40, _poll)
+        self._poll_after_id = self.after(40, _poll)
 
     def _ui(self, fn) -> None:
         self._ui_queue.put(fn)
@@ -1153,28 +1162,28 @@ class AlbedoGUI(ctk.CTk):
         finally:
             self._ui(lambda: self._set_state("standby"))
 
-    # ── Whisper pre-warming ────────────────────────────────────────────────
+    # ── Vosk pre-warming ────────────────────────────────────────────────
 
-    def _prewarm_whisper(self) -> None:
-        """Load WhisperModel from local cache only — never triggers a download.
-        If the cache is absent, logs a message and returns so the GUI stays
-        responsive. The Setup Wizard is responsible for the initial download."""
+    def _prewarm_vosk(self) -> None:
+        """Load the Vosk model from local cache only — never triggers a download.
+        If the model directory is absent, logs a message and returns so the GUI
+        stays responsive. The Setup Wizard is responsible for the initial download."""
         try:
             from albedo.audio.stt import is_cached, prewarm
             if not is_cached():
                 self._ui(lambda: self._log_append(
                     "system",
-                    "[SYS] Whisper model not in local cache. "
+                    "[SYS] Vosk model not in local cache. "
                     "Run the Setup Wizard to download it before using MIC."))
                 return
             self._ui(lambda: self._log_append(
-                "system", "[SYS] Loading Whisper STT from cache..."))
+                "system", "[SYS] Loading Vosk STT from cache..."))
             prewarm()
-            self._ui(lambda: self._log_append("system", "[SYS] Whisper tiny online."))
+            self._ui(lambda: self._log_append("system", "[SYS] Vosk online."))
         except Exception as exc:
             msg = str(exc)
             self._ui(lambda: self._log_append(
-                "system", f"[SYS] Whisper pre-warm failed: {msg}"))
+                "system", f"[SYS] Vosk pre-warm failed: {msg}"))
 
     # ── Visual scan ────────────────────────────────────────────────────────
 
@@ -1245,14 +1254,14 @@ class AlbedoGUI(ctk.CTk):
 
         # Persist to .env so CLI listener mode picks it up on next launch
         _update_env("PIPER_VOICE_MODEL", persona["voice"])
-        _update_env("WAKEWORD_MODEL",    persona["wakeword"])
+        _update_env("WAKE_WORDS",        persona["wake_word"])
 
-        # Hot-swap the wakeword model for the current session
+        # Hot-swap the Vosk wake word for the current session
         try:
             from albedo.audio import wakeword as _ww
-            _ww.set_active_model(persona["wakeword"])
+            _ww.set_active_model(persona["wake_word"])
         except Exception as exc:
-            print(f"[gui] wakeword hot-swap failed (non-fatal): {exc}")
+            print(f"[gui] wake word hot-swap failed (non-fatal): {exc}")
 
         if key != old_key:
             self._log_append(
@@ -1329,14 +1338,41 @@ class AlbedoGUI(ctk.CTk):
     # ── Cleanup ────────────────────────────────────────────────────────────
 
     def _on_close(self) -> None:
+        # Mark closing so threaded UI callables and the queue poll bail out.
+        self._closing = True
+
+        # Cancel any tracked after() callbacks before destroying widgets.
+        if self._poll_after_id is not None:
+            try:
+                self.after_cancel(self._poll_after_id)
+            except Exception:
+                pass
+            self._poll_after_id = None
+
         sys.stdout = self._stdout_orig
         sys.stderr = self._stderr_orig
+
+        # Stop TTS playback first so the audio thread isn't holding the device.
+        try:
+            from albedo.audio.tts import stop_audio
+            stop_audio()
+        except Exception:
+            pass
+
         if self._audio_stream:
             try:
                 self._audio_stream.stop()
             except Exception:
                 pass
-        self.destroy()
+
+        try:
+            self.quit()
+        except Exception:
+            pass
+        try:
+            self.destroy()
+        except Exception:
+            pass
 
 
 # ── Entry point ────────────────────────────────────────────────────────────

@@ -1,53 +1,64 @@
 """
-Wake word detection via OpenWakeWord.
+Wake word detection via Vosk with a restricted-grammar KaldiRecognizer.
 
-_active_model can be changed at runtime via set_active_model() so persona
-switches take effect without restarting the process.
+Listens continuously to the audio stream and uses Vosk transcription
+to detect the configured persona word(s).  This replaces OpenWakeWord
+entirely — Vosk handles both wake detection and full STT, so there is
+only one model to load and keep resident.
 
-WAKEWORD_MODEL (from .env) can be:
-  - A built-in label string: "hey_jarvis", "alexa", "hey_mycroft"
-  - An absolute path to a custom .onnx file (e.g. hey_core_tah_nuh.onnx)
-
-To train a custom Cortana model:
-  https://github.com/dscripka/openWakeWord#training-new-models
-The trained .onnx goes in <project_root>/wakeword_models/, then set
-WAKEWORD_MODEL=C:/path/to/wakeword_models/hey_core_tah_nuh.onnx in .env.
+WAKE_WORDS in .env is a comma-separated list (e.g. "cortana,jarvis").
+Wake detection succeeds when any one of those words appears in either
+the partial or final Vosk result while listening.
 """
 from __future__ import annotations
 
-import os
+import json
+
 import sounddevice as sd
-from openwakeword.model import Model
-from albedo.config import WAKEWORD_MODEL, WAKEWORD_THRESHOLD
+from vosk import KaldiRecognizer
+
 from albedo.audio.capture import AudioStream
+from albedo.audio.stt import _get_model
+from albedo.config import AUDIO_SAMPLE_RATE, WAKE_WORDS
 
-_model: Model | None = None
-_active_model: str = WAKEWORD_MODEL
-
-
-def set_active_model(model_path: str) -> None:
-    """Hot-swap the wake word model.  Resets the cached singleton so the
-    next wait_for_wakeword() call loads the new model."""
-    global _model, _active_model
-    if model_path != _active_model:
-        _active_model = model_path
-        _model = None
+_recognizer: KaldiRecognizer | None = None
+_active_words: str = WAKE_WORDS
 
 
-def _get_model() -> Model:
-    global _model
-    if _model is None:
-        print(f"[wakeword] Loading model: {_active_model!r}")
-        _model = Model(wakeword_models=[_active_model], inference_framework="onnx")
-    return _model
+def set_active_model(words: str) -> None:
+    """
+    Hot-swap the wake word(s).  Accepts a comma-separated string,
+    e.g. "cortana,jarvis" or just "cortana".  Resets the cached
+    recognizer so the next wait_for_wakeword() call rebuilds it
+    with the new grammar.
+    """
+    global _recognizer, _active_words
+    if words and words != _active_words:
+        _active_words = words
+        _recognizer = None
+
+
+def _word_set() -> set[str]:
+    return {w.strip().lower() for w in _active_words.split(",") if w.strip()}
+
+
+def _get_recognizer() -> KaldiRecognizer:
+    global _recognizer
+    if _recognizer is None:
+        words = sorted(_word_set())
+        # "[unk]" is required so Vosk silently absorbs anything not in the list
+        grammar = json.dumps(words + ["[unk]"])
+        model = _get_model()
+        _recognizer = KaldiRecognizer(model, AUDIO_SAMPLE_RATE, grammar)
+        print(f"[wakeword] Vosk recognizer armed for: {words}")
+    return _recognizer
 
 
 def wait_for_wakeword(stream: AudioStream) -> None:
-    """Block until the active wake word is detected above threshold."""
-    model = _get_model()
-    model_key = list(model.models.keys())[0]
-
-    print(f"[wakeword] Listening for '{_active_model}' (threshold={WAKEWORD_THRESHOLD})")
+    """Block until any configured wake word is transcribed by Vosk."""
+    rec     = _get_recognizer()
+    targets = _word_set()
+    print(f"[wakeword] Listening for {sorted(targets)}")
 
     while True:
         chunk = stream.read_chunk()
@@ -55,9 +66,13 @@ def wait_for_wakeword(stream: AudioStream) -> None:
             sd.sleep(10)
             continue
 
-        scores = model.predict(chunk)
-        score = scores.get(model_key, 0.0)
-
-        if score >= WAKEWORD_THRESHOLD:
-            model.reset()
-            return
+        if rec.AcceptWaveform(chunk.tobytes()):
+            text = json.loads(rec.Result()).get("text", "").strip().lower()
+            if any(w in text for w in targets):
+                rec.Reset()
+                return
+        else:
+            partial = json.loads(rec.PartialResult()).get("partial", "").strip().lower()
+            if partial and any(w in partial for w in targets):
+                rec.Reset()
+                return

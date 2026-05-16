@@ -12,8 +12,7 @@ channel counts with PortAudio error -9997 / AUDCLNT_E_UNSUPPORTED_FORMAT.
 
 AudioStream.start() escalates through three strategies before giving up:
 
-  Attempt 1 -- 16 kHz / mono on the user-selected device (ideal for
-               OpenWakeWord + Whisper).
+  Attempt 1 -- 16 kHz / mono on the user-selected device (ideal for Vosk).
 
   Attempt 2 -- Device's native sample rate + native channel count on the
                same device.  Callback downmixes to mono and resamples to
@@ -25,8 +24,8 @@ AudioStream.start() escalates through three strategies before giving up:
                _find_mme_device() locates the correct device index by
                matching the physical device name inside the MME host API.
 
-All downstream consumers (OpenWakeWord, Whisper) always receive 16 kHz
-mono int16 regardless of which attempt succeeded.
+All downstream consumers (Vosk wake word + Vosk STT) always receive
+16 kHz mono int16 regardless of which attempt succeeded.
 """
 from __future__ import annotations
 
