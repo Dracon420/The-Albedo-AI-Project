@@ -1,7 +1,7 @@
 """
 swarm.py  --  Albedo Swarm Matrix
 
-Multi-agent cloud LLM client pool: Gemini, Groq, Together AI.
+Multi-agent cloud LLM client pool: Gemini (google-genai SDK), Groq, Together AI.
 
 Keys are read from .env via load_swarm_keys() which is called automatically
 the first time any query_*() function is invoked. Subsequent calls are
@@ -33,21 +33,19 @@ import json
 import os
 import re
 import socket
-
 import warnings
 
 from dotenv import load_dotenv
 
-# Suppress the google-generativeai deprecation FutureWarning at import time.
-warnings.filterwarnings("ignore", category=FutureWarning,
-                        module="google.generativeai")
+# Suppress deprecation noise from google SDK internals at import time.
+warnings.filterwarnings("ignore", category=FutureWarning,      module="google")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="google")
 
 # Load .env now so all env vars are available before any function is called.
 load_dotenv()
 
 _location     = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
-# Free-tier stable model — gemini-2.0-flash triggers hard 429/limit:0 on unbilled accounts.
-# Use the -latest alias so older cached SDK endpoints always resolve correctly.
+# Free-tier stable model. Use -latest alias so SDK endpoint caches resolve correctly.
 _gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest").strip() or "gemini-1.5-flash-latest"
 
 # ---------------------------------------------------------------------------
@@ -56,11 +54,9 @@ _gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest").strip() or 
 # before API transmission so Gemini never sees "near me" or "my location".
 # ---------------------------------------------------------------------------
 
-# Single combined pattern for the three primary trigger phrases (directive spec)
 _RE_LOCATION_PRIMARY = re.compile(
     r'\b(near me|my location|where I am)\b', re.IGNORECASE
 )
-# Secondary triggers mapped to tailored replacements
 _LOCATION_SECONDARY: list[tuple[re.Pattern, str]] = [
     (re.compile(r'\bmy area\b',  re.IGNORECASE), f'the {_location} area'),
     (re.compile(r'\bmy city\b',  re.IGNORECASE), _location),
@@ -76,6 +72,7 @@ def _mutate_location(prompt: str) -> str:
     for pattern, replacement in _LOCATION_SECONDARY:
         prompt = pattern.sub(replacement, prompt)
     return prompt
+
 
 # ---------------------------------------------------------------------------
 # Connectivity watchdog
@@ -99,8 +96,8 @@ def native_web_search(query: str, max_results: int = 3) -> str:
     Scrape the top `max_results` DuckDuckGo text snippets for `query` and
     return them as a single formatted context string.
 
-    Never raises — returns an empty string on any failure so callers can
-    still proceed with whatever context they have.
+    Never raises — returns 'Local search node offline.' on any failure so
+    callers always have a meaningful signal to inject into the prompt.
     """
     try:
         with warnings.catch_warnings():
@@ -122,11 +119,21 @@ def native_web_search(query: str, max_results: int = 3) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Immersive error string — shown in UI chat feed on any Gemini API failure.
+# Raw exception JSON must never reach the user.
+# ---------------------------------------------------------------------------
+
+_UPLINK_ERROR = (
+    "[SYSTEM ERROR] Uplink to Gemini Swarm failed. "
+    "API Node rejected the connection. Check API key quotas."
+)
+
+# ---------------------------------------------------------------------------
 # Module-level singletons
 # ---------------------------------------------------------------------------
 
 _keys_loaded     = False
-_gemini_module   = None   # google.generativeai (configured)
+_gemini_client   = None   # google.genai.Client instance
 _groq_client     = None   # groq.Groq instance
 _together_client = None   # together.Together instance
 
@@ -136,7 +143,7 @@ def load_swarm_keys() -> None:
     Load API keys from .env and initialise each provider client.
     Safe to call multiple times — only runs once per process.
     """
-    global _keys_loaded, _gemini_module, _groq_client, _together_client
+    global _keys_loaded, _gemini_client, _groq_client, _together_client
     if _keys_loaded:
         return
 
@@ -148,9 +155,8 @@ def load_swarm_keys() -> None:
 
     if gemini_key:
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            _gemini_module = genai
+            from google import genai
+            _gemini_client = genai.Client(api_key=gemini_key)
             print(f"[swarm] Gemini client ready (model: {_gemini_model}).")
         except Exception as exc:
             print(f"[swarm] Gemini init failed: {exc}")
@@ -175,16 +181,6 @@ def load_swarm_keys() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Immersive error string — shown in UI chat feed on any Gemini API failure.
-# Raw exception JSON must never reach the user.
-# ---------------------------------------------------------------------------
-
-_UPLINK_ERROR = (
-    "[SYSTEM ERROR] Uplink to Gemini Swarm failed. "
-    "API Node rejected the connection. Check API key quotas."
-)
-
-# ---------------------------------------------------------------------------
 # Ping functions
 # ---------------------------------------------------------------------------
 
@@ -194,13 +190,16 @@ def query_gemini(prompt: str) -> str:
     Returns an error string (never raises) on auth or network failure.
     """
     load_swarm_keys()
-    if _gemini_module is None:
+    if _gemini_client is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
-        gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
-        model   = _gemini_module.GenerativeModel(
-            model_name=_gemini_model, generation_config=gen_cfg)
-        return model.generate_content(prompt).text.strip()
+        from google.genai import types
+        response = _gemini_client.models.generate_content(
+            model=_gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(temperature=0.1),
+        )
+        return response.text.strip()
     except Exception as exc:
         print(f"\n[CRITICAL DEBUG] Raw Swarm Exception: {exc}\n")
         return _UPLINK_ERROR
@@ -247,20 +246,18 @@ def direct_gemini_search(prompt: str) -> str:
     Scrape the web via DuckDuckGo, inject the snippets as background context,
     then send a tool-less prompt to Gemini for a one-sentence answer.
 
-    This pipeline is fully decoupled from Google's native search tool quota
-    (which returns 429 / limit:0).  Gemini acts as a summariser only — all
-    live data comes from the DDG scraper.
+    This pipeline is fully decoupled from Google's native search tool quota.
+    Gemini acts as a summariser only — all live data comes from the DDG scraper.
 
     Never raises — returns an error string on failure.
     """
     load_swarm_keys()
     prompt = _mutate_location(prompt)
-    if _gemini_module is None:
+    if _gemini_client is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
-        # Phase 3: scrape first, then inject
         scraped = native_web_search(prompt)
-        if scraped:
+        if scraped and scraped != "Local search node offline.":
             final_prompt = (
                 f"Background Data:\n{scraped}\n\n"
                 f"User Question: {prompt}\n"
@@ -268,28 +265,27 @@ def direct_gemini_search(prompt: str) -> str:
                 "in exactly one short sentence."
             )
         else:
-            # No web data — let Gemini answer from parametric knowledge
             final_prompt = (
                 f"{prompt}\n"
                 "Answer in exactly one short sentence."
             )
 
-        gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
-        instruction = (
-            "You are Albedo, a Spartan-Class AI. "
-            "NEVER introduce yourself. NEVER explain your reasoning. "
-            "NEVER write code, plans, or multi-step reasoning. "
-            "Provide ONLY the direct answer in one short sentence. "
-            "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
-            "Never use markdown."
+        from google.genai import types
+        response = _gemini_client.models.generate_content(
+            model=_gemini_model,
+            contents=final_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=(
+                    "You are Albedo, a Spartan-Class AI. "
+                    "NEVER introduce yourself. NEVER explain your reasoning. "
+                    "NEVER write code, plans, or multi-step reasoning. "
+                    "Provide ONLY the direct answer in one short sentence. "
+                    "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
+                    "Never use markdown."
+                ),
+                temperature=0.1,
+            ),
         )
-        # No tools — Google Search grounding returns 429; DDG scraper handles data
-        model = _gemini_module.GenerativeModel(
-            model_name=_gemini_model,
-            system_instruction=instruction,
-            generation_config=gen_cfg,
-        )
-        response = model.generate_content(final_prompt)
         return response.text.strip()
     except Exception as exc:
         print(f"\n[CRITICAL DEBUG] Raw Swarm Exception: {exc}\n")
@@ -298,7 +294,7 @@ def direct_gemini_search(prompt: str) -> str:
 
 def query_gemini_stream(prompt: str, on_sentence=None) -> str:
     """
-    Stream a response from Gemini 1.5 Flash using _DIRECT_ANSWER_INSTRUCTION.
+    Stream a response from Gemini using the google-genai SDK.
 
     on_sentence(sentence: str) is called for each complete sentence as it
     arrives from the stream, enabling zero-latency TTS queuing.  If
@@ -310,20 +306,20 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
     """
     load_swarm_keys()
     prompt = _mutate_location(prompt)
-    if _gemini_module is None:
+    if _gemini_client is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
-        gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
-        # No Google Search tools — grounding quota is 429 / limit:0.
-        # direct_gemini_search() handles web data via the DDG scraper instead.
-        model = _gemini_module.GenerativeModel(
-            model_name=_gemini_model,
-            system_instruction=_DIRECT_ANSWER_INSTRUCTION,
-            generation_config=gen_cfg,
-        )
+        from google.genai import types
         full_text = ""
         buffer    = ""
-        for chunk in model.generate_content(prompt, stream=True):
+        for chunk in _gemini_client.models.generate_content_stream(
+            model=_gemini_model,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_DIRECT_ANSWER_INSTRUCTION,
+                temperature=0.1,
+            ),
+        ):
             try:
                 chunk_text = chunk.text
             except Exception:
@@ -388,10 +384,10 @@ _DIRECT_ANSWER_INSTRUCTION = (
 
 def autonomous_commander(user_prompt: str) -> dict:
     """
-    Send user_prompt to Gemini 1.5 Flash acting as the Master Commander.
+    Send user_prompt to Gemini acting as the Master Commander.
 
     Returns a dict with keys:
-        route   -- one of 'direct', 'groq', 'together', 'local'
+        route   -- one of 'direct', 'groq', 'together', 'local', 'memory'
         payload -- the text to forward to the chosen agent (or the direct answer)
 
     Never raises. On any failure (missing key, API error, bad JSON) returns
@@ -406,27 +402,21 @@ def autonomous_commander(user_prompt: str) -> dict:
         print("[swarm] No internet — offline fallback engaged.")
         return {"route": "local", "payload": user_prompt, "_offline": True}
 
-    if _gemini_module is None:
+    if _gemini_client is None:
         return fallback
 
     try:
-        try:
-            cmd_cfg = _gemini_module.GenerationConfig(
+        from google.genai import types
+        response = _gemini_client.models.generate_content(
+            model=_gemini_model,
+            contents=user_prompt,
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM_INSTRUCTION,
                 temperature=0.1,
                 response_mime_type="application/json",
-            )
-        except Exception:
-            cmd_cfg = _gemini_module.GenerationConfig(temperature=0.1)
-
-        # No search tools — JSON mode (response_mime_type) and grounding are
-        # mutually exclusive; grounding is silently dropped when both present.
-        # The commander only routes — it does not need live web data.
-        model = _gemini_module.GenerativeModel(
-            model_name=_gemini_model,
-            system_instruction=_SYSTEM_INSTRUCTION,
-            generation_config=cmd_cfg,
+            ),
         )
-        raw = model.generate_content(user_prompt).text.strip()
+        raw = response.text.strip()
 
         # Strip markdown code fences Gemini sometimes wraps JSON in
         m = _RE_JSON_BLOCK.search(raw)
@@ -444,5 +434,4 @@ def autonomous_commander(user_prompt: str) -> dict:
 
     except Exception as exc:
         print(f"[ROUTER EXCEPTION]: {exc}")
-        print(f"[API ERROR]: {exc}")
         return fallback
