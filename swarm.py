@@ -47,7 +47,8 @@ load_dotenv()
 
 _location     = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
 # Free-tier stable model — gemini-2.0-flash triggers hard 429/limit:0 on unbilled accounts.
-_gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip() or "gemini-1.5-flash"
+# Use the -latest alias so older cached SDK endpoints always resolve correctly.
+_gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest").strip() or "gemini-1.5-flash-latest"
 
 # ---------------------------------------------------------------------------
 # Semantic location interceptor
@@ -102,7 +103,9 @@ def native_web_search(query: str, max_results: int = 3) -> str:
     still proceed with whatever context they have.
     """
     try:
-        from duckduckgo_search import DDGS
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            from duckduckgo_search import DDGS
         results = DDGS().text(query, max_results=max_results)
         if not results:
             return "Local search node offline."
