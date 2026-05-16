@@ -152,12 +152,15 @@ async def _edge_collect_mp3(text: str, voice: str) -> bytes:
 def _edge_synthesize(text: str, voice: str) -> tuple[np.ndarray, int] | None:
     """
     Synthesize text via Edge-TTS and return (float32 audio, sample_rate).
+    A 12-second asyncio.wait_for timeout prevents hung HTTP requests from
+    blocking the TTS daemon thread indefinitely.
     Returns None on any error so the caller can fall back to Piper.
     """
     try:
         loop = asyncio.new_event_loop()
         try:
-            mp3_bytes = loop.run_until_complete(_edge_collect_mp3(text, voice))
+            coro      = asyncio.wait_for(_edge_collect_mp3(text, voice), timeout=12.0)
+            mp3_bytes = loop.run_until_complete(coro)
         finally:
             loop.close()
         if not mp3_bytes:

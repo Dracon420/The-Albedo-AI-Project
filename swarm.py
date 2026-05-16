@@ -33,6 +33,7 @@ import json
 import os
 import re
 import socket
+import threading
 
 from dotenv import load_dotenv
 
@@ -57,6 +58,33 @@ _keys_loaded     = False
 _gemini_module   = None   # google.generativeai (configured)
 _groq_client     = None   # groq.Groq instance
 _together_client = None   # together.Together instance
+_geo_context     = ""     # "The user is currently located in City, Region."
+
+
+# ---------------------------------------------------------------------------
+# IP geolocation (non-blocking, called once on boot)
+# ---------------------------------------------------------------------------
+
+def fetch_geo_context() -> None:
+    """
+    Silently fetch city/region from ip-api.com and cache in _geo_context.
+    Called in a daemon thread from load_swarm_keys() so startup is never
+    blocked. Result is injected into the Gemini commander system instruction.
+    """
+    global _geo_context
+    try:
+        import requests
+        data   = requests.get("http://ip-api.com/json/", timeout=3).json()
+        city   = data.get("city", "").strip()
+        region = data.get("regionName", data.get("region", "")).strip()
+        if city and region:
+            _geo_context = (
+                f"The user is currently located in {city}, {region}. "
+                "Use this context implicitly for any weather, time, or local queries."
+            )
+            print(f"[swarm] Geo context acquired: {city}, {region}")
+    except Exception as exc:
+        print(f"[swarm] Geo lookup skipped: {exc}")
 _search_tool     = None   # list[protos.Tool] or None if grounding unavailable
 
 
@@ -130,6 +158,8 @@ def load_swarm_keys() -> None:
             print(f"[swarm] Together AI init failed: {exc}")
 
     _keys_loaded = True
+    threading.Thread(target=fetch_geo_context, daemon=True,
+                     name="geo-context").start()
 
 
 # ---------------------------------------------------------------------------
@@ -249,10 +279,14 @@ def autonomous_commander(user_prompt: str) -> dict:
         except Exception:
             cmd_cfg = _gemini_module.GenerationConfig(temperature=0.1)
 
+        system_instr = (
+            f"{_geo_context} {_SYSTEM_INSTRUCTION}" if _geo_context
+            else _SYSTEM_INSTRUCTION
+        )
         kwargs = {"tools": _search_tool} if _search_tool else {}
         model = _gemini_module.GenerativeModel(
             "gemini-1.5-flash",
-            system_instruction=_SYSTEM_INSTRUCTION,
+            system_instruction=system_instr,
             generation_config=cmd_cfg,
             **kwargs,
         )

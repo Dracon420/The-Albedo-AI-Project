@@ -498,12 +498,13 @@ class RadialDial(tk.Canvas):
                             outline=self._fill, width=self._rw,
                             style=tk.ARC)
 
-        # Centre percentage label
+        # Centre percentage label — font scales with dial size
         cx = cy = self._size // 2
+        font_sz = max(8, self._size // 9)
         self.create_text(cx, cy,
                          text=f"{int(self._value * 100)}%",
                          fill=self._fill,
-                         font=("Consolas", 8, "bold"))
+                         font=("Consolas", font_sz, "bold"))
 
 
 # ── Main window ────────────────────────────────────────────────────────────
@@ -641,11 +642,12 @@ class AlbedoGUI(ctk.CTk):
         def _make_dial(parent, label: str, color: str) -> RadialDial:
             col = ctk.CTkFrame(parent, fg_color="transparent")
             col.pack(side="left", expand=True, fill="x")
-            dial = RadialDial(col, size=60, fill_color=color, track_color="#1A1A1A")
+            dial = RadialDial(col, size=120, ring_width=10,
+                              fill_color=color, track_color="#1A1A1A")
             dial.set(0.0)
             dial.pack()
             ctk.CTkLabel(col, text=label,
-                         font=("Consolas", 9), text_color=color).pack()
+                         font=("Consolas", 11, "bold"), text_color=color).pack()
             return dial
 
         self._hud_cpu_dial  = _make_dial(dials_row, "RYZEN 5",  C_CYAN)
@@ -654,8 +656,8 @@ class AlbedoGUI(ctk.CTk):
         self._hud_ssd_dial  = _make_dial(dials_row, "SSD C:",   C_ORANGE)
 
         ctk.CTkLabel(left, text="LOCAL NODE: STABLE",
-                     font=("Consolas", 9), text_color=C_GREEN,
-                     anchor="center").pack(fill="x", pady=(3, 0))
+                     font=("Consolas", 11, "bold"), text_color=C_GREEN,
+                     anchor="center").pack(fill="x", pady=(4, 0))
 
         # ── Col 1 — Center: logo + title + state chip + LOGS ─────────────
         center = ctk.CTkFrame(dash, fg_color="transparent")
@@ -666,8 +668,8 @@ class AlbedoGUI(ctk.CTk):
         if logo_path.exists():
             try:
                 _pil = Image.open(logo_path).convert("RGBA").resize(
-                    (100, 100), Image.LANCZOS)
-                self._hdr_logo = ctk.CTkImage(_pil, size=(100, 100))
+                    (180, 180), Image.LANCZOS)
+                self._hdr_logo = ctk.CTkImage(_pil, size=(180, 180))
                 ctk.CTkLabel(center, image=self._hdr_logo,
                              text="").pack(pady=(4, 2))
                 _logo_shown = True
@@ -675,7 +677,7 @@ class AlbedoGUI(ctk.CTk):
                 pass
         if not _logo_shown:
             ctk.CTkLabel(center, text="▸ A",
-                         font=("Courier New", 48, "bold"),
+                         font=("Courier New", 72, "bold"),
                          text_color=C_CYAN).pack(pady=(4, 2))
 
         ctk.CTkLabel(center, text="ALBEDO  //  MISSION CONTROL",
@@ -698,7 +700,7 @@ class AlbedoGUI(ctk.CTk):
         right = ctk.CTkFrame(dash, fg_color="transparent")
         right.grid(row=0, column=2, sticky="ew", padx=(0, 8), pady=8)
 
-        _rlbl = {"font": ("Consolas", 10), "anchor": "w"}
+        _rlbl = {"font": ("Consolas", 12, "bold"), "anchor": "w"}
         ctk.CTkLabel(right, text="UPLINK: SECURE",
                      text_color=C_CYAN,   **_rlbl).pack(fill="x", padx=(12, 0))
         ctk.CTkLabel(right, text="GEMINI: STANDBY",
@@ -1307,6 +1309,7 @@ class AlbedoGUI(ctk.CTk):
             response = self._route_query(query, use_web)
 
             if self._abort_flag.is_set():
+                self._ui(lambda: self._set_state("standby"))
                 return
 
             # Guarantee response is always a non-empty string
@@ -1321,22 +1324,31 @@ class AlbedoGUI(ctk.CTk):
 
             resp = response
             self._ui(lambda: self._log_append("albedo", resp))
-            self._ui(lambda: self._set_state("speaking"))
 
-            # TTS — skip entirely if aborted during generation
+            # TTS — fire in a daemon thread so the pipeline returns immediately
+            # and the UI never blocks on audio synthesis or network latency.
             if not self._audio_muted and not self._abort_flag.is_set():
-                try:
-                    from albedo.audio.tts import speak_streamed
-                    out_dev = self._settings.get("audio_output_device")
-                    speak_streamed(response, device=out_dev, voice_model=self._get_tts_voice())
-                except Exception as tts_err:
-                    print(f"[gui] TTS error: {tts_err}")
+                self._ui(lambda: self._set_state("speaking"))
+                _voice = self._get_tts_voice()
+                _dev   = self._settings.get("audio_output_device")
+
+                def _play_tts(_r=resp, _v=_voice, _d=_dev) -> None:
+                    try:
+                        from albedo.audio.tts import speak_streamed
+                        speak_streamed(_r, device=_d, voice_model=_v)
+                    except Exception as tts_err:
+                        print(f"[gui] TTS error: {tts_err}")
+                    finally:
+                        self._ui(lambda: self._set_state("standby"))
+
+                threading.Thread(target=_play_tts, daemon=True,
+                                 name="tts-playback").start()
+            else:
+                self._ui(lambda: self._set_state("standby"))
 
         except Exception as exc:
             msg = str(exc)
             self._ui(lambda: self._log_append("error", msg))
-
-        finally:
             self._ui(lambda: self._set_state("standby"))
 
     # ── Vosk pre-warming ────────────────────────────────────────────────
