@@ -1141,17 +1141,19 @@ class AlbedoGUI(ctk.CTk):
 
     # ── Text input ─────────────────────────────────────────────────────────
 
-    def _intercept_prompt(self, text: str) -> str:
+    def _intercept_prompt(self, text: str) -> tuple[str, bool]:
         """
         Front-end prompt rewrite — runs on the main thread before anything
-        reaches the swarm.  Rewrites location-relative weather queries into
-        fully explicit strings so Gemini's safety layer never sees "near me".
+        reaches the swarm.  Returns (rewritten_text, is_direct_search).
+
+        is_direct_search=True means the caller should bypass autonomous_commander()
+        and call direct_gemini_search() directly (avoids the ReAct agent loop).
         """
         import os
         lower = text.lower()
         loc   = os.getenv("NODE_LOCATION", "Raymond, Washington")
 
-        # Weather + location trigger — full directive-spec rewrite
+        # Weather + location trigger — rewrite and flag for direct search bypass
         if "weather" in lower and any(
             t in lower for t in ("near me", "my location", "where i am",
                                  "my area", "my city", "my town", "locally")
@@ -1160,8 +1162,12 @@ class AlbedoGUI(ctk.CTk):
                 f"What is the current weather in {loc}? "
                 "Reply in exactly one short sentence with the temperature and conditions."
             )
-            print(f"[UI INTERCEPT] Prompt rewritten to: {text}")
-            return text
+            print(f"[UI INTERCEPT] Prompt rewritten → direct search: {text}")
+            return text, True
+
+        # General weather query (explicit location already) — still direct search
+        if "weather" in lower:
+            return text, True
 
         # General location trigger — swap vague phrases for concrete location
         import re as _re
@@ -1169,27 +1175,25 @@ class AlbedoGUI(ctk.CTk):
             r'\b(near me|my location|where I am|my area|my city|my town|locally|nearby)\b',
             f'in {loc}', text, flags=_re.IGNORECASE,
         )
-        return text
+        return text, False
 
     def _handle_send(self) -> None:
         text = self._entry.get().strip()
         if not text or self._state in ("processing", "speaking"):
             return
-        text = self._intercept_prompt(text)
+        text, is_direct = self._intercept_prompt(text)
         self._entry.delete(0, "end")
         use_web = text.lower().startswith("web:")
         query   = text[4:].strip() if use_web else text
         self._log_append("user", query)
         self._abort_flag.clear()
         self._set_state("processing")
-        # Phase 2: force immediate repaint on the main thread before the
-        # worker thread starts (update_idletasks() only works here).
         if self._gemini_tbar_lbl is not None:
             self._gemini_tbar_lbl.configure(text="GEMINI: ACTIVE",
                                             text_color=C_CYAN)
             self.update_idletasks()
         threading.Thread(target=self._run_pipeline,
-                         args=(query, use_web), daemon=True).start()
+                         args=(query, use_web, is_direct), daemon=True).start()
 
     def _handle_abort(self) -> None:
         """Set abort flag, kill TTS, log, instantly restore SEND button."""
@@ -1276,19 +1280,17 @@ class AlbedoGUI(ctk.CTk):
                 self._ui(lambda: self._set_state("standby"))
                 return
 
-            query = self._intercept_prompt(query)
+            query, is_direct = self._intercept_prompt(query)
             q = query
             self._ui(lambda: self._log_append("user", q))
             self._ui(lambda: self._set_gemini_active())
-            self._run_pipeline(query, use_web=False)
+            self._run_pipeline(query, use_web=False, is_direct=is_direct)
 
         except Exception as exc:
             msg = str(exc)
             self._ui(lambda: self._log_append(
                 "error", f"Microphone error: {msg}  --  check sounddevice / mic permissions"))
             self._ui(lambda: self._set_state("standby"))
-
-    # ── Pipeline runner (always on a background thread) ────────────────────
 
     # ── Swarm Commander routing ────────────────────────────────────────────
 
@@ -1404,15 +1406,42 @@ class AlbedoGUI(ctk.CTk):
             log_trace(query, "local", success=False)
             raise
 
+    def _run_direct_search(self, query: str) -> str:
+        """
+        Bypass autonomous_commander() entirely — call direct_gemini_search()
+        and return the plain-text answer.  Ensures GEMINI label updates fire
+        correctly on this code path.
+        """
+        try:
+            from swarm import direct_gemini_search
+            answer = direct_gemini_search(query)
+            if not self._audio_muted and not self._abort_flag.is_set():
+                from albedo.audio.tts import audio_queue, _stop_event
+                _stop_event.clear()
+                _voice = self._get_tts_voice()
+                _dev   = self._settings.get("audio_output_device")
+                audio_queue.put((answer, _voice, _dev))
+                self._audio_streamed_for_current_response = True
+                self._ui(lambda: self._set_state("speaking"))
+            self._ui(lambda: self._set_gemini_standby())
+            return answer
+        except Exception as exc:
+            self._ui(lambda: self._set_gemini_standby())
+            return f"[swarm] Direct search error: {exc}"
+
     # ── Pipeline runner (always on a background thread) ────────────────────
 
-    def _run_pipeline(self, query: str, use_web: bool) -> None:
+    def _run_pipeline(self, query: str, use_web: bool, is_direct: bool = False) -> None:
         try:
             if self._abort_flag.is_set():
                 return
 
             self._audio_streamed_for_current_response = False
-            response = self._route_query(query, use_web)
+
+            if is_direct:
+                response = self._run_direct_search(query)
+            else:
+                response = self._route_query(query, use_web)
 
             if self._abort_flag.is_set():
                 self._ui(lambda: self._set_state("standby"))

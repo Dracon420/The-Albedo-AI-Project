@@ -199,6 +199,51 @@ def query_together(prompt: str) -> str:
         return f"[swarm] Together AI error: {exc}"
 
 
+def direct_gemini_search(prompt: str) -> str:
+    """
+    Send a prompt directly to Gemini with Google Search grounding and return
+    the plain-text answer.  Non-streaming — avoids the ReAct agent loop that
+    stream=True triggers when grounding tools are active.
+
+    Use this for weather queries and any intercepted 'direct answer' path
+    that must bypass autonomous_commander() entirely.
+
+    Never raises — returns an error string on failure.
+    """
+    load_swarm_keys()
+    prompt = _mutate_location(prompt)
+    if _gemini_module is None:
+        return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
+    try:
+        gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
+        instruction = (
+            "You are Albedo, a Spartan-Class AI. "
+            "NEVER introduce yourself. NEVER explain your search process. "
+            "NEVER write code, plans, or multi-step reasoning. "
+            "Provide ONLY the direct answer in one short sentence. "
+            "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
+            "Never use markdown."
+        )
+        try:
+            model = _gemini_module.GenerativeModel(
+                model_name=_gemini_model,
+                tools='google_search_retrieval',
+                system_instruction=instruction,
+                generation_config=gen_cfg,
+            )
+        except Exception:
+            model = _gemini_module.GenerativeModel(
+                model_name=_gemini_model,
+                system_instruction=instruction,
+                generation_config=gen_cfg,
+            )
+        response = model.generate_content(prompt)
+        return response.text.strip()
+    except Exception as exc:
+        print(f"[swarm] direct_gemini_search error: {exc}")
+        return f"[swarm] Search error: {exc}"
+
+
 def query_gemini_stream(prompt: str, on_sentence=None) -> str:
     """
     Stream a response from Gemini 1.5 Flash using _DIRECT_ANSWER_INSTRUCTION.
