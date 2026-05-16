@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 import chromadb
 from albedo.config import (
     CHROMA_DB_PATH,
@@ -19,6 +22,21 @@ _ef = None          # SentenceTransformerEmbeddingFunction or None
 _ef_tried = False   # True once we have attempted init (success or failure)
 
 
+_HF_CACHE = Path.home() / ".cache" / "huggingface" / "hub"
+_MODEL_CACHE_PREFIX = "models--sentence-transformers--all-MiniLM-L6-v2"
+
+
+def _model_is_cached() -> bool:
+    """True if the sentence-transformer model exists in the local HF cache."""
+    try:
+        return any(
+            p.name.startswith(_MODEL_CACHE_PREFIX)
+            for p in _HF_CACHE.iterdir()
+        ) if _HF_CACHE.exists() else False
+    except Exception:
+        return False
+
+
 def _get_ef():
     global _ef, _ef_tried
     if _ef_tried:
@@ -26,17 +44,31 @@ def _get_ef():
     _ef_tried = True
     try:
         from chromadb.utils import embedding_functions
-        _ef = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name="all-MiniLM-L6-v2",
-            device="cpu",
-        )
+
+        # If the model is already cached locally, force offline mode so the
+        # loader never makes a network call that can fail on a hiccup.
+        cached = _model_is_cached()
+        _prev  = os.environ.get("HF_HUB_OFFLINE")
+        if cached:
+            os.environ["HF_HUB_OFFLINE"] = "1"
+        try:
+            _ef = embedding_functions.SentenceTransformerEmbeddingFunction(
+                model_name="all-MiniLM-L6-v2",
+                device="cpu",
+            )
+        finally:
+            if _prev is None:
+                os.environ.pop("HF_HUB_OFFLINE", None)
+            else:
+                os.environ["HF_HUB_OFFLINE"] = _prev
+
         print("[retriever] Embedding model loaded (all-MiniLM-L6-v2, CPU).")
     except Exception as exc:
         print(
             f"[retriever] WARNING: embedding model failed to load "
             f"({type(exc).__name__}: {exc}).\n"
-            "[retriever] Falling back to keyword search. "
-            "Delete chroma_db/ and re-index to restore semantic search."
+            "[retriever] Using keyword search fallback. "
+            "Restart with a stable connection to download the model once."
         )
         _ef = None
     return _ef
