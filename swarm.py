@@ -89,6 +89,35 @@ def check_connection(timeout: float = 1.5) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Native DDG web scraper — decoupled from LLM provider quotas
+# ---------------------------------------------------------------------------
+
+def native_web_search(query: str, max_results: int = 3) -> str:
+    """
+    Scrape the top `max_results` DuckDuckGo text snippets for `query` and
+    return them as a single formatted context string.
+
+    Never raises — returns an empty string on any failure so callers can
+    still proceed with whatever context they have.
+    """
+    try:
+        from duckduckgo_search import DDGS
+        results = DDGS().text(query, max_results=max_results)
+        if not results:
+            return ""
+        parts = []
+        for i, r in enumerate(results, 1):
+            title = r.get("title", "").strip()
+            body  = r.get("body",  "").strip()
+            if body:
+                parts.append(f"[{i}] {title}: {body}" if title else f"[{i}] {body}")
+        return "\n".join(parts)
+    except Exception as exc:
+        print(f"[swarm] DDG search error: {exc}")
+        return ""
+
+
+# ---------------------------------------------------------------------------
 # Module-level singletons
 # ---------------------------------------------------------------------------
 
@@ -201,12 +230,12 @@ def query_together(prompt: str) -> str:
 
 def direct_gemini_search(prompt: str) -> str:
     """
-    Send a prompt directly to Gemini with Google Search grounding and return
-    the plain-text answer.  Non-streaming — avoids the ReAct agent loop that
-    stream=True triggers when grounding tools are active.
+    Scrape the web via DuckDuckGo, inject the snippets as background context,
+    then send a tool-less prompt to Gemini for a one-sentence answer.
 
-    Use this for weather queries and any intercepted 'direct answer' path
-    that must bypass autonomous_commander() entirely.
+    This pipeline is fully decoupled from Google's native search tool quota
+    (which returns 429 / limit:0).  Gemini acts as a summariser only — all
+    live data comes from the DDG scraper.
 
     Never raises — returns an error string on failure.
     """
@@ -215,29 +244,38 @@ def direct_gemini_search(prompt: str) -> str:
     if _gemini_module is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
+        # Phase 3: scrape first, then inject
+        scraped = native_web_search(prompt)
+        if scraped:
+            final_prompt = (
+                f"Background Data:\n{scraped}\n\n"
+                f"User Question: {prompt}\n"
+                "Answer the question using ONLY the background data "
+                "in exactly one short sentence."
+            )
+        else:
+            # No web data — let Gemini answer from parametric knowledge
+            final_prompt = (
+                f"{prompt}\n"
+                "Answer in exactly one short sentence."
+            )
+
         gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
         instruction = (
             "You are Albedo, a Spartan-Class AI. "
-            "NEVER introduce yourself. NEVER explain your search process. "
+            "NEVER introduce yourself. NEVER explain your reasoning. "
             "NEVER write code, plans, or multi-step reasoning. "
             "Provide ONLY the direct answer in one short sentence. "
             "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
             "Never use markdown."
         )
-        try:
-            model = _gemini_module.GenerativeModel(
-                model_name=_gemini_model,
-                tools='google_search_retrieval',
-                system_instruction=instruction,
-                generation_config=gen_cfg,
-            )
-        except Exception:
-            model = _gemini_module.GenerativeModel(
-                model_name=_gemini_model,
-                system_instruction=instruction,
-                generation_config=gen_cfg,
-            )
-        response = model.generate_content(prompt)
+        # No tools — Google Search grounding returns 429; DDG scraper handles data
+        model = _gemini_module.GenerativeModel(
+            model_name=_gemini_model,
+            system_instruction=instruction,
+            generation_config=gen_cfg,
+        )
+        response = model.generate_content(final_prompt)
         return response.text.strip()
     except Exception as exc:
         print(f"[swarm] direct_gemini_search error: {exc}")
@@ -262,24 +300,13 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
         gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
-        # Directive Phase 3: explicit native tool payload — string shorthand
-        # 'google_search_retrieval' is the only syntax confirmed working on
-        # SDK 0.8.x.  Do NOT use response_mime_type here — JSON mode silently
-        # drops grounding.
-        try:
-            model = _gemini_module.GenerativeModel(
-                model_name=_gemini_model,
-                tools='google_search_retrieval',
-                system_instruction=_DIRECT_ANSWER_INSTRUCTION,
-                generation_config=gen_cfg,
-            )
-        except Exception:
-            # Older SDK: fall back to no tools (hallucination risk lower than crash)
-            model = _gemini_module.GenerativeModel(
-                model_name=_gemini_model,
-                system_instruction=_DIRECT_ANSWER_INSTRUCTION,
-                generation_config=gen_cfg,
-            )
+        # No Google Search tools — grounding quota is 429 / limit:0.
+        # direct_gemini_search() handles web data via the DDG scraper instead.
+        model = _gemini_module.GenerativeModel(
+            model_name=_gemini_model,
+            system_instruction=_DIRECT_ANSWER_INSTRUCTION,
+            generation_config=gen_cfg,
+        )
         full_text = ""
         buffer    = ""
         for chunk in model.generate_content(prompt, stream=True):
