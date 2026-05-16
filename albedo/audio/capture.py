@@ -143,6 +143,10 @@ class AudioStream:
     def _callback(self, indata: np.ndarray, frames: int, time, status) -> None:
         audio = indata.copy()
 
+        # Normalise int16 input to float32 [-1, 1]
+        if audio.dtype == np.int16:
+            audio = audio.astype(np.float32) / 32768.0
+
         # Downmix multichannel → mono
         if audio.ndim > 1 and audio.shape[1] > 1:
             audio = audio.mean(axis=1)
@@ -153,17 +157,18 @@ class AudioStream:
         if self._native_rate != AUDIO_SAMPLE_RATE:
             audio = _resample(audio, self._native_rate, AUDIO_SAMPLE_RATE)
 
-        int16 = (audio * 32767).astype(np.int16)
+        int16 = (np.clip(audio, -1.0, 1.0) * 32767).astype(np.int16)
         with self._lock:
             self._queue.append(int16)
 
     def _open_stream(self, samplerate: int, channels: int,
-                     blocksize: int, device: int | None) -> None:
+                     blocksize: int, device: int | None,
+                     dtype: str = "float32") -> None:
         """Open and start an InputStream with the given parameters."""
         self._stream = sd.InputStream(
             samplerate=samplerate,
             channels=channels,
-            dtype="float32",
+            dtype=dtype,
             blocksize=blocksize,
             callback=self._callback,
             device=device,
@@ -221,7 +226,26 @@ class AudioStream:
                 "[capture] Trying MME host API fallback..."
             )
 
-        # ── Attempt 4: MME host API — most compatible Windows audio stack ────
+        # ── Attempt 4: int16 dtype — USB mics often reject float32 in WASAPI ─
+        # AUDCLNT_E_UNSUPPORTED_FORMAT on float32 streams is common for USB
+        # webcam mics. Try int16 at 48kHz and 44.1kHz; callback normalises.
+        for probe_rate in [48000, 44100, native_rate]:
+            for probe_ch in ([native_ch] if native_ch > 1 else [1]):
+                try:
+                    probe_block           = int(probe_rate * AUDIO_CHUNK_MS / 1000)
+                    self._native_rate     = probe_rate
+                    self._native_channels = probe_ch
+                    self._open_stream(probe_rate, probe_ch, probe_block,
+                                      self._device, dtype="int16")
+                    print(
+                        f"[capture] Stream open at {probe_rate} Hz / {probe_ch} ch "
+                        f"int16 (WASAPI, resampling active)."
+                    )
+                    return
+                except sd.PortAudioError:
+                    pass
+
+        # ── Attempt 5: MME host API — most compatible Windows audio stack ────
         mme_dev = _find_mme_device(dev_name)
         if mme_dev is not None:
             try:
@@ -232,7 +256,7 @@ class AudioStream:
                 print(f"[capture] Stream open via MME fallback (device index {mme_dev}).")
                 return
             except sd.PortAudioError as e3:
-                print(f"[capture] Attempt 4 failed (MME): {e3}")
+                print(f"[capture] Attempt 5 failed (MME): {e3}")
         else:
             print("[capture] MME host API not found on this system.")
 

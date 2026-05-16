@@ -217,7 +217,7 @@ def query_gemini(prompt: str) -> str:
 
 def query_groq(prompt: str) -> str:
     """
-    Send a prompt to Groq (llama3-8b-8192) and return the response text.
+    Send a prompt to Groq (llama-3.1-8b-instant) and return the response text.
     Returns an error string (never raises) on auth or network failure.
     """
     load_swarm_keys()
@@ -225,7 +225,7 @@ def query_groq(prompt: str) -> str:
         return "[swarm] Groq unavailable — set GROQ_API_KEY in .env."
     try:
         completion = _groq_client.chat.completions.create(
-            model="llama3-8b-8192",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
         )
         return completion.choices[0].message.content.strip()
@@ -307,7 +307,7 @@ def direct_gemini_search(prompt: str) -> str:
     if _groq_client is not None:
         try:
             completion = _groq_client.chat.completions.create(
-                model="llama3-8b-8192",
+                model="llama-3.1-8b-instant",
                 messages=[
                     {"role": "system", "content": _SEARCH_INSTRUCTION},
                     {"role": "user",   "content": final_prompt},
