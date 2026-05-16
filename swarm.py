@@ -46,7 +46,8 @@ warnings.filterwarnings("ignore", category=FutureWarning,
 load_dotenv()
 
 _location     = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
-_gemini_model = os.getenv("GEMINI_MODEL",  "gemini-2.0-flash").strip()
+# Free-tier stable model — gemini-2.0-flash triggers hard 429/limit:0 on unbilled accounts.
+_gemini_model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip() or "gemini-1.5-flash"
 
 # ---------------------------------------------------------------------------
 # Semantic location interceptor
@@ -104,17 +105,17 @@ def native_web_search(query: str, max_results: int = 3) -> str:
         from duckduckgo_search import DDGS
         results = DDGS().text(query, max_results=max_results)
         if not results:
-            return ""
+            return "Local search node offline."
         parts = []
         for i, r in enumerate(results, 1):
             title = r.get("title", "").strip()
             body  = r.get("body",  "").strip()
             if body:
                 parts.append(f"[{i}] {title}: {body}" if title else f"[{i}] {body}")
-        return "\n".join(parts)
+        return "\n".join(parts) if parts else "Local search node offline."
     except Exception as exc:
         print(f"[swarm] DDG search error: {exc}")
-        return ""
+        return "Local search node offline."
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +172,16 @@ def load_swarm_keys() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Immersive error string — shown in UI chat feed on any Gemini API failure.
+# Raw exception JSON must never reach the user.
+# ---------------------------------------------------------------------------
+
+_UPLINK_ERROR = (
+    "[SYSTEM ERROR] Uplink to Gemini Swarm failed. "
+    "API Node rejected the connection. Check API key quotas."
+)
+
+# ---------------------------------------------------------------------------
 # Ping functions
 # ---------------------------------------------------------------------------
 
@@ -189,7 +200,7 @@ def query_gemini(prompt: str) -> str:
         return model.generate_content(prompt).text.strip()
     except Exception as exc:
         print(f"[API ERROR]: {exc}")
-        return f"[swarm] Gemini error: {exc}"
+        return _UPLINK_ERROR
 
 
 def query_groq(prompt: str) -> str:
@@ -279,7 +290,7 @@ def direct_gemini_search(prompt: str) -> str:
         return response.text.strip()
     except Exception as exc:
         print(f"[swarm] direct_gemini_search error: {exc}")
-        return f"[swarm] Search error: {exc}"
+        return _UPLINK_ERROR
 
 
 def query_gemini_stream(prompt: str, on_sentence=None) -> str:
@@ -335,7 +346,7 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
         return full_text.strip()
     except Exception as exc:
         print(f"[API ERROR]: {exc}")
-        return f"[swarm] Gemini error: {exc}"
+        return _UPLINK_ERROR
 
 
 # ---------------------------------------------------------------------------
