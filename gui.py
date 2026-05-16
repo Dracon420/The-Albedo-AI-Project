@@ -1153,20 +1153,24 @@ class AlbedoGUI(ctk.CTk):
         lower = text.lower()
         loc   = os.getenv("NODE_LOCATION", "Raymond, Washington")
 
-        # Weather + location trigger — rewrite and flag for direct search bypass
-        if "weather" in lower and any(
-            t in lower for t in ("near me", "my location", "where i am",
-                                 "my area", "my city", "my town", "locally")
-        ):
-            text = (
-                f"What is the current weather in {loc}? "
-                "Reply in exactly one short sentence with the temperature and conditions."
-            )
-            print(f"[UI INTERCEPT] Prompt rewritten → direct search: {text}")
-            return text, True
-
-        # General weather query (explicit location already) — still direct search
+        # ALL weather queries — canonicalize into an explicit location query so
+        # DDG gets a clean search string and Groq never sees filler words or
+        # STT mishearings like "and" instead of "in".
         if "weather" in lower:
+            import re as _re
+            # Strip Vosk filler + common mishearings; keep the location words
+            stripped = _re.sub(
+                r'\b(what|whats|is|the|weather|tell|me|give|current|forecast|'
+                r'today|please|check|and(?=\s+\w+\s+\w))\b',
+                '', text, flags=_re.IGNORECASE,
+            ).strip()
+            # If user named a location, use it; otherwise fall back to NODE_LOCATION
+            location = stripped if len(stripped) > 3 else loc
+            text = (
+                f"What is the current weather in {location}? "
+                "Answer in one sentence using Fahrenheit."
+            )
+            print(f"[UI INTERCEPT] Weather rewrite → {text}")
             return text, True
 
         # General location trigger — swap vague phrases for concrete location

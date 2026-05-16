@@ -256,22 +256,42 @@ _SEARCH_INSTRUCTION = (
     "NEVER introduce yourself. NEVER explain your reasoning. "
     "NEVER write code, plans, or multi-step reasoning. "
     "Provide ONLY the direct answer in one short sentence. "
-    "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
+    "Format weather as: 'The weather in [Location] is [Temp°F] with [Conditions].' "
+    "ALWAYS use Fahrenheit (°F). NEVER use Celsius. "
+    "NEVER substitute a nearby city — if the exact location has no data, say so. "
     "Never use markdown."
+)
+
+_RE_WEATHER    = re.compile(r'\bweather\b', re.IGNORECASE)
+_RE_FILLER     = re.compile(
+    r'\b(what|whats|is|the|weather|tell|me|give|current|forecast|'
+    r'today|please|check|answer|reply|sentence|fahrenheit)\b',
+    re.IGNORECASE,
 )
 
 
 def _build_search_prompt(user_prompt: str) -> str:
-    """Run DDG scraper and inject context into the final prompt string."""
-    scraped = native_web_search(user_prompt)
+    """
+    Run DDG scraper and inject context into the final prompt string.
+
+    For weather queries, strip filler words and construct a tight DDG search
+    string so the scraper returns the right location's data, not a nearby city.
+    """
+    if _RE_WEATHER.search(user_prompt):
+        location_hint = _RE_FILLER.sub('', user_prompt).strip()
+        ddg_query = f"current weather {location_hint} fahrenheit".strip()
+    else:
+        ddg_query = user_prompt
+
+    scraped = native_web_search(ddg_query)
     if scraped and scraped != "Local search node offline.":
         return (
             f"Background Data:\n{scraped}\n\n"
             f"User Question: {user_prompt}\n"
             "Answer the question using ONLY the background data "
-            "in exactly one short sentence."
+            "in exactly one short sentence. Use Fahrenheit."
         )
-    return f"{user_prompt}\nAnswer in exactly one short sentence."
+    return f"{user_prompt}\nAnswer in exactly one short sentence. Use Fahrenheit."
 
 
 def direct_gemini_search(prompt: str) -> str:
