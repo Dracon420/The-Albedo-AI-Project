@@ -36,6 +36,15 @@ import socket
 
 from dotenv import load_dotenv
 
+# Load .env now so NODE_LOCATION is available before any function is called.
+load_dotenv()
+
+_location = os.getenv("NODE_LOCATION", "").strip() or "an unspecified location"
+_local_context = (
+    f" [SYSTEM OVERRIDE: The user is located in {_location}. "
+    "Use Google Search to provide data for this exact location.]"
+)
+
 # ---------------------------------------------------------------------------
 # Connectivity watchdog
 # ---------------------------------------------------------------------------
@@ -252,8 +261,7 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
 # ---------------------------------------------------------------------------
 
 _SYSTEM_INSTRUCTION = (
-    "The user's local node is permanently located in Raymond, Washington, United States. "
-    "Use this exact location implicitly for all weather, time, and local context queries.\n\n"
+    _local_context + "\n\n"
     "You are the Master Router for the Albedo construct. Analyze the user's prompt. "
     "You have a team of agents.\n"
     "1. 'groq': For writing heavy Python scripts or formatting data fast.\n"
@@ -275,8 +283,7 @@ _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 _VALID_ROUTES = frozenset({"direct", "groq", "together", "local", "memory"})
 
 _DIRECT_ANSWER_INSTRUCTION = (
-    "The user's local node is permanently located in Raymond, Washington, United States. "
-    "Use this exact location implicitly for all weather, time, and local context queries.\n\n"
+    _local_context + "\n\n"
     "You are Albedo, a Spartan-Class AI construct. Answer the user's question directly and concisely. "
     "Keep responses under 3 sentences unless explicitly asked for detail. "
     "Never use markdown formatting. Write in plain conversational prose only."

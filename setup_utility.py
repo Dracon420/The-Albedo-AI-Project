@@ -208,6 +208,7 @@ def _write_env(
     vault_path: str,
     piper_bin: str,
     persona: str,
+    node_location: str = "",
 ) -> None:
     env_path   = ROOT / ".env"
     example    = ROOT / ".env.example"
@@ -226,6 +227,7 @@ def _write_env(
         "GROQ_API_KEY":         groq_key,
         "TOGETHER_API_KEY":     together_key,
         "OBSIDIAN_VAULT_PATH":  vault_path,
+        "NODE_LOCATION":        node_location or "an unspecified location",
         # ── Audio / voice ────────────────────────────────────────────────
         "PIPER_BINARY":         piper_bin,
         "PIPER_VOICE_MODEL":    active_voice,
@@ -420,6 +422,7 @@ class DirectoryPage(Page):
         self._vault_var    = tk.StringVar(value="")
         self._piper_var    = tk.StringVar(value=str(ROOT / "piper" / "piper.exe"))
         self._persona_var  = tk.StringVar(value="Cortana")
+        self._location_var = tk.StringVar(value="")
         self._build()
 
     def _build(self) -> None:
@@ -450,6 +453,19 @@ class DirectoryPage(Page):
         tk.Frame(box, height=1, bg=C_BORDER).pack(fill="x", padx=16, pady=8)
 
         self._path_row(box, "Piper binary path", self._piper_var)
+
+        # Node location
+        tk.Frame(box, height=1, bg=C_BORDER).pack(fill="x", padx=16, pady=8)
+        loc_row = tk.Frame(box, bg=C_PANEL)
+        loc_row.pack(fill="x", padx=16, pady=4)
+        _lbl(loc_row, "Node Location  (City, State, Country)",
+             size=10, bg=C_PANEL).pack(anchor="w")
+        tk.Entry(loc_row, textvariable=self._location_var, bg=C_BG, fg=C_TEXT,
+                 insertbackground=C_CYAN, relief="flat", bd=2,
+                 font=FONT_SMALL).pack(fill="x")
+        _lbl(loc_row,
+             "Used for weather and local context queries. Can be left blank.",
+             size=9, color=C_MUTED, bg=C_PANEL).pack(anchor="w", pady=(2, 0))
 
         # Persona dropdown
         prow = tk.Frame(box, bg=C_PANEL)
@@ -519,6 +535,7 @@ class DirectoryPage(Page):
             "vault_path":   self._vault_var.get().strip(),
             "piper_bin":    self._piper_var.get().strip(),
             "persona":      self._persona_var.get().strip().lower(),
+            "location":     self._location_var.get().strip(),
         }
 
 
@@ -725,6 +742,7 @@ class InstallPage(Page):
             vault_path=dirs.get("vault_path", ""),
             piper_bin=dirs.get("piper_bin", ""),
             persona=persona,
+            node_location=dirs.get("location", ""),
         )
         # Write initial settings.json so the GUI knows the active persona
         settings_path = ROOT / "settings.json"

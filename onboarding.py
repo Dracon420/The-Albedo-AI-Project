@@ -71,6 +71,7 @@ class OnboardingWizard(ctk.CTkToplevel):
         self._saved              = False
         self._entries:     dict  = {}
         self._show_states: dict  = {}
+        self._location_var       = ctk.StringVar()
 
         self._build_ui()
 
@@ -159,6 +160,22 @@ class OnboardingWizard(ctk.CTkToplevel):
             text_color=_CYAN,
             command=self._pick_vault,
         ).pack(side="right", padx=(8, 0))
+
+        # ── Node location ────────────────────────────────────────────────
+        ctk.CTkLabel(self, text="NODE LOCATION  (City, State, Country)",
+                     font=_FONT_HUD, text_color=_CYAN,
+                     anchor="w").pack(fill="x", padx=24, pady=(12, 2))
+
+        ctk.CTkEntry(
+            self,
+            textvariable=self._location_var,
+            placeholder_text="e.g. Seattle, Washington, United States",
+            font=("Courier New", 14),
+            fg_color=_PANEL,
+            border_color=_CYAN_DIM,
+            text_color=_CYAN,
+            height=36,
+        ).pack(fill="x", padx=24, pady=(0, 4))
 
         # ── Status label ─────────────────────────────────────────────────
         self._status = ctk.CTkLabel(
@@ -263,6 +280,7 @@ class OnboardingWizard(ctk.CTkToplevel):
         groq     = self._groq_var.get().strip()
         together = self._together_var.get().strip()
         vault    = self._vault_path.strip()
+        location = self._location_var.get().strip()
 
         if not gemini:
             self._status.configure(
@@ -273,7 +291,7 @@ class OnboardingWizard(ctk.CTkToplevel):
                 text="⚠  OBSIDIAN VAULT DIRECTORY is required.", text_color=_RED)
             return
 
-        self._write_env(gemini, groq, together, vault)
+        self._write_env(gemini, groq, together, vault, location)
         self._status.configure(
             text="✔  Core initialized. Booting Albedo...", text_color=_GREEN)
         self._saved = True
@@ -301,6 +319,7 @@ class OnboardingWizard(ctk.CTkToplevel):
         groq: str,
         together: str,
         vault: str,
+        location: str = "",
     ) -> None:
         """Merge new values into .env, preserving unrelated keys."""
         updates = {
@@ -308,6 +327,7 @@ class OnboardingWizard(ctk.CTkToplevel):
             "GROQ_API_KEY":        groq,
             "TOGETHER_API_KEY":    together,
             "OBSIDIAN_VAULT_PATH": vault,
+            "NODE_LOCATION":       location or "an unspecified location",
         }
 
         existing_lines: list[str] = []
