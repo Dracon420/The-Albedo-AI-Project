@@ -89,20 +89,25 @@ def _split_sentences(text: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Active-process tracker (enables hard-kill on abort)
+# Active-process tracker and stop flag (enables hard-kill on abort)
 # ---------------------------------------------------------------------------
 
 _active_proc: subprocess.Popen | None = None
 _proc_lock   = threading.Lock()
+_stop_event  = threading.Event()   # set by stop_audio(); cleared at each new utterance
 
 
 def stop_audio() -> None:
     """
-    Hard-kill any active Piper synthesis subprocess and stop sounddevice
-    playback immediately.  Covers both the edge-tts and Piper paths since
-    all playback is routed through sd.play().  Safe to call from any thread.
+    Immediately halt all TTS activity — edge-tts synthesis queue, any active
+    Piper subprocess, and sounddevice playback.  Safe to call from any thread.
+
+    Sets _stop_event so the producer thread in speak_streamed() stops
+    synthesising further sentences and the consumer loop exits after the
+    current sd.play() returns (which sd.stop() unblocks instantly).
     """
     global _active_proc
+    _stop_event.set()           # Signal speak / speak_streamed to halt
     with _proc_lock:
         proc = _active_proc
     if proc is not None:
@@ -111,7 +116,7 @@ def stop_audio() -> None:
         except Exception:
             pass
     try:
-        sd.stop()
+        sd.stop()               # Unblocks any blocking sd.play() immediately
     except Exception:
         pass
 
@@ -284,6 +289,7 @@ def speak(text: str, device: int | None = None,
     Synthesise the full text and play it as one block.
     Kept for compatibility; prefer speak_streamed() for multi-sentence responses.
     """
+    _stop_event.clear()
     text = _sanitize_for_tts(text)
     if not text:
         return
@@ -293,6 +299,8 @@ def speak(text: str, device: int | None = None,
     result = _synthesize_sentence(text, model, edge_voice)
     if result is None:
         print(f"[Albedo] {text}")
+        return
+    if _stop_event.is_set():
         return
     audio, sr = result
     sd.play(_resampled(audio, sr), samplerate=AUDIO_SAMPLE_RATE,
@@ -308,7 +316,13 @@ def speak_streamed(text: str, device: int | None = None,
     Piper fallback) and enqueues the resulting audio array.  The main thread
     dequeues and plays each chunk immediately so first audio starts as soon
     as the opening sentence finishes synthesis.
+
+    stop_audio() sets _stop_event which causes:
+      - the producer to skip remaining sentences immediately
+      - sd.stop() to unblock the current blocking sd.play()
+      - the consumer loop to exit at the next iteration check
     """
+    _stop_event.clear()
     text = _sanitize_for_tts(text)
     if not text:
         return
@@ -321,11 +335,11 @@ def speak_streamed(text: str, device: int | None = None,
 
     if len(sentences) == 1:
         result = _synthesize_sentence(sentences[0], model, edge_voice)
-        if result:
+        if result and not _stop_event.is_set():
             audio, sr = result
             sd.play(_resampled(audio, sr), samplerate=AUDIO_SAMPLE_RATE,
                     blocking=True, device=device)
-        else:
+        elif result is None:
             print(f"[Albedo] {text}")
         return
 
@@ -333,20 +347,23 @@ def speak_streamed(text: str, device: int | None = None,
 
     def _producer() -> None:
         for sentence in sentences:
+            if _stop_event.is_set():
+                break
             if not sentence:
                 continue
             audio_q.put(_synthesize_sentence(sentence, model, edge_voice))
-        audio_q.put(None)  # sentinel
+        audio_q.put(None)  # sentinel always — consumer must see it
 
     threading.Thread(target=_producer, daemon=True).start()
 
     while True:
         item = audio_q.get()
-        if item is None:
+        if item is None or _stop_event.is_set():
             break
         audio, sr = item
-        sd.play(_resampled(audio, sr), samplerate=AUDIO_SAMPLE_RATE,
-                blocking=True, device=device)
+        if not _stop_event.is_set():
+            sd.play(_resampled(audio, sr), samplerate=AUDIO_SAMPLE_RATE,
+                    blocking=True, device=device)
 
 
 def synthesize_to_bytes(text: str,

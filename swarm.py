@@ -53,10 +53,27 @@ def check_connection(timeout: float = 1.5) -> bool:
 # Module-level singletons
 # ---------------------------------------------------------------------------
 
-_keys_loaded    = False
-_gemini_module  = None   # google.generativeai (configured)
-_groq_client    = None   # groq.Groq instance
-_together_client = None  # together.Together instance
+_keys_loaded     = False
+_gemini_module   = None   # google.generativeai (configured)
+_groq_client     = None   # groq.Groq instance
+_together_client = None   # together.Together instance
+_search_tool     = None   # list[protos.Tool] or None if grounding unavailable
+
+
+def _build_search_tool(genai_module) -> list | None:
+    """
+    Construct the Google Search Retrieval tool using the SDK's proto types.
+    Returns a one-element list ready for the tools= parameter, or None if
+    the current SDK version doesn't expose the required protos.
+    """
+    try:
+        tool = genai_module.protos.Tool(
+            google_search_retrieval=genai_module.protos.GoogleSearchRetrieval()
+        )
+        return [tool]
+    except Exception as exc:
+        print(f"[swarm] Search grounding build failed: {exc}")
+        return None
 
 
 def load_swarm_keys() -> None:
@@ -64,7 +81,7 @@ def load_swarm_keys() -> None:
     Load API keys from .env and initialise each provider client.
     Safe to call multiple times — only runs once per process.
     """
-    global _keys_loaded, _gemini_module, _groq_client, _together_client
+    global _keys_loaded, _gemini_module, _groq_client, _together_client, _search_tool
     if _keys_loaded:
         return
 
@@ -79,7 +96,9 @@ def load_swarm_keys() -> None:
             import google.generativeai as genai
             genai.configure(api_key=gemini_key)
             _gemini_module = genai
-            print("[swarm] Gemini client ready.")
+            _search_tool   = _build_search_tool(genai)
+            print("[swarm] Gemini client ready."
+                  + (" (search grounding ON)" if _search_tool else " (search grounding OFF)"))
         except Exception as exc:
             print(f"[swarm] Gemini init failed: {exc}")
 
@@ -115,13 +134,12 @@ def query_gemini(prompt: str) -> str:
     if _gemini_module is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
-        model    = _gemini_module.GenerativeModel(
-            "gemini-1.5-flash",
-            tools="google_search_retrieval",
-        )
+        kwargs = {"tools": _search_tool} if _search_tool else {}
+        model    = _gemini_module.GenerativeModel("gemini-1.5-flash", **kwargs)
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as exc:
+        print(f"[API ERROR]: {exc}")
         return f"[swarm] Gemini error: {exc}"
 
 
@@ -208,10 +226,11 @@ def autonomous_commander(user_prompt: str) -> dict:
         return fallback
 
     try:
+        kwargs = {"tools": _search_tool} if _search_tool else {}
         model = _gemini_module.GenerativeModel(
             "gemini-1.5-flash",
             system_instruction=_SYSTEM_INSTRUCTION,
-            tools="google_search_retrieval",
+            **kwargs,
         )
         raw = model.generate_content(user_prompt).text.strip()
 
@@ -231,4 +250,5 @@ def autonomous_commander(user_prompt: str) -> dict:
 
     except Exception as exc:
         print(f"[ROUTER EXCEPTION]: {exc}")
+        print(f"[API ERROR]: {exc}")
         return fallback

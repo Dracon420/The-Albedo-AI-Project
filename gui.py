@@ -451,6 +451,61 @@ class ConsoleDialog(ctk.CTkToplevel):
         self.destroy()
 
 
+# ── Radial telemetry dial ──────────────────────────────────────────────────
+
+class RadialDial(tk.Canvas):
+    """
+    Circular arc gauge drawn on a tk.Canvas.
+    set(value) accepts 0.0 – 1.0 and redraws immediately.
+    The arc starts at 12 o'clock and sweeps clockwise.
+    """
+
+    def __init__(self, parent, size: int = 64,
+                 fill_color: str = C_CYAN,
+                 track_color: str = "#1A1A1A",
+                 ring_width: int = 6, **kw) -> None:
+        super().__init__(parent, width=size, height=size,
+                         bg=C_BG, highlightthickness=0, **kw)
+        self._size  = size
+        self._fill  = fill_color
+        self._track = track_color
+        self._rw    = ring_width
+        self._value = 0.0
+        self._draw()
+
+    def set(self, value: float) -> None:
+        self._value = max(0.0, min(1.0, float(value)))
+        self._draw()
+
+    def get(self) -> float:
+        return self._value
+
+    def _draw(self) -> None:
+        self.delete("all")
+        m  = self._rw + 3
+        x0, y0, x1, y1 = m, m, self._size - m, self._size - m
+
+        # Background track — full ring
+        self.create_arc(x0, y0, x1, y1,
+                        start=90, extent=359.9,
+                        outline=self._track, width=self._rw,
+                        style=tk.ARC)
+
+        # Value arc — clockwise from 12 o'clock
+        if self._value > 0:
+            self.create_arc(x0, y0, x1, y1,
+                            start=90, extent=-self._value * 359.9,
+                            outline=self._fill, width=self._rw,
+                            style=tk.ARC)
+
+        # Centre percentage label
+        cx = cy = self._size // 2
+        self.create_text(cx, cy,
+                         text=f"{int(self._value * 100)}%",
+                         fill=self._fill,
+                         font=("Consolas", 8, "bold"))
+
+
 # ── Main window ────────────────────────────────────────────────────────────
 
 class AlbedoGUI(ctk.CTk):
@@ -546,12 +601,12 @@ class AlbedoGUI(ctk.CTk):
     # ── Live HUD telemetry ─────────────────────────────────────────────────
 
     def _update_hud_bars(self) -> None:
-        """Refresh the CPU progress bar every 2 s using psutil."""
+        """Refresh the RYZEN 5 radial dial every 2 s using psutil CPU %."""
         if self._closing:
             return
         try:
             import psutil
-            self._hud_cpu_bar.set(psutil.cpu_percent() / 100.0)
+            self._hud_cpu_dial.set(psutil.cpu_percent() / 100.0)
         except Exception:
             pass
         self.after(2000, self._update_hud_bars)
@@ -574,26 +629,34 @@ class AlbedoGUI(ctk.CTk):
         hdr.grid_columnconfigure(4, weight=3)
         hdr.grid_rowconfigure(0, weight=1)
 
-        # ── Left panel — local hardware telemetry ─────────────────────────
+        # ── Left panel — radial hardware telemetry dials ──────────────────
         left = ctk.CTkFrame(hdr, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="nsew", padx=(16, 0), pady=10)
+        left.grid(row=0, column=0, sticky="nsew", padx=(12, 0), pady=6)
 
-        _lbl = {"font": ("Consolas", 10), "text_color": C_CYAN, "anchor": "w"}
-        ctk.CTkLabel(left, text="RYZEN 5 CORE", **_lbl).pack(fill="x")
-        self._hud_cpu_bar = ctk.CTkProgressBar(
-            left, height=7, progress_color=C_CYAN, fg_color=C_BORDER)
-        self._hud_cpu_bar.set(0.42)
-        self._hud_cpu_bar.pack(fill="x", pady=(1, 7))
+        dials_row = ctk.CTkFrame(left, fg_color="transparent")
+        dials_row.pack(anchor="center")
 
-        ctk.CTkLabel(left, text="RTX 2060 VRAM", **_lbl).pack(fill="x")
-        self._hud_vram_bar = ctk.CTkProgressBar(
-            left, height=7, progress_color=C_PURPLE, fg_color=C_BORDER)
-        self._hud_vram_bar.set(0.31)
-        self._hud_vram_bar.pack(fill="x", pady=(1, 7))
+        cpu_col = ctk.CTkFrame(dials_row, fg_color="transparent")
+        cpu_col.pack(side="left", padx=(0, 6))
+        self._hud_cpu_dial = RadialDial(cpu_col, size=66,
+                                        fill_color=C_CYAN, track_color="#1A1A1A")
+        self._hud_cpu_dial.set(0.42)
+        self._hud_cpu_dial.pack()
+        ctk.CTkLabel(cpu_col, text="RYZEN 5",
+                     font=("Consolas", 9), text_color=C_CYAN).pack()
+
+        vram_col = ctk.CTkFrame(dials_row, fg_color="transparent")
+        vram_col.pack(side="left")
+        self._hud_vram_dial = RadialDial(vram_col, size=66,
+                                         fill_color=C_PURPLE, track_color="#1A1A1A")
+        self._hud_vram_dial.set(0.31)
+        self._hud_vram_dial.pack()
+        ctk.CTkLabel(vram_col, text="RTX 2060",
+                     font=("Consolas", 9), text_color=C_PURPLE).pack()
 
         ctk.CTkLabel(left, text="LOCAL NODE: STABLE",
-                     font=("Consolas", 10), text_color=C_GREEN,
-                     anchor="w").pack(fill="x")
+                     font=("Consolas", 9), text_color=C_GREEN,
+                     anchor="center").pack(pady=(3, 0))
 
         # ── Divider (left) ────────────────────────────────────────────────
         ctk.CTkFrame(hdr, fg_color=C_BORDER, width=1).grid(
