@@ -199,7 +199,7 @@ def query_gemini(prompt: str) -> str:
             model_name=_gemini_model, generation_config=gen_cfg)
         return model.generate_content(prompt).text.strip()
     except Exception as exc:
-        print(f"[API ERROR]: {exc}")
+        print(f"\n[CRITICAL DEBUG] Raw Swarm Exception: {exc}\n")
         return _UPLINK_ERROR
 
 
@@ -289,7 +289,7 @@ def direct_gemini_search(prompt: str) -> str:
         response = model.generate_content(final_prompt)
         return response.text.strip()
     except Exception as exc:
-        print(f"[swarm] direct_gemini_search error: {exc}")
+        print(f"\n[CRITICAL DEBUG] Raw Swarm Exception: {exc}\n")
         return _UPLINK_ERROR
 
 
@@ -345,7 +345,7 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
             on_sentence(buffer.strip())
         return full_text.strip()
     except Exception as exc:
-        print(f"[API ERROR]: {exc}")
+        print(f"\n[CRITICAL DEBUG] Raw Swarm Exception: {exc}\n")
         return _UPLINK_ERROR
 
 
