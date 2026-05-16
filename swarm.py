@@ -39,11 +39,31 @@ from dotenv import load_dotenv
 # Load .env now so NODE_LOCATION is available before any function is called.
 load_dotenv()
 
-_location = os.getenv("NODE_LOCATION", "").strip() or "an unspecified location"
-_local_context = (
-    f" [SYSTEM OVERRIDE: The user is located in {_location}. "
-    "Use Google Search to provide data for this exact location.]"
-)
+_location = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
+
+# ---------------------------------------------------------------------------
+# Semantic location interceptor
+# Physically rewrites location-relative trigger phrases in the user string
+# before API transmission so Gemini never sees "near me" or "my location".
+# ---------------------------------------------------------------------------
+
+_LOCATION_TRIGGERS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'\bnear me\b',     re.IGNORECASE), f'in {_location}'),
+    (re.compile(r'\bmy location\b', re.IGNORECASE), _location),
+    (re.compile(r'\bwhere I am\b',  re.IGNORECASE), _location),
+    (re.compile(r'\bmy area\b',     re.IGNORECASE), f'the {_location} area'),
+    (re.compile(r'\bmy city\b',     re.IGNORECASE), _location),
+    (re.compile(r'\bmy town\b',     re.IGNORECASE), _location),
+    (re.compile(r'\bnearby\b',      re.IGNORECASE), f'near {_location}'),
+    (re.compile(r'\blocally\b',     re.IGNORECASE), f'in {_location}'),
+]
+
+
+def _mutate_location(prompt: str) -> str:
+    """Replace location-relative phrases with the actual node location."""
+    for pattern, replacement in _LOCATION_TRIGGERS:
+        prompt = pattern.sub(replacement, prompt)
+    return prompt
 
 # ---------------------------------------------------------------------------
 # Connectivity watchdog
@@ -214,6 +234,7 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
     Never raises — returns an error string on failure.
     """
     load_swarm_keys()
+    prompt = _mutate_location(prompt)
     if _gemini_module is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
@@ -261,7 +282,6 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
 # ---------------------------------------------------------------------------
 
 _SYSTEM_INSTRUCTION = (
-    _local_context + "\n\n"
     "You are the Master Router for the Albedo construct. Analyze the user's prompt. "
     "You have a team of agents.\n"
     "1. 'groq': For writing heavy Python scripts or formatting data fast.\n"
@@ -283,7 +303,6 @@ _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 _VALID_ROUTES = frozenset({"direct", "groq", "together", "local", "memory"})
 
 _DIRECT_ANSWER_INSTRUCTION = (
-    _local_context + "\n\n"
     "You are Albedo, a Spartan-Class AI construct. Answer the user's question directly and concisely. "
     "Keep responses under 3 sentences unless explicitly asked for detail. "
     "Never use markdown formatting. Write in plain conversational prose only."
@@ -303,6 +322,7 @@ def autonomous_commander(user_prompt: str) -> dict:
     so the local Ollama+RAG pipeline always has a safe fallback.
     """
     load_swarm_keys()
+    user_prompt = _mutate_location(user_prompt)
     fallback = {"route": "local", "payload": user_prompt}
 
     if not check_connection():
