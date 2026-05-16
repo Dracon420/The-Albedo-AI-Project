@@ -523,8 +523,9 @@ class AlbedoGUI(ctk.CTk):
         self._voice_stop   = threading.Event()
         self._abort_flag   = threading.Event()
         self._canvas       = None   # no orb canvas in dashboard layout
-        self._hud_ram_dial = None   # set by _build_ui
-        self._hud_ssd_dial = None   # set by _build_ui
+        self._hud_ram_dial      = None   # set by _build_ui
+        self._hud_ssd_dial      = None   # set by _build_ui
+        self._gemini_tbar_lbl   = None   # set by _build_ui
         self._audio_stream = None   # AudioStream, lazy-init
         self._settings_win = None
         self._hardware_win = None
@@ -611,6 +612,22 @@ class AlbedoGUI(ctk.CTk):
             "Press MIC to start recording. Press STOP (or go silent) to send.")
 
     # ── Live HUD telemetry ─────────────────────────────────────────────────
+
+    def _set_gemini_active(self) -> None:
+        """Mark the GEMINI telemetry tile as active (called on main thread)."""
+        try:
+            self._gemini_tbar_lbl.configure(
+                text="GEMINI: ACTIVE", text_color=C_CYAN)
+        except Exception:
+            pass
+
+    def _set_gemini_standby(self) -> None:
+        """Revert the GEMINI telemetry tile to standby (called on main thread)."""
+        try:
+            self._gemini_tbar_lbl.configure(
+                text="GEMINI: STANDBY", text_color=C_ORANGE)
+        except Exception:
+            pass
 
     def _update_hud_bars(self) -> None:
         """Refresh all four HUD gauges every 2 s via psutil + GPUtil."""
@@ -717,7 +734,6 @@ class AlbedoGUI(ctk.CTk):
 
         for _txt, _col in [
             ("UPLINK: SECURE",  C_CYAN),
-            ("GEMINI: STANDBY", C_ORANGE),
             ("EDGE-TTS: READY", C_GREEN),
             ("VEC_DB: ONLINE",  C_CYAN),
         ]:
@@ -726,6 +742,17 @@ class AlbedoGUI(ctk.CTk):
             ctk.CTkLabel(_tc, text=_txt, text_color=_col,
                          font=("Consolas", 11, "bold"),
                          anchor="center").pack(fill="x")
+
+        # GEMINI tile — kept as an instance attribute so _set_gemini_active()
+        # can update it live without rebuilding the widget.
+        _gtc = ctk.CTkFrame(tbar, fg_color="transparent")
+        _gtc.pack(side="left", expand=True, fill="x")
+        self._gemini_tbar_lbl = ctk.CTkLabel(
+            _gtc, text="GEMINI: STANDBY",
+            font=("Consolas", 11, "bold"),
+            text_color=C_ORANGE, anchor="center",
+        )
+        self._gemini_tbar_lbl.pack(fill="x")
 
         # Thin 1 px structural border below the dashboard
         ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x", expand=False)
@@ -1267,6 +1294,7 @@ class AlbedoGUI(ctk.CTk):
         _offline_mode = False
         try:
             from swarm import autonomous_commander, query_gemini_stream, query_groq, query_together
+            self._ui(lambda: self._set_gemini_active())
             result       = autonomous_commander(query)
             route        = result["route"]
             payload      = result["payload"]
@@ -1284,15 +1312,21 @@ class AlbedoGUI(ctk.CTk):
                             audio_queue.put((sentence, _voice, _dev))
                     self._audio_streamed_for_current_response = True
                     self._ui(lambda: self._set_state("speaking"))
-                    return query_gemini_stream(payload, on_sentence=_on_sent)
-                return query_gemini_stream(payload)
+                    result_text = query_gemini_stream(payload, on_sentence=_on_sent)
+                    self._ui(lambda: self._set_gemini_standby())
+                    return result_text
+                result_text = query_gemini_stream(payload)
+                self._ui(lambda: self._set_gemini_standby())
+                return result_text
             if route == "groq":
                 response = "[GROQ EXECUTING]\n" + query_groq(payload)
                 log_trace(query, route, success=not response.startswith("[swarm]"))
+                self._ui(lambda: self._set_gemini_standby())
                 return response
             if route == "together":
                 response = "[TOGETHER EVALUATING]\n" + query_together(payload)
                 log_trace(query, route, success=not response.startswith("[swarm]"))
+                self._ui(lambda: self._set_gemini_standby())
                 return response
             if route == "memory":
                 try:
@@ -1301,14 +1335,18 @@ class AlbedoGUI(ctk.CTk):
                     if chunks:
                         body = "\n\n---\n\n".join(chunks)
                         log_trace(query, route, success=True)
+                        self._ui(lambda: self._set_gemini_standby())
                         return f"[OBSIDIAN VAULT]\n{body}"
                     log_trace(query, route, success=False)
+                    self._ui(lambda: self._set_gemini_standby())
                     return "[OBSIDIAN VAULT] No relevant notes found. Try 'index vault' first."
                 except Exception as exc:
                     print(f"[gui] Memory search error: {exc}")
                     log_trace(query, route, success=False)
             # route == "local" — fall through to Ollama below
+            self._ui(lambda: self._set_gemini_standby())
         except Exception as exc:
+            self._ui(lambda: self._set_gemini_standby())
             print(f"[gui] Commander routing error (falling back to local): {exc}")
 
         from albedo.pipeline import run as pipeline_run

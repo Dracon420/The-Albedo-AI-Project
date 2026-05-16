@@ -47,21 +47,24 @@ _location = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
 # before API transmission so Gemini never sees "near me" or "my location".
 # ---------------------------------------------------------------------------
 
-_LOCATION_TRIGGERS: list[tuple[re.Pattern, str]] = [
-    (re.compile(r'\bnear me\b',     re.IGNORECASE), f'in {_location}'),
-    (re.compile(r'\bmy location\b', re.IGNORECASE), _location),
-    (re.compile(r'\bwhere I am\b',  re.IGNORECASE), _location),
-    (re.compile(r'\bmy area\b',     re.IGNORECASE), f'the {_location} area'),
-    (re.compile(r'\bmy city\b',     re.IGNORECASE), _location),
-    (re.compile(r'\bmy town\b',     re.IGNORECASE), _location),
-    (re.compile(r'\bnearby\b',      re.IGNORECASE), f'near {_location}'),
-    (re.compile(r'\blocally\b',     re.IGNORECASE), f'in {_location}'),
+# Single combined pattern for the three primary trigger phrases (directive spec)
+_RE_LOCATION_PRIMARY = re.compile(
+    r'\b(near me|my location|where I am)\b', re.IGNORECASE
+)
+# Secondary triggers mapped to tailored replacements
+_LOCATION_SECONDARY: list[tuple[re.Pattern, str]] = [
+    (re.compile(r'\bmy area\b',  re.IGNORECASE), f'the {_location} area'),
+    (re.compile(r'\bmy city\b',  re.IGNORECASE), _location),
+    (re.compile(r'\bmy town\b',  re.IGNORECASE), _location),
+    (re.compile(r'\bnearby\b',   re.IGNORECASE), f'near {_location}'),
+    (re.compile(r'\blocally\b',  re.IGNORECASE), f'in {_location}'),
 ]
 
 
 def _mutate_location(prompt: str) -> str:
     """Replace location-relative phrases with the actual node location."""
-    for pattern, replacement in _LOCATION_TRIGGERS:
+    prompt = _RE_LOCATION_PRIMARY.sub(f'in {_location}', prompt)
+    for pattern, replacement in _LOCATION_SECONDARY:
         prompt = pattern.sub(replacement, prompt)
     return prompt
 
@@ -91,26 +94,28 @@ _search_tool     = None   # list[protos.Tool] or None if grounding unavailable
 
 def _build_search_tool(genai_module) -> list | None:
     """
-    Construct the Google Search tool for Gemini grounding.
-    Tries the modern dict syntax first (SDK >= 0.8), falls back to protos.
-    Returns a one-element list ready for tools=, or None if both fail.
+    Construct the Google Search grounding tool.
+
+    Does NOT create a dummy GenerativeModel to validate — model construction
+    is not a reliable validation method and wastes resources.  Tries the
+    protos syntax first (stable across SDK versions), then falls back to the
+    modern dict syntax (SDK >= 0.8).
+
+    NOTE: search grounding is incompatible with response_mime_type="application/json".
+    Only pass this tool to models that return free-form text (query_gemini_stream),
+    NOT to the JSON-mode commander.
     """
-    # Modern SDK syntax
-    try:
-        model = genai_module.GenerativeModel(
-            "gemini-1.5-flash",
-            tools=[{"google_search": {}}],
-        )
-        _ = model  # just validate; discard the instance
-        return [{"google_search": {}}]
-    except Exception:
-        pass
-    # Legacy protos syntax
     try:
         tool = genai_module.protos.Tool(
             google_search_retrieval=genai_module.protos.GoogleSearchRetrieval()
         )
+        print("[swarm] Search grounding: protos syntax.")
         return [tool]
+    except Exception:
+        pass
+    try:
+        print("[swarm] Search grounding: dict syntax.")
+        return [{"google_search": {}}]
     except Exception as exc:
         print(f"[swarm] Search grounding build failed: {exc}")
         return None
@@ -282,20 +287,20 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
 # ---------------------------------------------------------------------------
 
 _SYSTEM_INSTRUCTION = (
-    "You are the Master Router for the Albedo construct. Analyze the user's prompt. "
-    "You have a team of agents.\n"
-    "1. 'groq': For writing heavy Python scripts or formatting data fast.\n"
-    "2. 'together': For complex debugging or logic puzzles.\n"
-    "3. 'local': For local system tasks (e.g., 'scan hardware', 'optimize PC').\n"
-    "4. 'direct': If the user asks a general question, for the weather, or casual "
-    "conversation, answer it yourself directly. "
-    "Always use the Google Search tool for current events, weather, or any time-sensitive query.\n"
-    "5. 'memory': If the user asks about past projects, specific Albedo configurations, "
-    "notes, or anything that implies retrieving personal stored knowledge. "
-    "The payload must be the specific search query to look up.\n\n"
-    "Keep all responses strictly under 3 sentences unless explicitly asked for detail.\n"
-    "You MUST respond ONLY in valid JSON format: "
-    '{"route": "agent_name", "payload": "The prompt to send to the agent, or your direct answer"}'
+    "You are Albedo, a Spartan-Class AI master router. "
+    "NEVER introduce yourself. NEVER explain your reasoning or search process. "
+    "Analyze the user prompt and respond ONLY with valid JSON.\n\n"
+    "Route to one of:\n"
+    "  'groq'    — Python scripts or fast data formatting\n"
+    "  'together' — complex debugging or logic puzzles\n"
+    "  'local'   — local system tasks (scan hardware, optimize PC)\n"
+    "  'direct'  — general questions, weather, casual conversation — answer directly\n"
+    "  'memory'  — past projects, Albedo configs, personal notes\n\n"
+    "Rules:\n"
+    "  - Keep all answers under 2 sentences.\n"
+    "  - Format weather as: 'The weather in [Location] is [Temp] with [Conditions].'\n"
+    "  - ONLY output JSON. No prose, no preamble.\n"
+    'Respond ONLY: {"route": "agent_name", "payload": "direct answer or forwarded prompt"}'
 )
 
 _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
@@ -303,8 +308,10 @@ _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 _VALID_ROUTES = frozenset({"direct", "groq", "together", "local", "memory"})
 
 _DIRECT_ANSWER_INSTRUCTION = (
-    "You are Albedo, a Spartan-Class AI construct. Answer the user's question directly and concisely. "
-    "Keep responses under 3 sentences unless explicitly asked for detail. "
+    "You are Albedo, a Spartan-Class AI. "
+    "NEVER introduce yourself. NEVER explain your search process or thought process. "
+    "Provide ONLY the direct answer. Keep all responses under 2 sentences. "
+    "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
     "Never use markdown formatting. Write in plain conversational prose only."
 )
 
@@ -341,12 +348,14 @@ def autonomous_commander(user_prompt: str) -> dict:
         except Exception:
             cmd_cfg = _gemini_module.GenerationConfig(temperature=0.1)
 
-        kwargs = {"tools": _search_tool} if _search_tool else {}
+        # No search tools here — JSON mode (response_mime_type) and grounding
+        # are mutually exclusive on Gemini 1.5 Flash; grounding is silently
+        # dropped when both are present.  The commander only routes — it does
+        # not need live web data.
         model = _gemini_module.GenerativeModel(
             "gemini-1.5-flash",
             system_instruction=_SYSTEM_INSTRUCTION,
             generation_config=cmd_cfg,
-            **kwargs,
         )
         raw = model.generate_content(user_prompt).text.strip()
 
