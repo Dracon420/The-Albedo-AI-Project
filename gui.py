@@ -56,11 +56,11 @@ _VOICES_DIR   = ROOT / "voices"
 PERSONA_MAP: dict[str, dict[str, str]] = {
     "Cortana": {
         "voice":     str(_VOICES_DIR / "en_US-kristin-medium.onnx"),
-        "wake_word": "cortana",
+        "wake_word": "hey cortana",
     },
     "Jarvis": {
         "voice":     str(_VOICES_DIR / "en_US-ryan-medium.onnx"),
-        "wake_word": "jarvis",
+        "wake_word": "hey jarvis",
     },
 }
 _PERSONA_DISPLAY = list(PERSONA_MAP.keys())  # ["Cortana", "Jarvis"]
@@ -522,6 +522,8 @@ class AlbedoGUI(ctk.CTk):
         self._voice_stop   = threading.Event()
         self._abort_flag   = threading.Event()
         self._canvas       = None   # no orb canvas in dashboard layout
+        self._hud_ram_dial = None   # set by _build_ui
+        self._hud_ssd_dial = None   # set by _build_ui
         self._audio_stream = None   # AudioStream, lazy-init
         self._settings_win = None
         self._hardware_win = None
@@ -601,12 +603,16 @@ class AlbedoGUI(ctk.CTk):
     # ── Live HUD telemetry ─────────────────────────────────────────────────
 
     def _update_hud_bars(self) -> None:
-        """Refresh the RYZEN 5 radial dial every 2 s using psutil CPU %."""
+        """Refresh all four HUD gauges every 2 s via psutil."""
         if self._closing:
             return
         try:
             import psutil
             self._hud_cpu_dial.set(psutil.cpu_percent() / 100.0)
+            if self._hud_ram_dial:
+                self._hud_ram_dial.set(psutil.virtual_memory().percent / 100.0)
+            if self._hud_ssd_dial:
+                self._hud_ssd_dial.set(psutil.disk_usage("C:").percent / 100.0)
         except Exception:
             pass
         self.after(2000, self._update_hud_bars)
@@ -625,34 +631,31 @@ class AlbedoGUI(ctk.CTk):
         dash.grid_columnconfigure(2, weight=1)
         dash.grid_rowconfigure(0, weight=1)
 
-        # ── Col 0 — Left flank: radial hardware telemetry dials ──────────
+        # ── Col 0 — Left flank: 4-gauge hardware task manager ────────────
         left = ctk.CTkFrame(dash, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="e", padx=(16, 12), pady=10)
+        left.grid(row=0, column=0, sticky="ew", padx=(8, 0), pady=8)
 
         dials_row = ctk.CTkFrame(left, fg_color="transparent")
-        dials_row.pack(anchor="e")
+        dials_row.pack(fill="x", expand=True)
 
-        cpu_col = ctk.CTkFrame(dials_row, fg_color="transparent")
-        cpu_col.pack(side="left", padx=(0, 6))
-        self._hud_cpu_dial = RadialDial(cpu_col, size=66,
-                                        fill_color=C_CYAN, track_color="#1A1A1A")
-        self._hud_cpu_dial.set(0.42)
-        self._hud_cpu_dial.pack()
-        ctk.CTkLabel(cpu_col, text="RYZEN 5",
-                     font=("Consolas", 9), text_color=C_CYAN).pack()
+        def _make_dial(parent, label: str, color: str) -> RadialDial:
+            col = ctk.CTkFrame(parent, fg_color="transparent")
+            col.pack(side="left", expand=True, fill="x")
+            dial = RadialDial(col, size=60, fill_color=color, track_color="#1A1A1A")
+            dial.set(0.0)
+            dial.pack()
+            ctk.CTkLabel(col, text=label,
+                         font=("Consolas", 9), text_color=color).pack()
+            return dial
 
-        vram_col = ctk.CTkFrame(dials_row, fg_color="transparent")
-        vram_col.pack(side="left")
-        self._hud_vram_dial = RadialDial(vram_col, size=66,
-                                         fill_color=C_PURPLE, track_color="#1A1A1A")
-        self._hud_vram_dial.set(0.31)
-        self._hud_vram_dial.pack()
-        ctk.CTkLabel(vram_col, text="RTX 2060",
-                     font=("Consolas", 9), text_color=C_PURPLE).pack()
+        self._hud_cpu_dial  = _make_dial(dials_row, "RYZEN 5",  C_CYAN)
+        self._hud_vram_dial = _make_dial(dials_row, "RTX 2060", C_PURPLE)
+        self._hud_ram_dial  = _make_dial(dials_row, "SYS RAM",  C_GREEN)
+        self._hud_ssd_dial  = _make_dial(dials_row, "SSD C:",   C_ORANGE)
 
         ctk.CTkLabel(left, text="LOCAL NODE: STABLE",
                      font=("Consolas", 9), text_color=C_GREEN,
-                     anchor="e").pack(fill="x", pady=(3, 0))
+                     anchor="center").pack(fill="x", pady=(3, 0))
 
         # ── Col 1 — Center: logo + title + state chip + LOGS ─────────────
         center = ctk.CTkFrame(dash, fg_color="transparent")
@@ -693,17 +696,17 @@ class AlbedoGUI(ctk.CTk):
 
         # ── Col 2 — Right flank: swarm uplink telemetry ───────────────────
         right = ctk.CTkFrame(dash, fg_color="transparent")
-        right.grid(row=0, column=2, sticky="w", padx=(12, 16), pady=10)
+        right.grid(row=0, column=2, sticky="ew", padx=(0, 8), pady=8)
 
         _rlbl = {"font": ("Consolas", 10), "anchor": "w"}
         ctk.CTkLabel(right, text="UPLINK: SECURE",
-                     text_color=C_CYAN,   **_rlbl).pack(fill="x")
+                     text_color=C_CYAN,   **_rlbl).pack(fill="x", padx=(12, 0))
         ctk.CTkLabel(right, text="GEMINI: STANDBY",
-                     text_color=C_ORANGE, **_rlbl).pack(fill="x")
+                     text_color=C_ORANGE, **_rlbl).pack(fill="x", padx=(12, 0))
         ctk.CTkLabel(right, text="EDGE-TTS: READY",
-                     text_color=C_GREEN,  **_rlbl).pack(fill="x")
+                     text_color=C_GREEN,  **_rlbl).pack(fill="x", padx=(12, 0))
         ctk.CTkLabel(right, text="VEC_DB: ONLINE",
-                     text_color=C_CYAN,   **_rlbl).pack(fill="x")
+                     text_color=C_CYAN,   **_rlbl).pack(fill="x", padx=(12, 0))
 
         # Thin 1 px structural border below the dashboard
         ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x", expand=False)
@@ -1105,14 +1108,14 @@ class AlbedoGUI(ctk.CTk):
                          args=(query, use_web), daemon=True).start()
 
     def _handle_abort(self) -> None:
-        """Hard-kill TTS audio, set the abort flag, reset state."""
+        """Set abort flag, kill TTS, log, instantly restore SEND button."""
         self._abort_flag.set()
         try:
             from albedo.audio.tts import stop_audio
             stop_audio()
-        except Exception:
-            pass
-        self._log_append("system", "[SYS] Process aborted by user.")
+        except Exception as exc:
+            print(f"[gui] abort stop_audio error: {exc}")
+        self._log_append("system", "[ABORT] Operation terminated by user.")
         self._set_state("standby")
 
     # ── Voice input ────────────────────────────────────────────────────────
@@ -1473,12 +1476,12 @@ class AlbedoGUI(ctk.CTk):
         self._hardware_win = HardwareSettingsDialog(self)
 
     def _toggle_audio_mute(self) -> None:
-        """Toggle TTS mute. Immediately kills any playing audio via sd.stop()."""
+        """Toggle TTS mute. Kills edge-tts producer + sounddevice playback instantly."""
         self._audio_muted = not self._audio_muted
         if self._audio_muted:
             try:
-                import sounddevice as sd
-                sd.stop()
+                from albedo.audio.tts import stop_audio
+                stop_audio()
             except Exception:
                 pass
             self._audio_btn.configure(

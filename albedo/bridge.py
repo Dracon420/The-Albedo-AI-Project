@@ -76,7 +76,7 @@ _SYSTEM_PROMPT = (
 
 def _ollama_chat(message: str, history: list[dict] | None = None,
                  num_predict: int = _PREDICT_STANDARD,
-                 temperature: float = 0.8) -> str:
+                 temperature: float = 0.1) -> str:
     """
     Direct Ollama /api/chat — no open-interpreter dependency.
 
@@ -122,7 +122,7 @@ def direct_reply(message: str, history: list[dict] | None = None) -> str:
     150-token output cap makes "hello" loops physically impossible.
     """
     return _ollama_chat(message, history=history,
-                        num_predict=_PREDICT_CONVERSATIONAL, temperature=0.7)
+                        num_predict=_PREDICT_CONVERSATIONAL, temperature=0.1)
 
 
 # ── Open Interpreter (Bridge Control) ────────────────────────────────────────

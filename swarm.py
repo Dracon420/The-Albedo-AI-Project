@@ -62,10 +62,21 @@ _search_tool     = None   # list[protos.Tool] or None if grounding unavailable
 
 def _build_search_tool(genai_module) -> list | None:
     """
-    Construct the Google Search Retrieval tool using the SDK's proto types.
-    Returns a one-element list ready for the tools= parameter, or None if
-    the current SDK version doesn't expose the required protos.
+    Construct the Google Search tool for Gemini grounding.
+    Tries the modern dict syntax first (SDK >= 0.8), falls back to protos.
+    Returns a one-element list ready for tools=, or None if both fail.
     """
+    # Modern SDK syntax
+    try:
+        model = genai_module.GenerativeModel(
+            "gemini-1.5-flash",
+            tools=[{"google_search": {}}],
+        )
+        _ = model  # just validate; discard the instance
+        return [{"google_search": {}}]
+    except Exception:
+        pass
+    # Legacy protos syntax
     try:
         tool = genai_module.protos.Tool(
             google_search_retrieval=genai_module.protos.GoogleSearchRetrieval()
@@ -134,8 +145,10 @@ def query_gemini(prompt: str) -> str:
     if _gemini_module is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
-        kwargs = {"tools": _search_tool} if _search_tool else {}
-        model    = _gemini_module.GenerativeModel("gemini-1.5-flash", **kwargs)
+        gen_cfg  = _gemini_module.GenerationConfig(temperature=0.1)
+        kwargs   = {"tools": _search_tool} if _search_tool else {}
+        model    = _gemini_module.GenerativeModel(
+            "gemini-1.5-flash", generation_config=gen_cfg, **kwargs)
         response = model.generate_content(prompt)
         return response.text.strip()
     except Exception as exc:
@@ -228,10 +241,19 @@ def autonomous_commander(user_prompt: str) -> dict:
         return fallback
 
     try:
+        try:
+            cmd_cfg = _gemini_module.GenerationConfig(
+                temperature=0.1,
+                response_mime_type="application/json",
+            )
+        except Exception:
+            cmd_cfg = _gemini_module.GenerationConfig(temperature=0.1)
+
         kwargs = {"tools": _search_tool} if _search_tool else {}
         model = _gemini_module.GenerativeModel(
             "gemini-1.5-flash",
             system_instruction=_SYSTEM_INSTRUCTION,
+            generation_config=cmd_cfg,
             **kwargs,
         )
         raw = model.generate_content(user_prompt).text.strip()
