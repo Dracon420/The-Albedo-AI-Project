@@ -82,10 +82,12 @@ def _find_mme_device(device_name: str) -> int | None:
     """
     Return the sounddevice index of the MME-hosted version of a named device.
 
-    Windows exposes each physical audio device once per host API (MME,
-    DirectSound, WASAPI …).  This function scans the device list for an
-    input-capable device whose name matches and whose host API is MME.
-    Returns None if MME is not present or no matching device is found.
+    Windows truncates MME device names to ~31 chars, so the WASAPI name and
+    the MME name are often not identical.  Match strategy (in order):
+      1. Exact name match
+      2. MME name is a prefix of the WASAPI name (truncation case)
+      3. Longest common prefix >= 10 chars (aggressive truncation)
+    Returns None if MME is not present or no match found.
     """
     try:
         hostapis = sd.query_hostapis()
@@ -95,11 +97,29 @@ def _find_mme_device(device_name: str) -> int | None:
         )
         if mme_idx is None:
             return None
-        for i, d in enumerate(sd.query_devices()):
-            if (d["hostapi"] == mme_idx
-                    and d["max_input_channels"] > 0
-                    and d["name"] == device_name):
+
+        candidates = [
+            (i, d) for i, d in enumerate(sd.query_devices())
+            if d["hostapi"] == mme_idx and d["max_input_channels"] > 0
+        ]
+
+        # Pass 1: exact match
+        for i, d in candidates:
+            if d["name"] == device_name:
                 return i
+
+        # Pass 2: MME name is a leading substring of the WASAPI name
+        for i, d in candidates:
+            mme_name = d["name"]
+            if device_name.startswith(mme_name) and len(mme_name) >= 10:
+                return i
+
+        # Pass 3: WASAPI name starts with MME name (reverse truncation)
+        for i, d in candidates:
+            mme_name = d["name"]
+            if mme_name.startswith(device_name[:min(len(device_name), 20)]):
+                return i
+
     except Exception:
         pass
     return None
@@ -165,7 +185,26 @@ class AudioStream:
                 f"[capture] Trying native format {native_rate} Hz / {native_ch} ch..."
             )
 
-        # ── Attempt 2: native rate + native channels; resample in callback ───
+        # ── Attempt 2: probe USB-standard rates (48 kHz, then 44.1 kHz) ────
+        # USB mics are almost universally 48 kHz but sounddevice's query
+        # often returns 44100 as the reported default, causing a mismatch.
+        for probe_rate in [48000, 44100]:
+            if probe_rate == native_rate:
+                continue   # already tried implicitly via native_rate below
+            try:
+                probe_block           = int(probe_rate * AUDIO_CHUNK_MS / 1000)
+                self._native_rate     = probe_rate
+                self._native_channels = native_ch
+                self._open_stream(probe_rate, native_ch, probe_block, self._device)
+                print(
+                    f"[capture] Stream open at {probe_rate} Hz / {native_ch} ch "
+                    f"(WASAPI probe, resampling active)."
+                )
+                return
+            except sd.PortAudioError:
+                pass
+
+        # ── Attempt 3: device-reported native rate + native channels ─────────
         try:
             native_block          = int(native_rate * AUDIO_CHUNK_MS / 1000)
             self._native_rate     = native_rate
@@ -178,11 +217,11 @@ class AudioStream:
             return
         except sd.PortAudioError as e2:
             print(
-                f"[capture] Attempt 2 failed (native format): {e2}\n"
+                f"[capture] Attempt 3 failed (native format): {e2}\n"
                 "[capture] Trying MME host API fallback..."
             )
 
-        # ── Attempt 3: MME host API — most compatible Windows audio stack ────
+        # ── Attempt 4: MME host API — most compatible Windows audio stack ────
         mme_dev = _find_mme_device(dev_name)
         if mme_dev is not None:
             try:
@@ -193,7 +232,7 @@ class AudioStream:
                 print(f"[capture] Stream open via MME fallback (device index {mme_dev}).")
                 return
             except sd.PortAudioError as e3:
-                print(f"[capture] Attempt 3 failed (MME): {e3}")
+                print(f"[capture] Attempt 4 failed (MME): {e3}")
         else:
             print("[capture] MME host API not found on this system.")
 
