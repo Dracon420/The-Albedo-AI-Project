@@ -32,8 +32,22 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 
 from dotenv import load_dotenv
+
+# ---------------------------------------------------------------------------
+# Connectivity watchdog
+# ---------------------------------------------------------------------------
+
+def check_connection(timeout: float = 1.5) -> bool:
+    """Return True if the internet is reachable (TCP connect to 8.8.8.8:53)."""
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=timeout).close()
+        return True
+    except OSError:
+        return False
+
 
 # ---------------------------------------------------------------------------
 # Module-level singletons
@@ -185,6 +199,10 @@ def autonomous_commander(user_prompt: str) -> dict:
     """
     load_swarm_keys()
     fallback = {"route": "local", "payload": user_prompt}
+
+    if not check_connection():
+        print("[swarm] No internet — offline fallback engaged.")
+        return {"route": "local", "payload": user_prompt, "_offline": True}
 
     if _gemini_module is None:
         return fallback

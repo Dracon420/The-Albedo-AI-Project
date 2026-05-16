@@ -1,12 +1,17 @@
 """
 onboarding.py  --  Albedo First-Time Configuration Wizard
 
-Launched automatically on first boot when .env is absent or is missing
+Launched by AlbedoGUI._check_first_boot() when .env is absent or missing
 required keys (GEMINI_API_KEY, OBSIDIAN_VAULT_PATH).
 
-Call run_onboarding() from the main entry point; it blocks until the
-wizard is closed.  After a successful save the .env file is written and
-the main GUI boots normally.
+OnboardingWizard is a CTkToplevel — it shares the main application's
+CTk root and event loop.  AlbedoGUI calls self.withdraw() to hide
+itself, then instantiates OnboardingWizard(parent=self, on_complete=cb).
+When the wizard writes .env and closes, it calls on_complete() which
+triggers self.deiconify() on the main window.
+
+This single-root design eliminates the check_dpi_scaling ghost-thread
+errors that occurred when the wizard used its own CTk() mainloop().
 """
 from __future__ import annotations
 
@@ -43,37 +48,33 @@ _FONT_BTN = ("Courier New", 11, "bold")
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Wizard window  (CTkToplevel — no second CTk root, no second mainloop)
 # ---------------------------------------------------------------------------
 
-def run_onboarding() -> None:
-    """Launch the wizard and block until the user closes it."""
-    ctk.set_appearance_mode("dark")
-    ctk.set_default_color_theme("dark-blue")
-    win = _OnboardingWindow()
-    win.mainloop()
+class OnboardingWizard(ctk.CTkToplevel):
 
+    def __init__(self, parent: ctk.CTk, on_complete=None) -> None:
+        super().__init__(parent)
+        self._on_complete = on_complete
 
-# ---------------------------------------------------------------------------
-# Wizard window
-# ---------------------------------------------------------------------------
-
-class _OnboardingWindow(ctk.CTk):
-
-    def __init__(self) -> None:
-        super().__init__()
         self.title("ALBEDO // FIRST-TIME CONFIGURATION")
         self.geometry("780x740")
         self.minsize(700, 680)
         self.configure(fg_color=_BG)
         self.resizable(True, True)
 
+        # Block interaction with the hidden main window until wizard closes
+        self.grab_set()
+        self.focus_force()
+
         self._vault_path:  str  = ""
         self._saved              = False
-        self._entries:     dict  = {}   # key → CTkEntry
-        self._show_states: dict  = {}   # key → bool (True = visible)
+        self._entries:     dict  = {}
+        self._show_states: dict  = {}
 
         self._build_ui()
+
+        # Do NOT call self.mainloop() — we share the parent's event loop.
 
     # ── UI construction ────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ class _OnboardingWindow(ctk.CTk):
         ).pack(pady=(0, 2))
 
         # ── Preflight instructions ───────────────────────────────────────
-        ctk.CTkTextbox(
+        instr = ctk.CTkTextbox(
             self,
             height=110,
             font=("Courier New", 16, "bold"),
@@ -106,16 +107,14 @@ class _OnboardingWindow(ctk.CTk):
             border_width=1,
             wrap="word",
             state="normal",
-        ).pack(fill="x", **pad)
-
-        # Write static text into the textbox
-        _instr = self.winfo_children()[-1]
-        _instr.insert("1.0",
+        )
+        instr.pack(fill="x", **pad)
+        instr.insert("1.0",
             "Welcome to Albedo.  To initialize the Swarm Commander, input your "
             "developer API keys and select your Obsidian Markdown vault directory.  "
             "All values are saved locally to .env and never transmitted."
         )
-        _instr.configure(state="disabled")
+        instr.configure(state="disabled")
 
         # ── Divider ─────────────────────────────────────────────────────
         ctk.CTkLabel(self, text="─" * 72, text_color=_CYAN_DIM,
@@ -206,7 +205,6 @@ class _OnboardingWindow(ctk.CTk):
         self._show_states[key] = False
         self._bind_paste(entry)
 
-        # Pack right-to-left: [?] outermost, then SHOW to its left.
         url = _HELP_URLS[key]
         ctk.CTkButton(
             row, text=" ? ", width=34, font=_FONT_BTN,
@@ -224,28 +222,18 @@ class _OnboardingWindow(ctk.CTk):
         show_btn.pack(side="right", padx=(4, 0))
 
     def _toggle_show(self, key: str, btn: ctk.CTkButton) -> None:
-        """Toggle the password-masking on the entry for `key`."""
-        entry = self._entries[key]
+        entry   = self._entries[key]
         visible = self._show_states[key]
-        if visible:
-            entry._entry.configure(show="•")
-            btn.configure(text="SHOW")
-        else:
-            entry._entry.configure(show="")
-            btn.configure(text="HIDE")
+        entry._entry.configure(show="" if not visible else "•")
+        btn.configure(text="HIDE" if not visible else "SHOW")
         self._show_states[key] = not visible
 
     def _bind_paste(self, entry: ctk.CTkEntry) -> None:
-        """Attach a right-click context menu with a Paste command to entry."""
         menu = tk.Menu(self, tearoff=0,
                        bg=_PANEL, fg=_FG, activebackground=_CYAN_DIM,
                        activeforeground="#000000", relief="flat",
                        font=("Courier New", 10))
-        menu.add_command(
-            label="Paste",
-            command=lambda: self._paste_into(entry),
-        )
-        # Bind to both the CTkEntry wrapper and its inner tk.Entry
+        menu.add_command(label="Paste", command=lambda: self._paste_into(entry))
         for widget in (entry, entry._entry):
             widget.bind("<Button-3>",
                         lambda e, m=menu: m.tk_popup(e.x_root, e.y_root),
@@ -289,19 +277,23 @@ class _OnboardingWindow(ctk.CTk):
         self._status.configure(
             text="✔  Core initialized. Booting Albedo...", text_color=_GREEN)
         self._saved = True
-        # quit() before destroy() — breaks mainloop cleanly so CTk's
-        # check_dpi_scaling poll doesn't fire after the window is gone.
         self.after(900, self._safe_shutdown)
 
     def _safe_shutdown(self) -> None:
+        """Destroy the toplevel, then fire the completion callback."""
         try:
-            self.quit()
+            self.grab_release()
         except Exception:
             pass
         try:
             self.destroy()
         except Exception:
             pass
+        if self._on_complete is not None:
+            try:
+                self._on_complete()
+            except Exception:
+                pass
 
     def _write_env(
         self,
@@ -310,18 +302,14 @@ class _OnboardingWindow(ctk.CTk):
         together: str,
         vault: str,
     ) -> None:
-        """
-        Merge new values into .env.  Existing lines for other keys are
-        preserved; onboarding keys are upserted.
-        """
+        """Merge new values into .env, preserving unrelated keys."""
         updates = {
-            "GEMINI_API_KEY":     gemini,
-            "GROQ_API_KEY":       groq,
-            "TOGETHER_API_KEY":   together,
+            "GEMINI_API_KEY":      gemini,
+            "GROQ_API_KEY":        groq,
+            "TOGETHER_API_KEY":    together,
             "OBSIDIAN_VAULT_PATH": vault,
         }
 
-        # Read existing lines so unrelated keys survive.
         existing_lines: list[str] = []
         if ENV_FILE.exists():
             existing_lines = ENV_FILE.read_text(encoding="utf-8").splitlines()
@@ -340,7 +328,6 @@ class _OnboardingWindow(ctk.CTk):
             else:
                 merged.append(line)
 
-        # Append any keys not already present.
         for key, val in updates.items():
             if key not in seen:
                 merged.append(f"{key}={val}")

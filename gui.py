@@ -498,45 +498,165 @@ class AlbedoGUI(ctk.CTk):
         # Pre-warm Vosk in background so first MIC press is instant
         threading.Thread(target=self._prewarm_vosk, daemon=True).start()
 
+        # Start live HUD bar updates (CPU %) and check first-boot last
+        self._update_hud_bars()
+        self.after(150, self._show_startup_messages)
+        self._check_first_boot()
+
+    # ── First-boot onboarding (single-root) ───────────────────────────────
+
+    def _check_first_boot(self) -> None:
+        """
+        If .env lacks GEMINI_API_KEY or OBSIDIAN_VAULT_PATH, hide the main
+        window and show the onboarding wizard as a CTkToplevel.  This keeps
+        exactly ONE CTk() root alive for the entire process lifetime, which
+        eliminates the check_dpi_scaling ghost-thread errors.
+        """
+        env_file = ROOT / ".env"
+
+        def _env_complete() -> bool:
+            if not env_file.exists():
+                return False
+            from dotenv import dotenv_values
+            cfg = dotenv_values(env_file)
+            return (bool(cfg.get("GEMINI_API_KEY",     "").strip()) and
+                    bool(cfg.get("OBSIDIAN_VAULT_PATH", "").strip()))
+
+        if _env_complete():
+            return
+
+        self.withdraw()
+        from onboarding import OnboardingWizard
+        OnboardingWizard(self, on_complete=self._on_onboarding_done)
+
+    def _on_onboarding_done(self) -> None:
+        """Called by OnboardingWizard after it destroys itself."""
+        from dotenv import load_dotenv
+        load_dotenv(dotenv_path=ROOT / ".env", override=True)
+        self.deiconify()
+
+    def _show_startup_messages(self) -> None:
+        self._log_append("system", "Albedo Mission Control online.")
+        self._log_append("system",
+            "Type a query and press SEND (or Return).  "
+            "Prefix with  web:  to force live web search.")
+        self._log_append("system",
+            "Press MIC to start recording. Press STOP (or go silent) to send.")
+
+    # ── Live HUD telemetry ─────────────────────────────────────────────────
+
+    def _update_hud_bars(self) -> None:
+        """Refresh the CPU progress bar every 2 s using psutil."""
+        if self._closing:
+            return
+        try:
+            import psutil
+            self._hud_cpu_bar.set(psutil.cpu_percent() / 100.0)
+        except Exception:
+            pass
+        self.after(2000, self._update_hud_bars)
+
     # ── UI construction ────────────────────────────────────────────────────
 
     def _build_ui(self) -> None:
-        # ── Header ─────────────────────────────────────────────────────────
-        hdr = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=72)
+        # ══════════════════════════════════════════════════════════════════
+        # CYBERDECK HEADER — Three-panel grid
+        # ══════════════════════════════════════════════════════════════════
+        hdr = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0, height=110)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
-        ctk.CTkLabel(hdr, text="ALBEDO  //  MISSION CONTROL",
-                     font=("Courier New", 22, "bold"),
-                     text_color=C_CYAN).pack(side="left", padx=22, pady=14)
+        # Five columns: left panel | divider | center | divider | right panel
+        hdr.grid_columnconfigure(0, weight=3)
+        hdr.grid_columnconfigure(1, weight=0, minsize=1)
+        hdr.grid_columnconfigure(2, weight=4)
+        hdr.grid_columnconfigure(3, weight=0, minsize=1)
+        hdr.grid_columnconfigure(4, weight=3)
+        hdr.grid_rowconfigure(0, weight=1)
 
-        self._state_chip = ctk.CTkLabel(hdr, text="STANDBY",
-                                        font=("Courier New", 15, "bold"),
-                                        text_color=C_ORANGE)
-        self._state_chip.pack(side="right", padx=22)
+        # ── Left panel — local hardware telemetry ─────────────────────────
+        left = ctk.CTkFrame(hdr, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="nsew", padx=(16, 0), pady=10)
 
-        ctk.CTkButton(hdr, text="LOGS", width=68, height=34,
-                      font=("Courier New", 13, "bold"),
-                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
-                      text_color=C_CYAN,
-                      command=self._open_console).pack(side="right", padx=(0, 4), pady=16)
+        _lbl = {"font": ("Consolas", 10), "text_color": C_CYAN, "anchor": "w"}
+        ctk.CTkLabel(left, text="RYZEN 5 CORE", **_lbl).pack(fill="x")
+        self._hud_cpu_bar = ctk.CTkProgressBar(
+            left, height=7, progress_color=C_CYAN, fg_color=C_BORDER)
+        self._hud_cpu_bar.set(0.42)
+        self._hud_cpu_bar.pack(fill="x", pady=(1, 7))
 
-        # ── Tactical HUD status bar ─────────────────────────────────────────
-        hud = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=0, height=26)
-        hud.pack(fill="x")
-        hud.pack_propagate(False)
-        ctk.CTkLabel(
-            hud,
-            text="// CORE_SYS: ACTIVE  |  BRIDGE: OK  |  MEM: ONLINE  |  VEC_DB: READY",
-            font=("Courier New", 12, "bold"),
-            text_color=C_CYAN,
-        ).pack(side="left", padx=16)
-        ctk.CTkLabel(
-            hud,
-            text="[ NET_LINK: OK ]",
-            font=("Courier New", 12, "bold"),
-            text_color=C_ORANGE,
-        ).pack(side="right", padx=16)
+        ctk.CTkLabel(left, text="RTX 2060 VRAM", **_lbl).pack(fill="x")
+        self._hud_vram_bar = ctk.CTkProgressBar(
+            left, height=7, progress_color=C_PURPLE, fg_color=C_BORDER)
+        self._hud_vram_bar.set(0.31)
+        self._hud_vram_bar.pack(fill="x", pady=(1, 7))
+
+        ctk.CTkLabel(left, text="LOCAL NODE: STABLE",
+                     font=("Consolas", 10), text_color=C_GREEN,
+                     anchor="w").pack(fill="x")
+
+        # ── Divider (left) ────────────────────────────────────────────────
+        ctk.CTkFrame(hdr, fg_color=C_BORDER, width=1).grid(
+            row=0, column=1, sticky="ns", pady=6)
+
+        # ── Center panel — identity + state chip + LOGS ───────────────────
+        center = ctk.CTkFrame(hdr, fg_color="transparent")
+        center.grid(row=0, column=2, sticky="nsew", padx=8, pady=6)
+
+        # Logo image (44×44) or fallback glyph
+        logo_path = ROOT / "albedo_logo.png"
+        _logo_shown = False
+        if logo_path.exists():
+            try:
+                _pil = Image.open(logo_path).convert("RGBA").resize(
+                    (44, 44), Image.LANCZOS)
+                self._hdr_logo = ctk.CTkImage(_pil, size=(44, 44))
+                ctk.CTkLabel(center, image=self._hdr_logo,
+                             text="").pack(pady=(4, 0))
+                _logo_shown = True
+            except Exception:
+                pass
+        if not _logo_shown:
+            ctk.CTkLabel(center, text="▸ A",
+                         font=("Courier New", 26, "bold"),
+                         text_color=C_CYAN).pack(pady=(4, 0))
+
+        ctk.CTkLabel(center, text="ALBEDO  //  MISSION CONTROL",
+                     font=("Courier New", 12, "bold"),
+                     text_color=C_CYAN).pack()
+
+        chip_row = ctk.CTkFrame(center, fg_color="transparent")
+        chip_row.pack(pady=(2, 0))
+        self._state_chip = ctk.CTkLabel(
+            chip_row, text="STANDBY",
+            font=("Courier New", 12, "bold"), text_color=C_ORANGE)
+        self._state_chip.pack(side="left", padx=(0, 10))
+        ctk.CTkButton(
+            chip_row, text="LOGS", width=60, height=26,
+            font=("Courier New", 11, "bold"),
+            fg_color=C_BORDER, hover_color=C_CYAN_DIM, text_color=C_CYAN,
+            command=self._open_console).pack(side="left")
+
+        # ── Divider (right) ───────────────────────────────────────────────
+        ctk.CTkFrame(hdr, fg_color=C_BORDER, width=1).grid(
+            row=0, column=3, sticky="ns", pady=6)
+
+        # ── Right panel — swarm uplink telemetry ──────────────────────────
+        right = ctk.CTkFrame(hdr, fg_color="transparent")
+        right.grid(row=0, column=4, sticky="nsew", padx=(0, 16), pady=10)
+
+        _rlbl = {"font": ("Consolas", 10), "anchor": "e"}
+        ctk.CTkLabel(right, text="UPLINK: SECURE",
+                     text_color=C_CYAN,   **_rlbl).pack(fill="x")
+        ctk.CTkLabel(right, text="GEMINI: STANDBY",
+                     text_color=C_ORANGE, **_rlbl).pack(fill="x")
+        ctk.CTkLabel(right, text="EDGE-TTS: READY",
+                     text_color=C_GREEN,  **_rlbl).pack(fill="x")
+        ctk.CTkLabel(right, text="VEC_DB: ONLINE",
+                     text_color=C_CYAN,   **_rlbl).pack(fill="x")
+
+        # Thin 1 px structural border below the header
+        ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x")
 
         # ── Orb canvas (borderless, generous breathing room) ─────────────────
         self._canvas = tk.Canvas(self, width=CANVAS_SIZE, height=CANVAS_SIZE,
@@ -1076,11 +1196,13 @@ class AlbedoGUI(ctk.CTk):
 
         from telemetry import log_trace
 
+        _offline_mode = False
         try:
             from swarm import autonomous_commander, query_groq, query_together
-            result  = autonomous_commander(query)
-            route   = result["route"]
-            payload = result["payload"]
+            result       = autonomous_commander(query)
+            route        = result["route"]
+            payload      = result["payload"]
+            _offline_mode = result.get("_offline", False)
 
             if route == "direct":
                 log_trace(query, route, success=True)
@@ -1113,8 +1235,14 @@ class AlbedoGUI(ctk.CTk):
         from albedo.pipeline import run as pipeline_run
         history_snapshot = list(self._chat_history)
         try:
-            response = pipeline_run(query, use_web=use_web, history=history_snapshot)
+            response = pipeline_run(
+                query,
+                use_web=use_web and not _offline_mode,
+                history=history_snapshot,
+            )
             log_trace(query, "local", success=bool(response and response.strip()))
+            if _offline_mode:
+                return f"[SYS - OFFLINE FALLBACK ENGAGED]\n{response}"
             return response
         except Exception as exc:
             log_trace(query, "local", success=False)
@@ -1165,20 +1293,18 @@ class AlbedoGUI(ctk.CTk):
     # ── Vosk pre-warming ────────────────────────────────────────────────
 
     def _prewarm_vosk(self) -> None:
-        """Load the Vosk model from local cache only — never triggers a download.
-        If the model directory is absent, logs a message and returns so the GUI
-        stays responsive. The Setup Wizard is responsible for the initial download."""
+        """Load (or auto-download) the Vosk model so the first MIC press is instant."""
         try:
             from albedo.audio.stt import is_cached, prewarm
-            if not is_cached():
+            if is_cached():
+                self._ui(lambda: self._log_append(
+                    "system", "[SYS] Loading Vosk STT..."))
+            else:
                 self._ui(lambda: self._log_append(
                     "system",
-                    "[SYS] Vosk model not in local cache. "
-                    "Run the Setup Wizard to download it before using MIC."))
-                return
-            self._ui(lambda: self._log_append(
-                "system", "[SYS] Loading Vosk STT from cache..."))
-            prewarm()
+                    "[SYS] Vosk model not found — auto-downloading (~40 MB). "
+                    "Check the LOGS console for progress."))
+            prewarm()   # _ensure_model() runs inside here if needed
             self._ui(lambda: self._log_append("system", "[SYS] Vosk online."))
         except Exception as exc:
             msg = str(exc)
@@ -1377,41 +1503,8 @@ class AlbedoGUI(ctk.CTk):
 
 # ── Entry point ────────────────────────────────────────────────────────────
 
-def _check_first_boot() -> None:
-    """
-    Inspect .env for GEMINI_API_KEY and OBSIDIAN_VAULT_PATH.
-    If either is absent or blank, run the onboarding wizard and block
-    until it completes, then reload the environment so the rest of the
-    process sees the freshly-written values.
-    """
-    from pathlib import Path as _Path
-    env_file = _Path(__file__).parent / ".env"
-
-    def _env_complete() -> bool:
-        if not env_file.exists():
-            return False
-        from dotenv import dotenv_values
-        cfg = dotenv_values(env_file)
-        return bool(cfg.get("GEMINI_API_KEY", "").strip()) and \
-               bool(cfg.get("OBSIDIAN_VAULT_PATH", "").strip())
-
-    if not _env_complete():
-        from onboarding import run_onboarding
-        run_onboarding()
-        # Reload so swarm.py, memory.py etc. pick up the new values.
-        from dotenv import load_dotenv
-        load_dotenv(dotenv_path=env_file, override=True)
-
-
 def main() -> None:
-    _check_first_boot()
     app = AlbedoGUI()
-    app._log_append("system", "Albedo Mission Control online.")
-    app._log_append("system",
-        "Type a query and press SEND (or Return).  "
-        "Prefix with  web:  to force live web search.")
-    app._log_append("system",
-        "Press MIC to start recording. Press STOP (or go silent) to send.")
     app.mainloop()
 
 

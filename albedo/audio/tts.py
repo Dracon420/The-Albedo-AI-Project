@@ -1,34 +1,45 @@
 """
-Text-to-speech via Piper (subprocess) with sounddevice playback.
+Text-to-speech with Edge-TTS (primary) and Piper (offline fallback).
 
-Setup:
+Primary path — Edge-TTS:
+  Streams audio from Microsoft's TTS cloud service using the edge-tts
+  library.  No API key required; requires an internet connection.
+  Voice quality is significantly higher than local Piper synthesis.
+
+Fallback path — Piper (subprocess):
+  If edge-tts fails for any reason (no internet, library absent, decode
+  error) the call transparently retries via the local Piper binary.
+  Piper runs on CPU so it uses zero VRAM — keeps the RTX 2060 clean.
+
+Streaming TTS:
+  speak_streamed() splits the response into sentences and pipelines
+  synthesis with playback: a producer thread synthesizes sentence N+1
+  while the consumer plays sentence N through sounddevice.  First audio
+  starts as soon as the opening sentence finishes synthesis.
+
+Setup (Piper fallback):
   1. Download the Piper binary for Windows:
        https://github.com/rhasspy/piper/releases
   2. Voice models are downloaded automatically by setup_utility.py into
        <project_root>/voices/
-     or set PIPER_VOICE_CORTANA / PIPER_VOICE_JARVIS in your .env.
   3. Set PIPER_BINARY in your .env (or accept the default).
-
-Piper runs on CPU so it uses zero VRAM -- keeps the RTX 2060 budget clean.
-
-Streaming TTS
--------------
-speak_streamed() splits the response into sentences and pipelines synthesis
-with playback: a producer thread synthesizes sentence N+1 via Piper while
-the consumer plays sentence N through sounddevice.  First audio starts as
-soon as Piper finishes the opening sentence, with no wait for the rest.
 """
 from __future__ import annotations
 
+import asyncio
+import io
 import os
 import queue
 import re
 import subprocess
 import tempfile
 import threading
+from pathlib import Path
+
+import numpy as np
 import sounddevice as sd
 import soundfile as sf
-import numpy as np
+
 from albedo.config import PIPER_BINARY, PIPER_VOICE_MODEL, AUDIO_SAMPLE_RATE
 
 # ---------------------------------------------------------------------------
@@ -49,7 +60,7 @@ _MD_BLANKS    = re.compile(r'\n{3,}')
 
 
 def _sanitize_for_tts(text: str) -> str:
-    """Strip all markdown formatting so Piper speaks clean prose."""
+    """Strip all markdown formatting so TTS speaks clean prose."""
     text = _MD_IMG.sub('', text)
     text = _MD_LINK.sub(r'\1', text)
     text = _MD_BARE_LINK.sub(r'\1', text)
@@ -72,11 +83,6 @@ _SENT_SPLIT = re.compile(r'(?<=[.!?])\s+')
 
 
 def _split_sentences(text: str) -> list[str]:
-    """
-    Split text on sentence-ending punctuation followed by whitespace.
-    Newlines are normalised to a single space first so paragraph breaks
-    don't create empty chunks.
-    """
     text = text.replace('\n\n', ' ').replace('\n', ' ')
     parts = _SENT_SPLIT.split(text)
     return [p.strip() for p in parts if p.strip()]
@@ -93,8 +99,8 @@ _proc_lock   = threading.Lock()
 def stop_audio() -> None:
     """
     Hard-kill any active Piper synthesis subprocess and stop sounddevice
-    playback immediately.  Safe to call from any thread at any time.
-    sd.stop() unblocks a blocking sd.play() so speak_streamed() exits cleanly.
+    playback immediately.  Covers both the edge-tts and Piper paths since
+    all playback is routed through sd.play().  Safe to call from any thread.
     """
     global _active_proc
     with _proc_lock:
@@ -111,7 +117,58 @@ def stop_audio() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Binary / voice checks
+# Edge-TTS helpers (primary path)
+# ---------------------------------------------------------------------------
+
+# Map Piper model filename fragments → Edge-TTS voice names
+_EDGE_VOICE_MAP: dict[str, str] = {
+    "kristin": "en-US-AriaNeural",   # Cortana persona
+    "ryan":    "en-US-GuyNeural",    # Jarvis persona
+}
+_EDGE_VOICE_DEFAULT = "en-US-AriaNeural"
+
+
+def _piper_to_edge_voice(piper_model: str) -> str:
+    """Derive an Edge-TTS voice name from a Piper .onnx model path."""
+    stem = Path(piper_model).stem.lower()
+    for fragment, voice in _EDGE_VOICE_MAP.items():
+        if fragment in stem:
+            return voice
+    return _EDGE_VOICE_DEFAULT
+
+
+async def _edge_collect_mp3(text: str, voice: str) -> bytes:
+    import edge_tts as _et
+    communicate = _et.Communicate(text, voice)
+    buf = bytearray()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            buf.extend(chunk["data"])
+    return bytes(buf)
+
+
+def _edge_synthesize(text: str, voice: str) -> tuple[np.ndarray, int] | None:
+    """
+    Synthesize text via Edge-TTS and return (float32 audio, sample_rate).
+    Returns None on any error so the caller can fall back to Piper.
+    """
+    try:
+        loop = asyncio.new_event_loop()
+        try:
+            mp3_bytes = loop.run_until_complete(_edge_collect_mp3(text, voice))
+        finally:
+            loop.close()
+        if not mp3_bytes:
+            return None
+        audio, sr = sf.read(io.BytesIO(mp3_bytes), dtype="float32")
+        return audio, sr
+    except Exception as exc:
+        print(f"[tts] Edge-TTS error: {exc}")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Piper helpers (fallback path)
 # ---------------------------------------------------------------------------
 _piper_binary_ok: bool | None = None
 
@@ -123,8 +180,7 @@ def _check_piper_binary() -> bool:
         if not _piper_binary_ok:
             print(
                 f"[tts] Piper binary not found at {PIPER_BINARY!r}. "
-                "TTS will print to console instead. "
-                "See .env.example for setup instructions."
+                "TTS will print to console if Edge-TTS also fails."
             )
     return _piper_binary_ok
 
@@ -134,7 +190,6 @@ def _resolve_voice(voice_model: str | None) -> str:
 
 
 def _resampled(audio: np.ndarray, sr: int) -> np.ndarray:
-    """Resample to AUDIO_SAMPLE_RATE if needed."""
     if sr == AUDIO_SAMPLE_RATE:
         return audio
     try:
@@ -148,16 +203,8 @@ def _resampled(audio: np.ndarray, sr: int) -> np.ndarray:
         return np.interp(x_new, x_old, audio).astype(np.float32)
 
 
-# ---------------------------------------------------------------------------
-# Core synthesis helper (one sentence → (audio, sr) or None)
-# ---------------------------------------------------------------------------
-
 def _synthesize(text: str, model: str) -> tuple[np.ndarray, int] | None:
-    """
-    Run Piper for a single text fragment and return (float32 audio, sr).
-    The Popen object is stored in _active_proc so stop_audio() can kill it
-    instantly from any thread.
-    """
+    """Run Piper for a single text fragment; returns (float32 audio, sr) or None."""
     global _active_proc
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         tmp_path = tmp.name
@@ -182,16 +229,16 @@ def _synthesize(text: str, model: str) -> tuple[np.ndarray, int] | None:
             proc.communicate()
             return None
 
-        if proc.returncode not in (0, -9, -15):   # -9/-15 = killed by stop_audio
+        if proc.returncode not in (0, -9, -15):
             print(f"[tts] Piper error: {stderr_bytes.decode().strip()}")
             return None
-        if proc.returncode != 0:                   # killed — drop silently
+        if proc.returncode != 0:
             return None
 
         audio, sr = sf.read(tmp_path, dtype="float32")
         return audio, sr
     except Exception as exc:
-        print(f"[tts] Synthesis error: {exc}")
+        print(f"[tts] Piper synthesis error: {exc}")
         return None
     finally:
         with _proc_lock:
@@ -201,6 +248,30 @@ def _synthesize(text: str, model: str) -> tuple[np.ndarray, int] | None:
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Unified synthesis — edge-tts with Piper fallback
+# ---------------------------------------------------------------------------
+
+def _synthesize_sentence(
+    text: str,
+    piper_model: str,
+    edge_voice: str,
+) -> tuple[np.ndarray, int] | None:
+    """
+    Try Edge-TTS first; fall back to Piper if edge-tts fails.
+    Returns (float32 audio, sample_rate) or None if both fail.
+    """
+    result = _edge_synthesize(text, edge_voice)
+    if result is not None:
+        return result
+
+    # Piper fallback
+    if _check_piper_binary() and os.path.isfile(piper_model):
+        return _synthesize(text, piper_model)
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -216,16 +287,10 @@ def speak(text: str, device: int | None = None,
     text = _sanitize_for_tts(text)
     if not text:
         return
-    if not _check_piper_binary():
-        print(f"[Albedo] {text}")
-        return
-    model = _resolve_voice(voice_model)
-    if not os.path.isfile(model):
-        print(f"[tts] Voice model not found: {model!r} -- falling back to console.")
-        print(f"[Albedo] {text}")
-        return
+    model      = _resolve_voice(voice_model)
+    edge_voice = _piper_to_edge_voice(model)
 
-    result = _synthesize(text, model)
+    result = _synthesize_sentence(text, model, edge_voice)
     if result is None:
         print(f"[Albedo] {text}")
         return
@@ -239,32 +304,23 @@ def speak_streamed(text: str, device: int | None = None,
     """
     Sentence-level streaming TTS with pipelined synthesis and playback.
 
-    A producer thread synthesizes each sentence in order via Piper and
-    enqueues the resulting audio array.  The main (caller) thread dequeues
-    and plays each chunk immediately, so first audio starts as soon as the
-    opening sentence is synthesized — without waiting for the whole response.
-
-    Falls back to plain speak() for single-sentence responses.
+    A producer thread synthesizes each sentence in order (edge-tts primary,
+    Piper fallback) and enqueues the resulting audio array.  The main thread
+    dequeues and plays each chunk immediately so first audio starts as soon
+    as the opening sentence finishes synthesis.
     """
     text = _sanitize_for_tts(text)
     if not text:
         return
-    if not _check_piper_binary():
-        print(f"[Albedo] {text}")
-        return
-    model = _resolve_voice(voice_model)
-    if not os.path.isfile(model):
-        print(f"[tts] Voice model not found: {model!r} -- falling back to console.")
-        print(f"[Albedo] {text}")
-        return
+    model      = _resolve_voice(voice_model)
+    edge_voice = _piper_to_edge_voice(model)
 
     sentences = _split_sentences(text)
     if not sentences:
         return
 
-    # Single sentence: no pipelining overhead needed
     if len(sentences) == 1:
-        result = _synthesize(sentences[0], model)
+        result = _synthesize_sentence(sentences[0], model, edge_voice)
         if result:
             audio, sr = result
             sd.play(_resampled(audio, sr), samplerate=AUDIO_SAMPLE_RATE,
@@ -273,17 +329,14 @@ def speak_streamed(text: str, device: int | None = None,
             print(f"[Albedo] {text}")
         return
 
-    # Multiple sentences: producer synthesizes ahead, consumer plays
-    # maxsize=2 keeps one chunk ready while the current one plays.
     audio_q: queue.Queue = queue.Queue(maxsize=2)
 
     def _producer() -> None:
         for sentence in sentences:
             if not sentence:
                 continue
-            item = _synthesize(sentence, model)
-            audio_q.put(item)   # None means Piper failed for this sentence
-        audio_q.put(None)       # sentinel
+            audio_q.put(_synthesize_sentence(sentence, model, edge_voice))
+        audio_q.put(None)  # sentinel
 
     threading.Thread(target=_producer, daemon=True).start()
 
@@ -299,7 +352,7 @@ def speak_streamed(text: str, device: int | None = None,
 def synthesize_to_bytes(text: str,
                         voice_model: str | None = None) -> bytes | None:
     """
-    Run Piper and return the raw WAV bytes.
+    Run Piper and return raw WAV bytes.
     Used by the FastAPI server for mobile client audio delivery.
     """
     text = _sanitize_for_tts(text)
