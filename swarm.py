@@ -34,12 +34,19 @@ import os
 import re
 import socket
 
+import warnings
+
 from dotenv import load_dotenv
 
-# Load .env now so NODE_LOCATION is available before any function is called.
+# Suppress the google-generativeai deprecation FutureWarning at import time.
+warnings.filterwarnings("ignore", category=FutureWarning,
+                        module="google.generativeai")
+
+# Load .env now so all env vars are available before any function is called.
 load_dotenv()
 
-_location = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
+_location     = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
+_gemini_model = os.getenv("GEMINI_MODEL",  "gemini-2.0-flash").strip()
 
 # ---------------------------------------------------------------------------
 # Semantic location interceptor
@@ -89,36 +96,6 @@ _keys_loaded     = False
 _gemini_module   = None   # google.generativeai (configured)
 _groq_client     = None   # groq.Groq instance
 _together_client = None   # together.Together instance
-_search_tool     = None   # list[protos.Tool] or None if grounding unavailable
-
-
-def _build_search_tool(genai_module) -> list | None:
-    """
-    Construct the Google Search grounding tool.
-
-    Does NOT create a dummy GenerativeModel to validate — model construction
-    is not a reliable validation method and wastes resources.  Tries the
-    protos syntax first (stable across SDK versions), then falls back to the
-    modern dict syntax (SDK >= 0.8).
-
-    NOTE: search grounding is incompatible with response_mime_type="application/json".
-    Only pass this tool to models that return free-form text (query_gemini_stream),
-    NOT to the JSON-mode commander.
-    """
-    try:
-        tool = genai_module.protos.Tool(
-            google_search_retrieval=genai_module.protos.GoogleSearchRetrieval()
-        )
-        print("[swarm] Search grounding: protos syntax.")
-        return [tool]
-    except Exception:
-        pass
-    try:
-        print("[swarm] Search grounding: dict syntax.")
-        return [{"google_search": {}}]
-    except Exception as exc:
-        print(f"[swarm] Search grounding build failed: {exc}")
-        return None
 
 
 def load_swarm_keys() -> None:
@@ -126,7 +103,7 @@ def load_swarm_keys() -> None:
     Load API keys from .env and initialise each provider client.
     Safe to call multiple times — only runs once per process.
     """
-    global _keys_loaded, _gemini_module, _groq_client, _together_client, _search_tool
+    global _keys_loaded, _gemini_module, _groq_client, _together_client
     if _keys_loaded:
         return
 
@@ -141,9 +118,7 @@ def load_swarm_keys() -> None:
             import google.generativeai as genai
             genai.configure(api_key=gemini_key)
             _gemini_module = genai
-            _search_tool   = _build_search_tool(genai)
-            print("[swarm] Gemini client ready."
-                  + (" (search grounding ON)" if _search_tool else " (search grounding OFF)"))
+            print(f"[swarm] Gemini client ready (model: {_gemini_model}).")
         except Exception as exc:
             print(f"[swarm] Gemini init failed: {exc}")
 
@@ -172,19 +147,17 @@ def load_swarm_keys() -> None:
 
 def query_gemini(prompt: str) -> str:
     """
-    Send a prompt to Gemini 1.5 Flash and return the response text.
+    Send a prompt to Gemini and return the response text.
     Returns an error string (never raises) on auth or network failure.
     """
     load_swarm_keys()
     if _gemini_module is None:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
-        gen_cfg  = _gemini_module.GenerationConfig(temperature=0.1)
-        kwargs   = {"tools": _search_tool} if _search_tool else {}
-        model    = _gemini_module.GenerativeModel(
-            "gemini-1.5-flash", generation_config=gen_cfg, **kwargs)
-        response = model.generate_content(prompt)
-        return response.text.strip()
+        gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
+        model   = _gemini_module.GenerativeModel(
+            model_name=_gemini_model, generation_config=gen_cfg)
+        return model.generate_content(prompt).text.strip()
     except Exception as exc:
         print(f"[API ERROR]: {exc}")
         return f"[swarm] Gemini error: {exc}"
@@ -244,13 +217,24 @@ def query_gemini_stream(prompt: str, on_sentence=None) -> str:
         return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
     try:
         gen_cfg = _gemini_module.GenerationConfig(temperature=0.1)
-        kwargs  = {"tools": _search_tool} if _search_tool else {}
-        model   = _gemini_module.GenerativeModel(
-            "gemini-1.5-flash",
-            system_instruction=_DIRECT_ANSWER_INSTRUCTION,
-            generation_config=gen_cfg,
-            **kwargs,
-        )
+        # Directive Phase 3: explicit native tool payload — string shorthand
+        # 'google_search_retrieval' is the only syntax confirmed working on
+        # SDK 0.8.x.  Do NOT use response_mime_type here — JSON mode silently
+        # drops grounding.
+        try:
+            model = _gemini_module.GenerativeModel(
+                model_name=_gemini_model,
+                tools='google_search_retrieval',
+                system_instruction=_DIRECT_ANSWER_INSTRUCTION,
+                generation_config=gen_cfg,
+            )
+        except Exception:
+            # Older SDK: fall back to no tools (hallucination risk lower than crash)
+            model = _gemini_module.GenerativeModel(
+                model_name=_gemini_model,
+                system_instruction=_DIRECT_ANSWER_INSTRUCTION,
+                generation_config=gen_cfg,
+            )
         full_text = ""
         buffer    = ""
         for chunk in model.generate_content(prompt, stream=True):
@@ -348,12 +332,11 @@ def autonomous_commander(user_prompt: str) -> dict:
         except Exception:
             cmd_cfg = _gemini_module.GenerationConfig(temperature=0.1)
 
-        # No search tools here — JSON mode (response_mime_type) and grounding
-        # are mutually exclusive on Gemini 1.5 Flash; grounding is silently
-        # dropped when both are present.  The commander only routes — it does
-        # not need live web data.
+        # No search tools — JSON mode (response_mime_type) and grounding are
+        # mutually exclusive; grounding is silently dropped when both present.
+        # The commander only routes — it does not need live web data.
         model = _gemini_module.GenerativeModel(
-            "gemini-1.5-flash",
+            model_name=_gemini_model,
             system_instruction=_SYSTEM_INSTRUCTION,
             generation_config=cmd_cfg,
         )
