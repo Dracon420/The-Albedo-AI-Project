@@ -110,9 +110,9 @@ def native_web_search(query: str, max_results: int = 3) -> str:
     callers always have a meaningful signal to inject into the prompt.
     """
     try:
-        from duckduckgo_search import DDGS
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
+            warnings.simplefilter("ignore")   # silence all DDGS rename warnings
+            from duckduckgo_search import DDGS
             results = DDGS().text(query, max_results=max_results)
         if not results:
             return "Local search node offline."
@@ -251,55 +251,73 @@ def query_together(prompt: str) -> str:
         return f"[swarm] Together AI error: {exc}"
 
 
+_SEARCH_INSTRUCTION = (
+    "You are Albedo, a Spartan-Class AI. "
+    "NEVER introduce yourself. NEVER explain your reasoning. "
+    "NEVER write code, plans, or multi-step reasoning. "
+    "Provide ONLY the direct answer in one short sentence. "
+    "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
+    "Never use markdown."
+)
+
+
+def _build_search_prompt(user_prompt: str) -> str:
+    """Run DDG scraper and inject context into the final prompt string."""
+    scraped = native_web_search(user_prompt)
+    if scraped and scraped != "Local search node offline.":
+        return (
+            f"Background Data:\n{scraped}\n\n"
+            f"User Question: {user_prompt}\n"
+            "Answer the question using ONLY the background data "
+            "in exactly one short sentence."
+        )
+    return f"{user_prompt}\nAnswer in exactly one short sentence."
+
+
 def direct_gemini_search(prompt: str) -> str:
     """
-    Scrape the web via DuckDuckGo, inject the snippets as background context,
-    then send a tool-less prompt to Gemini for a one-sentence answer.
+    Scrape the web via DuckDuckGo, inject context, then summarise with Gemini.
+    If Gemini's quota is exhausted (429 / limit:0), falls back to Groq with
+    the same DDG-enriched prompt so the pipeline never goes dark.
 
-    This pipeline is fully decoupled from Google's native search tool quota.
-    Gemini acts as a summariser only — all live data comes from the DDG scraper.
-
-    Never raises — returns an error string on failure.
+    Never raises — returns _UPLINK_ERROR only if every provider fails.
     """
     load_swarm_keys()
     prompt = _mutate_location(prompt)
-    if _gemini_client is None:
-        return "[swarm] Gemini unavailable — set GEMINI_API_KEY in .env."
-    try:
-        scraped = native_web_search(prompt)
-        if scraped and scraped != "Local search node offline.":
-            final_prompt = (
-                f"Background Data:\n{scraped}\n\n"
-                f"User Question: {prompt}\n"
-                "Answer the question using ONLY the background data "
-                "in exactly one short sentence."
-            )
-        else:
-            final_prompt = (
-                f"{prompt}\n"
-                "Answer in exactly one short sentence."
-            )
+    final_prompt = _build_search_prompt(prompt)
 
-        from google.genai import types
-        response = _gemini_client.models.generate_content(
-            model=_gemini_model,
-            contents=final_prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=(
-                    "You are Albedo, a Spartan-Class AI. "
-                    "NEVER introduce yourself. NEVER explain your reasoning. "
-                    "NEVER write code, plans, or multi-step reasoning. "
-                    "Provide ONLY the direct answer in one short sentence. "
-                    "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
-                    "Never use markdown."
+    # ── Gemini attempt ────────────────────────────────────────────────────
+    if _gemini_client is not None:
+        try:
+            from google.genai import types
+            response = _gemini_client.models.generate_content(
+                model=_gemini_model,
+                contents=final_prompt,
+                config=types.GenerateContentConfig(
+                    system_instruction=_SEARCH_INSTRUCTION,
+                    temperature=0.1,
                 ),
-                temperature=0.1,
-            ),
-        )
-        return response.text.strip()
-    except Exception as exc:
-        print(f"\n[CRITICAL DEBUG] Raw Swarm Exception: {exc}\n")
-        return _UPLINK_ERROR
+            )
+            return response.text.strip()
+        except Exception as exc:
+            print(f"\n[CRITICAL DEBUG] Raw Swarm Exception: {exc}\n")
+            print("[swarm] Gemini quota rejected — engaging Groq fallback.")
+
+    # ── Groq fallback (free tier, no quota block) ─────────────────────────
+    if _groq_client is not None:
+        try:
+            completion = _groq_client.chat.completions.create(
+                model="llama3-8b-8192",
+                messages=[
+                    {"role": "system", "content": _SEARCH_INSTRUCTION},
+                    {"role": "user",   "content": final_prompt},
+                ],
+            )
+            return completion.choices[0].message.content.strip()
+        except Exception as exc:
+            print(f"[swarm] Groq fallback error: {exc}")
+
+    return _UPLINK_ERROR
 
 
 def query_gemini_stream(prompt: str, on_sentence=None) -> str:
