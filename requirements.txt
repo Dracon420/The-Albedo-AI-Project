@@ -30,6 +30,7 @@ lxml>=5.2.0
 # Hardware telemetry (tactical audit, system vitals)
 psutil>=5.9.0
 WMI>=1.5.1
+GPUtil>=1.4.0
 
 # Obsidian Vault RAG (chromadb + sentence-transformers already above)
 langchain>=0.2.0

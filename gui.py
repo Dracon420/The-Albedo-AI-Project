@@ -540,6 +540,14 @@ class AlbedoGUI(ctk.CTk):
         self._audio_btn    = None   # AUDIO ON/MUTE toggle — set by _build_ui
         self._audio_muted  = False  # TTS kill-switch
         self._audio_streamed_for_current_response = False
+        # Hardware labels — detected once at boot for the telemetry HUD
+        try:
+            from system_stats import get_cpu_name, get_gpu_name
+            self._hw_cpu_label = get_cpu_name()
+            self._hw_gpu_label = get_gpu_name()
+        except Exception:
+            self._hw_cpu_label = "CPU"
+            self._hw_gpu_label = "SYS GPU"
         # Rolling conversation context — last 10 turns (20 messages)
         self._chat_history: list[dict] = []
 
@@ -605,7 +613,7 @@ class AlbedoGUI(ctk.CTk):
     # ── Live HUD telemetry ─────────────────────────────────────────────────
 
     def _update_hud_bars(self) -> None:
-        """Refresh all four HUD gauges every 2 s via psutil."""
+        """Refresh all four HUD gauges every 2 s via psutil + GPUtil."""
         if self._closing:
             return
         try:
@@ -615,6 +623,11 @@ class AlbedoGUI(ctk.CTk):
                 self._hud_ram_dial.set(psutil.virtual_memory().percent / 100.0)
             if self._hud_ssd_dial:
                 self._hud_ssd_dial.set(psutil.disk_usage("C:").percent / 100.0)
+        except Exception:
+            pass
+        try:
+            from system_stats import get_gpu_load
+            self._hud_vram_dial.set(get_gpu_load())
         except Exception:
             pass
         self.after(2000, self._update_hud_bars)
@@ -650,8 +663,8 @@ class AlbedoGUI(ctk.CTk):
         left.grid(row=0, column=0, sticky="ew", padx=(8, 0), pady=8)
         left_dials = ctk.CTkFrame(left, fg_color="transparent")
         left_dials.pack(fill="x", expand=True)
-        self._hud_cpu_dial  = _make_dial(left_dials, "RYZEN 5",  C_CYAN)
-        self._hud_vram_dial = _make_dial(left_dials, "RTX 2060", C_PURPLE)
+        self._hud_cpu_dial  = _make_dial(left_dials, self._hw_cpu_label, C_CYAN)
+        self._hud_vram_dial = _make_dial(left_dials, self._hw_gpu_label, C_PURPLE)
 
         # ── Col 1 — Center: logo + title + state chip + LOGS ─────────────
         center = ctk.CTkFrame(dash, fg_color="transparent")
