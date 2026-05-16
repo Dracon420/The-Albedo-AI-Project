@@ -631,13 +631,7 @@ class AlbedoGUI(ctk.CTk):
         dash.grid_columnconfigure(1, weight=0)
         dash.grid_columnconfigure(2, weight=1)
         dash.grid_rowconfigure(0, weight=1)
-
-        # ── Col 0 — Left flank: 4-gauge hardware task manager ────────────
-        left = ctk.CTkFrame(dash, fg_color="transparent")
-        left.grid(row=0, column=0, sticky="ew", padx=(8, 0), pady=8)
-
-        dials_row = ctk.CTkFrame(left, fg_color="transparent")
-        dials_row.pack(fill="x", expand=True)
+        dash.grid_rowconfigure(1, weight=0)
 
         def _make_dial(parent, label: str, color: str) -> RadialDial:
             col = ctk.CTkFrame(parent, fg_color="transparent")
@@ -650,14 +644,13 @@ class AlbedoGUI(ctk.CTk):
                          font=("Consolas", 11, "bold"), text_color=color).pack()
             return dial
 
-        self._hud_cpu_dial  = _make_dial(dials_row, "RYZEN 5",  C_CYAN)
-        self._hud_vram_dial = _make_dial(dials_row, "RTX 2060", C_PURPLE)
-        self._hud_ram_dial  = _make_dial(dials_row, "SYS RAM",  C_GREEN)
-        self._hud_ssd_dial  = _make_dial(dials_row, "SSD C:",   C_ORANGE)
-
-        ctk.CTkLabel(left, text="LOCAL NODE: STABLE",
-                     font=("Consolas", 11, "bold"), text_color=C_GREEN,
-                     anchor="center").pack(fill="x", pady=(4, 0))
+        # ── Col 0 — Left flank: CPU + VRAM ───────────────────────────────
+        left = ctk.CTkFrame(dash, fg_color="transparent")
+        left.grid(row=0, column=0, sticky="ew", padx=(8, 0), pady=8)
+        left_dials = ctk.CTkFrame(left, fg_color="transparent")
+        left_dials.pack(fill="x", expand=True)
+        self._hud_cpu_dial  = _make_dial(left_dials, "RYZEN 5",  C_CYAN)
+        self._hud_vram_dial = _make_dial(left_dials, "RTX 2060", C_PURPLE)
 
         # ── Col 1 — Center: logo + title + state chip + LOGS ─────────────
         center = ctk.CTkFrame(dash, fg_color="transparent")
@@ -696,19 +689,29 @@ class AlbedoGUI(ctk.CTk):
             fg_color=C_BORDER, hover_color=C_CYAN_DIM, text_color=C_CYAN,
             command=self._open_console).pack(side="left")
 
-        # ── Col 2 — Right flank: swarm uplink telemetry ───────────────────
+        # ── Col 2 — Right flank: RAM + SSD ───────────────────────────────
         right = ctk.CTkFrame(dash, fg_color="transparent")
         right.grid(row=0, column=2, sticky="ew", padx=(0, 8), pady=8)
+        right_dials = ctk.CTkFrame(right, fg_color="transparent")
+        right_dials.pack(fill="x", expand=True)
+        self._hud_ram_dial = _make_dial(right_dials, "SYS RAM", C_GREEN)
+        self._hud_ssd_dial = _make_dial(right_dials, "SSD C:",  C_ORANGE)
 
-        _rlbl = {"font": ("Consolas", 12, "bold"), "anchor": "w"}
-        ctk.CTkLabel(right, text="UPLINK: SECURE",
-                     text_color=C_CYAN,   **_rlbl).pack(fill="x", padx=(12, 0))
-        ctk.CTkLabel(right, text="GEMINI: STANDBY",
-                     text_color=C_ORANGE, **_rlbl).pack(fill="x", padx=(12, 0))
-        ctk.CTkLabel(right, text="EDGE-TTS: READY",
-                     text_color=C_GREEN,  **_rlbl).pack(fill="x", padx=(12, 0))
-        ctk.CTkLabel(right, text="VEC_DB: ONLINE",
-                     text_color=C_CYAN,   **_rlbl).pack(fill="x", padx=(12, 0))
+        # ── Row 1 — Full-width telemetry status bar ───────────────────────
+        tbar = ctk.CTkFrame(dash, fg_color="transparent")
+        tbar.grid(row=1, column=0, columnspan=3, sticky="ew", padx=8, pady=(0, 8))
+
+        for _txt, _col in [
+            ("UPLINK: SECURE",  C_CYAN),
+            ("GEMINI: STANDBY", C_ORANGE),
+            ("EDGE-TTS: READY", C_GREEN),
+            ("VEC_DB: ONLINE",  C_CYAN),
+        ]:
+            _tc = ctk.CTkFrame(tbar, fg_color="transparent")
+            _tc.pack(side="left", expand=True, fill="x")
+            ctk.CTkLabel(_tc, text=_txt, text_color=_col,
+                         font=("Consolas", 11, "bold"),
+                         anchor="center").pack(fill="x")
 
         # Thin 1 px structural border below the dashboard
         ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x", expand=False)
