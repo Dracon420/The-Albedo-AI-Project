@@ -14,7 +14,7 @@
 ; ── Build metadata ─────────────────────────────────────────────────────────
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "1.2.0"
+#define AppVersion   "1.3.0"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/Albedo-Local-AI"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -87,13 +87,27 @@ Source: "memory.py";               DestDir: "{app}"; Flags: ignoreversion
 Source: "telemetry.py";            DestDir: "{app}"; Flags: ignoreversion
 Source: "operative_dream.py";      DestDir: "{app}"; Flags: ignoreversion
 Source: "onboarding.py";           DestDir: "{app}"; Flags: ignoreversion
+Source: "system_stats.py";         DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "install.ps1";             DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "logs\*";                  DestDir: "{app}\logs"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
-Source: "requirements.txt";     DestDir: "{app}"; Flags: ignoreversion
-Source: ".env.example";         DestDir: "{app}"; Flags: ignoreversion
-Source: "Launch-Albedo.ps1";    DestDir: "{app}"; Flags: ignoreversion
-Source: "Albedo-Maintenance.ps1"; DestDir: "{app}"; Flags: ignoreversion
-Source: "README.md";            DestDir: "{app}"; Flags: ignoreversion
-Source: "CLAUDE.md";            DestDir: "{app}"; Flags: ignoreversion
+Source: "requirements.txt";        DestDir: "{app}"; Flags: ignoreversion
+Source: ".env.example";            DestDir: "{app}"; Flags: ignoreversion
+Source: "Launch-Albedo.ps1";       DestDir: "{app}"; Flags: ignoreversion
+Source: "Albedo-Maintenance.ps1";  DestDir: "{app}"; Flags: ignoreversion
+Source: "README.md";               DestDir: "{app}"; Flags: ignoreversion
+Source: "CLAUDE.md";               DestDir: "{app}"; Flags: ignoreversion
+
+; ── Docs folder ────────────────────────────────────────────────────────────
+Source: "docs\*";               DestDir: "{app}\docs";              Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; ── Background images (user-selectable in Settings) ───────────────────────
+Source: "Albedo-mission-control-background-1.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "albedo-mission-control-background-2.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "albedo-mission-control-background-3.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+Source: "albedo-mission-control-background-4.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
+
+; ── Branding assets ────────────────────────────────────────────────────────
+Source: "albedo_logo.png";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; ── Piper TTS binary (bundled in repo under piper/) ───────────────────────
 Source: "piper\*";              DestDir: "{app}\piper";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
@@ -103,6 +117,9 @@ Source: "voices\*";             DestDir: "{app}\voices";            Flags: ignor
 
 ; ── Vosk STT model (downloaded by setup_utility.py; bundle if cached) ────
 Source: "vosk_models\*";        DestDir: "{app}\vosk_models";       Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; ── OpenWakeWord models ────────────────────────────────────────────────────
+Source: "wakewords\*";          DestDir: "{app}\wakewords";         Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; ── Icon (optional -- installer skips gracefully if absent) ───────────────
 Source: "albedo_icon.ico";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
