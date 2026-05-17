@@ -298,6 +298,11 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkButton(btn, text="SAVE", width=130,
                       font=("Courier New", 12, "bold"),
                       command=self._save).pack(side="left", padx=10)
+        ctk.CTkButton(btn, text="RESTART", width=130,
+                      font=("Courier New", 12, "bold"),
+                      fg_color="#330000", hover_color="#660000",
+                      text_color="#FF4444",
+                      command=self._parent._restart_app).pack(side="left", padx=10)
         self._msg = ctk.CTkLabel(scroll, text="", font=("Courier New", 10),
                                  text_color=C_MUTED)
         self._msg.pack(pady=(0, 12))
@@ -2092,8 +2097,18 @@ class AlbedoGUI(ctk.CTk):
             "UPDATE AVAILABLE — A new version of Albedo is ready. "
             "Open Settings and click UPDATE AVAILABLE to install and restart.")
 
+    def _restart_app(self) -> None:
+        """Spawn a fresh Albedo process then close this one."""
+        import subprocess as _sp
+        print("[restart] Launching new Albedo process...")
+        _sp.Popen(
+            [sys.executable, str(ROOT / "gui.py")],
+            creationflags=_sp.CREATE_NO_WINDOW,
+        )
+        self._ui(self.destroy)
+
     def _run_update(self) -> None:
-        """Pull latest commits then restart the application."""
+        """Pull latest commits and auto-restart."""
         import subprocess as _sp
         if not self._update_available:
             btn = self._update_btn
@@ -2104,15 +2119,6 @@ class AlbedoGUI(ctk.CTk):
                 except Exception:
                     pass
             self._check_for_updates(_manual=True)
-            return
-
-        import tkinter.messagebox as _mb
-        confirmed = _mb.askyesno(
-            "Albedo Update",
-            "A new version is ready.\n\nAlbedo will pull the latest commit and restart.\n\nProceed?",
-            parent=self,
-        )
-        if not confirmed:
             return
 
         def _apply():
@@ -2126,19 +2132,14 @@ class AlbedoGUI(ctk.CTk):
                 )
                 print(f"[update] pull: {result.stdout.strip()}")
                 if result.returncode != 0:
-                    print(f"[update] Pull failed — aborting restart.")
+                    print("[update] Pull failed — aborting restart.")
                     self._ui(lambda: self._reset_update_btn("PULL FAILED"))
                     return
             except Exception as exc:
                 print(f"[update] pull error: {exc}")
                 self._ui(lambda: self._reset_update_btn("PULL FAILED"))
                 return
-            print("[update] Restarting Albedo Mission Control...")
-            _sp.Popen(
-                [sys.executable, str(ROOT / "gui.py")],
-                creationflags=_sp.CREATE_NO_WINDOW,
-            )
-            self._ui(self.destroy)
+            self._restart_app()
 
         threading.Thread(target=_apply, daemon=True, name="update-apply").start()
 
