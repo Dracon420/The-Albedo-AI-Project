@@ -26,6 +26,12 @@ build/
 Output/
 Albedo-Setup.exe
 
+# Stray files from botched pip commands (e.g. shell typo creating "=1.4.0")
+=*
+
+# Runtime-generated memory database
+albedo_memory_db/
+
 # Ollama model cache (large binaries)
 models/
 *.gguf

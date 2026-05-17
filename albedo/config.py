@@ -2,15 +2,15 @@ from pathlib import Path
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+# Resolve project root before load_dotenv so we always load the right .env
+# regardless of what the process CWD is (shortcut, terminal, installer, etc.)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_PROJECT_ROOT / ".env", override=False)
 
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL",    "llama3.2:3b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 WEB_SEARCH_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
-
-# Project root (two levels up: albedo/config.py → albedo/ → root)
-_PROJECT_ROOT = Path(__file__).parent.parent
 
 # --- Audio / Voice ---
 PIPER_BINARY = os.getenv("PIPER_BINARY", str(_PROJECT_ROOT / "piper" / "piper.exe"))

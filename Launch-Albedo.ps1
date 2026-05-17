@@ -25,8 +25,8 @@ if (-not (Test-Path $python)) {
     Write-Host "      Expected: $python" -ForegroundColor Gray
     Write-Host ""
 
-    # If setup_utility.py is present, offer to run it now rather than
-    # leaving the user stranded at an error prompt.
+    # If setup_utility.py is present, run it now rather than leaving the
+    # user stranded at an error prompt.
     $setupScript = Join-Path $projectRoot "setup_utility.py"
     if (Test-Path $setupScript) {
         Write-Host "  The Albedo Setup Wizard was not completed." -ForegroundColor Yellow
@@ -50,14 +50,27 @@ if (-not (Test-Path $python)) {
                 Write-Host "  [X] Python not found on PATH." -ForegroundColor Red
                 Write-Host "      Install Python 3.12 then re-run this shortcut." -ForegroundColor Gray
                 Read-Host "  Press Enter to exit"
+                exit 1
             }
         }
     } else {
         Write-Host "  Run setup_utility.py or install.ps1 to complete setup." -ForegroundColor Yellow
         Write-Host ""
         Read-Host "  Press Enter to exit"
+        exit 1
     }
-    exit 1
+
+    # Re-check after wizard exits — if venv now exists, fall through and launch.
+    if (-not (Test-Path $python)) {
+        Write-Host ""
+        Write-Host "  [X] Setup did not create the virtual environment." -ForegroundColor Red
+        Write-Host "      Open the Setup Wizard manually to see the error log." -ForegroundColor Gray
+        Write-Host ""
+        Read-Host "  Press Enter to exit"
+        exit 1
+    }
+    Write-Host "  [OK] Virtual environment ready -- continuing launch." -ForegroundColor Green
+    Write-Host ""
 }
 
 if (-not (Test-Path $mainPy)) {
@@ -74,7 +87,7 @@ if (-not (Test-Path $mainPy)) {
 # ============================================================================
 
 $_chk = Start-Process -FilePath $python `
-    -ArgumentList '-c', 'import customtkinter' `
+    -ArgumentList '-c "import customtkinter"' `
     -WindowStyle Hidden -PassThru -Wait
 if ($_chk.ExitCode -ne 0) {
     Write-Host ""
@@ -100,8 +113,23 @@ if ($_chk.ExitCode -ne 0) {
         Write-Host "  [X] setup_utility.py not found." -ForegroundColor Red
         Write-Host "      Re-run the installer or run: pip install -r requirements.txt" -ForegroundColor Gray
         Read-Host "  Press Enter to exit"
+        exit 1
     }
-    exit 1
+
+    # Re-check after wizard exits — if install succeeded, continue launching.
+    $_chk2 = Start-Process -FilePath $python `
+        -ArgumentList '-c "import customtkinter"' `
+        -WindowStyle Hidden -PassThru -Wait
+    if ($_chk2.ExitCode -ne 0) {
+        Write-Host ""
+        Write-Host "  [X] Setup did not complete successfully." -ForegroundColor Red
+        Write-Host "      Open the Setup Wizard manually to see the error log." -ForegroundColor Gray
+        Write-Host ""
+        Read-Host "  Press Enter to exit"
+        exit 1
+    }
+    Write-Host "  [OK] Setup complete -- continuing launch." -ForegroundColor Green
+    Write-Host ""
 }
 
 # ============================================================================

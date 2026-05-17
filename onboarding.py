@@ -2,7 +2,7 @@
 onboarding.py  --  Albedo First-Time Configuration Wizard
 
 Launched by AlbedoGUI._check_first_boot() when .env is absent or missing
-required keys (GEMINI_API_KEY, OBSIDIAN_VAULT_PATH).
+GEMINI_API_KEY.  OBSIDIAN_VAULT_PATH is optional.
 
 OnboardingWizard is a CTkToplevel — it shares the main application's
 CTk root and event loop.  AlbedoGUI calls self.withdraw() to hide
@@ -112,7 +112,7 @@ class OnboardingWizard(ctk.CTkToplevel):
         instr.pack(fill="x", **pad)
         instr.insert("1.0",
             "Welcome to Albedo.  To initialize the Swarm Commander, input your "
-            "developer API keys and select your Obsidian Markdown vault directory.  "
+            "developer API keys.  Obsidian vault is optional and can be added later in Settings.  "
             "All values are saved locally to .env and never transmitted."
         )
         instr.configure(state="disabled")
@@ -131,7 +131,7 @@ class OnboardingWizard(ctk.CTkToplevel):
         self._api_row("TOGETHER API KEY", self._together_var, "together")
 
         # ── Vault picker ─────────────────────────────────────────────────
-        ctk.CTkLabel(self, text="OBSIDIAN VAULT DIRECTORY",
+        ctk.CTkLabel(self, text="OBSIDIAN VAULT DIRECTORY  (optional)",
                      font=_FONT_HUD, text_color=_CYAN,
                      anchor="w").pack(fill="x", padx=24, pady=(12, 2))
 
@@ -285,10 +285,6 @@ class OnboardingWizard(ctk.CTkToplevel):
         if not gemini:
             self._status.configure(
                 text="⚠  GEMINI API KEY is required.", text_color=_RED)
-            return
-        if not vault:
-            self._status.configure(
-                text="⚠  OBSIDIAN VAULT DIRECTORY is required.", text_color=_RED)
             return
 
         self._write_env(gemini, groq, together, vault, location)

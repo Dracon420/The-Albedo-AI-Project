@@ -713,14 +713,11 @@ class AlbedoGUI(ctk.CTk):
         self._audio_muted  = False  # TTS kill-switch
         self._audio_streamed_for_current_response = False
         self._tts_override: str | None = None  # spoken prose override (e.g. audit)
-        # Hardware labels — detected once at boot for the telemetry HUD
-        try:
-            from system_stats import get_cpu_name, get_gpu_name
-            self._hw_cpu_label = get_cpu_name()
-            self._hw_gpu_label = get_gpu_name()
-        except Exception:
-            self._hw_cpu_label = "CPU"
-            self._hw_gpu_label = "SYS GPU"
+        # Hardware labels — detected once at boot for the telemetry HUD.
+        # Initialise with placeholders; background thread fills them in.
+        self._hw_cpu_label = "CPU"
+        self._hw_gpu_label = "SYS GPU"
+        threading.Thread(target=self._detect_hw_labels, daemon=True).start()
         # Rolling conversation context — last 10 turns (20 messages)
         self._chat_history: list[dict] = []
 
@@ -762,8 +759,7 @@ class AlbedoGUI(ctk.CTk):
                 return False
             from dotenv import dotenv_values
             cfg = dotenv_values(env_file)
-            return (bool(cfg.get("GEMINI_API_KEY",     "").strip()) and
-                    bool(cfg.get("OBSIDIAN_VAULT_PATH", "").strip()))
+            return bool(cfg.get("GEMINI_API_KEY", "").strip())
 
         if _env_complete():
             return
@@ -805,25 +801,57 @@ class AlbedoGUI(ctk.CTk):
         except Exception:
             pass
 
+    def _detect_hw_labels(self) -> None:
+        """Background thread: resolve CPU/GPU names once at startup without blocking the UI."""
+        try:
+            from system_stats import get_cpu_name, get_gpu_name
+            cpu = get_cpu_name()
+            gpu = get_gpu_name()
+            self._hw_cpu_label = cpu
+            self._hw_gpu_label = gpu
+        except Exception:
+            pass
+
     def _update_hud_bars(self) -> None:
-        """Refresh all four HUD gauges every 2 s via psutil + GPUtil."""
-        if self._closing:
-            return
-        try:
-            import psutil
-            self._hud_cpu_dial.set(psutil.cpu_percent() / 100.0)
-            if self._hud_ram_dial:
-                self._hud_ram_dial.set(psutil.virtual_memory().percent / 100.0)
-            if self._hud_ssd_dial:
-                self._hud_ssd_dial.set(psutil.disk_usage("C:").percent / 100.0)
-        except Exception:
-            pass
-        try:
-            from system_stats import get_gpu_load
-            self._hud_vram_dial.set(get_gpu_load())
-        except Exception:
-            pass
-        self.after(2000, self._update_hud_bars)
+        """Spawn the background HUD polling thread (called once at startup)."""
+        threading.Thread(target=self._hud_poll_loop, daemon=True).start()
+
+    def _hud_poll_loop(self) -> None:
+        """Background daemon: collects hardware stats every 2 s, updates dials via after()."""
+        import time
+        import psutil
+        from system_stats import get_gpu_load
+        while not self._closing:
+            try:
+                cpu  = psutil.cpu_percent() / 100.0
+                ram  = psutil.virtual_memory().percent / 100.0
+                disk = psutil.disk_usage("C:").percent / 100.0
+            except Exception:
+                cpu = ram = disk = 0.0
+            try:
+                gpu = get_gpu_load()
+            except Exception:
+                gpu = 0.0
+
+            def _apply(c=cpu, r=ram, d=disk, g=gpu) -> None:
+                if self._closing:
+                    return
+                try:
+                    self._hud_cpu_dial.set(c)
+                    if self._hud_ram_dial:
+                        self._hud_ram_dial.set(r)
+                    if self._hud_ssd_dial:
+                        self._hud_ssd_dial.set(d)
+                    self._hud_vram_dial.set(g)
+                except Exception:
+                    pass
+
+            self.after(0, _apply)
+            # Sleep in 100 ms increments so the thread exits quickly when closing
+            for _ in range(20):
+                if self._closing:
+                    return
+                time.sleep(0.1)
 
     # ── UI construction ────────────────────────────────────────────────────
 
@@ -859,7 +887,7 @@ class AlbedoGUI(ctk.CTk):
             _bg.delete('bg_img', 'hud')
 
             # Background image (stretched to window size)
-            if self._bg_pil is not None:
+            if getattr(self, '_bg_pil', None) is not None:
                 try:
                     img = self._bg_pil.resize((w, h), Image.LANCZOS)
                     self._bg_photo = ImageTk.PhotoImage(img)
@@ -2104,87 +2132,36 @@ class AlbedoGUI(ctk.CTk):
             self._update_check_after_id = self.after(
                 interval_ms, self._reschedule_update_check)
 
+    _REPO = "Dracon420/The-Albedo-AI-Project"
+
+    def _remote_version(self) -> str:
+        """Fetch the VERSION string from GitHub master (raises on network error)."""
+        import urllib.request
+        url = f"https://raw.githubusercontent.com/{self._REPO}/master/VERSION"
+        req = urllib.request.Request(url, headers={"User-Agent": "Albedo-Updater/2.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return resp.read().decode().strip()
+
+    def _local_version(self) -> str:
+        vf = ROOT / "VERSION"
+        return vf.read_text().strip() if vf.exists() else "0.0.0"
+
     def _check_for_updates(self, _manual: bool = False) -> None:
-        """Run git fetch in background; alert user if commits are available."""
+        """Fetch VERSION from GitHub master; alert user if a newer version exists."""
         def _worker():
-            import subprocess as _sp
-
-            def _run(cmd):
-                return _sp.run(
-                    cmd, capture_output=False,
-                    stdout=_sp.PIPE, stderr=_sp.STDOUT,
-                    text=True, timeout=20,
-                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
-                )
-
             try:
-                # Verify we are inside a git repo
-                check = _run(["git", "rev-parse", "--is-inside-work-tree"])
-                if check.returncode != 0:
-                    print("[update] Not a git repository — opening releases page.")
-                    import webbrowser
-                    webbrowser.open(
-                        "https://github.com/Dracon420/The-Albedo-AI-Project/releases/latest")
-                    self._ui(lambda: self._reset_update_btn("UPDATE"))
-                    return
-
-                # Get current HEAD and compare to what was on disk at launch
-                current_head = _run(["git", "rev-parse", "HEAD"]).stdout.strip()
-                print(f"[update] Launch commit: {self._startup_commit[:7] if self._startup_commit else '?'}")
-                print(f"[update] Current HEAD:  {current_head[:7] if current_head else '?'}")
-
-                if self._startup_commit and current_head and current_head != self._startup_commit:
-                    # Code was committed (and possibly pushed) from this machine since launch —
-                    # the running process has stale bytecode; offer a restart.
-                    local = _run(["git", "log", "-1", "--oneline"])
-                    print(f"[update] Disk code changed since launch → {local.stdout.strip()}")
-                    print("[update] Restart required to apply new code.")
-                    self._update_available = True
-                    self._ui(self._notify_update_available)
-                    return
-
-                # Show current local commit
-                local = _run(["git", "log", "-1", "--oneline"])
-                print(f"[update] Local:  {local.stdout.strip()}")
-
-                # Fetch from remote
-                print("[update] Fetching from remote...")
-                fetch = _run(["git", "fetch"])
-                if fetch.stdout.strip():
-                    print(f"[update] fetch: {fetch.stdout.strip()}")
-                if fetch.returncode != 0:
-                    print(f"[update] Fetch failed (returncode {fetch.returncode}).")
-                    if _manual:
-                        self._ui(lambda: self._reset_update_btn("FETCH FAILED"))
-                    return
-
-                # Determine remote branch (origin/HEAD or origin/<branch>)
-                branch = _run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
-                remote_ref = branch.stdout.strip() if branch.returncode == 0 else "origin/master"
-                print(f"[update] Tracking: {remote_ref}")
-
-                # Count new commits on remote
-                log = _run(["git", "log", f"HEAD..{remote_ref}", "--oneline"])
-                new_commits = log.stdout.strip()
-
-                if new_commits:
-                    count = len(new_commits.splitlines())
-                    print(f"[update] {count} new commit(s) available:\n{new_commits}")
+                remote = self._remote_version()
+                local  = self._local_version()
+                if remote != local:
+                    print(f"[update] Update available: {local} → {remote}")
                     self._update_available = True
                     self._ui(self._notify_update_available)
                 else:
-                    remote_log = _run(["git", "log", "-1", "--oneline", remote_ref])
-                    print(f"[update] Remote: {remote_log.stdout.strip()}")
-                    print("[update] Already up to date.")
+                    print(f"[update] Up to date ({local}).")
                     if _manual:
                         self._ui(lambda: self._reset_update_btn("UP TO DATE"))
-
-            except FileNotFoundError:
-                print("[update] git not found on PATH.")
-                if _manual:
-                    self._ui(lambda: self._reset_update_btn("GIT NOT FOUND"))
             except Exception as exc:
-                print(f"[update] check error: {exc}")
+                print(f"[update] Check failed: {exc}")
                 if _manual:
                     self._ui(lambda: self._reset_update_btn("CHECK FAILED"))
 
@@ -2252,77 +2229,66 @@ class AlbedoGUI(ctk.CTk):
         self._ui(self.destroy)
 
     def _run_update(self) -> None:
-        """Single-click: check → pull (if needed) → restart. No two-step."""
-        import subprocess as _sp
+        """Download latest source from GitHub master, extract over install dir, restart."""
+        import urllib.request, zipfile, shutil, tempfile, os
 
         self._ui(lambda: self._reset_update_btn("CHECKING..."))
 
+        # Directories that must never be overwritten during an update
+        _PROTECTED = {".venv", ".env", "vosk_models", "chroma_db", "logs",
+                      "__pycache__", "Output"}
+
         def _worker():
-            def _run(cmd):
-                return _sp.run(
-                    cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT,
-                    text=True, timeout=30,
-                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
-                )
-
             try:
-                # Disk-change detection (same-machine push workflow)
-                current_head = _run(["git", "rev-parse", "HEAD"]).stdout.strip()
-                if (self._startup_commit and current_head
-                        and current_head != self._startup_commit):
-                    print(f"[update] Code changed on disk since launch "
-                          f"({self._startup_commit[:7]} → {current_head[:7]}) — restarting.")
-                    self._restart_app()
-                    return
+                remote = self._remote_version()
+                local  = self._local_version()
 
-                # Fetch + check remote
-                check = _run(["git", "rev-parse", "--is-inside-work-tree"])
-                if check.returncode != 0:
-                    print("[update] Not a git repository — opening releases page.")
-                    import webbrowser
-                    webbrowser.open(
-                        "https://github.com/Dracon420/The-Albedo-AI-Project/releases/latest")
-                    self._ui(lambda: self._reset_update_btn("UPDATE"))
-                    return
-
-                print("[update] Fetching from remote...")
-                fetch = _run(["git", "fetch"])
-                if fetch.returncode != 0:
-                    print(f"[update] Fetch failed.\n{fetch.stdout.strip()}")
-                    self._ui(lambda: self._reset_update_btn("FETCH FAILED"))
-                    return
-
-                branch = _run(["git", "rev-parse", "--abbrev-ref",
-                                "--symbolic-full-name", "@{u}"])
-                remote_ref = (branch.stdout.strip()
-                              if branch.returncode == 0 else "origin/master")
-
-                new_commits = _run(
-                    ["git", "log", f"HEAD..{remote_ref}", "--oneline"]
-                ).stdout.strip()
-
-                if not new_commits:
-                    print("[update] Already up to date.")
+                if remote == local:
+                    self._ui(lambda: self._log_append(
+                        "system", f"[UPDATE] Already on latest version ({local})."))
                     self._ui(lambda: self._reset_update_btn("UP TO DATE"))
                     return
 
-                # Updates available — pull immediately
-                count = len(new_commits.splitlines())
-                print(f"[update] {count} new commit(s) — pulling...")
-                pull = _run(["git", "pull", "--ff-only"])
-                print(f"[update] {pull.stdout.strip()}")
-                if pull.returncode != 0:
-                    print("[update] Pull failed — cannot fast-forward.")
-                    self._ui(lambda: self._reset_update_btn("PULL FAILED"))
-                    return
+                self._ui(lambda: self._log_append(
+                    "system", f"[UPDATE] Downloading v{remote} from GitHub..."))
 
-                self._restart_app()
+                zip_url = f"https://github.com/{self._REPO}/archive/refs/heads/master.zip"
 
-            except FileNotFoundError:
-                print("[update] git not found on PATH.")
-                self._ui(lambda: self._reset_update_btn("GIT NOT FOUND"))
+                with tempfile.TemporaryDirectory() as tmp:
+                    zip_path = os.path.join(tmp, "update.zip")
+                    urllib.request.urlretrieve(zip_url, zip_path)
+
+                    self._ui(lambda: self._log_append("system", "[UPDATE] Extracting..."))
+                    with zipfile.ZipFile(zip_path) as zf:
+                        zf.extractall(tmp)
+
+                    # GitHub zips have one top-level dir like "RepoName-master/"
+                    subdirs = [d for d in os.listdir(tmp)
+                               if os.path.isdir(os.path.join(tmp, d))
+                               and d not in ("__MACOSX",)]
+                    if not subdirs:
+                        raise RuntimeError("Zip contained no source directory.")
+                    src_dir = os.path.join(tmp, subdirs[0])
+
+                    self._ui(lambda: self._log_append("system", "[UPDATE] Installing files..."))
+                    dst = str(ROOT)
+                    for item in os.listdir(src_dir):
+                        if item in _PROTECTED:
+                            continue
+                        s = os.path.join(src_dir, item)
+                        d = os.path.join(dst, item)
+                        if os.path.isdir(s):
+                            shutil.copytree(s, d, dirs_exist_ok=True)
+                        else:
+                            shutil.copy2(s, d)
+
+                self._ui(lambda: self._log_append(
+                    "system", f"[UPDATE] v{remote} installed. Restarting in 2s..."))
+                self.after(2000, self._restart_app)
+
             except Exception as exc:
-                print(f"[update] error: {exc}")
+                self._ui(lambda: self._log_append(
+                    "system", f"[UPDATE] Failed: {exc}"))
                 self._ui(lambda: self._reset_update_btn("UPDATE FAILED"))
 
         threading.Thread(target=_worker, daemon=True, name="update-run").start()

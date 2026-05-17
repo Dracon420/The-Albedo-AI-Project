@@ -14,7 +14,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Llama%203.2-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-Beta%20v1.0.01-00F0FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-v2.0.2-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice &amp; text command catalog
 
@@ -38,9 +38,9 @@ When given a directive, Albedo executes it.
 
 The inference core runs **Llama 3.2:3b** via Ollama, quantized and memory-mapped to operate within the 6 GB VRAM envelope of an RTX 2060. A fixed `num_ctx` of 2048 tokens covers the system prompt, a full 10-turn rolling conversation history, and the current user query â€” without ever crowding out the generation budget. Output is hard-capped at 250 tokens per response with injected stop sequences that prevent the model from entering self-simulated dialogue loops. ChromaDB embeddings run entirely on CPU to preserve every byte of VRAM for LLM inference. Offline-first by design â€” web search is additive intelligence, not a dependency.
 
-### Speech-to-Text â€” Faster-Whisper Tiny (CPU, int8)
+### Speech-to-Text & Wake Word — Vosk (CPU, offline)
 
-**Faster-Whisper** loads the `tiny` model at startup on a daemon thread, eliminating the cold-start penalty on the first voice command. The `int8` compute type avoids the `cublas64_12.dll` CUDA dependency entirely, leaving the full GPU budget uncontested. The **OpenWakeWord** listener runs a parallel VAD loop at 80 ms inference frames, checking the stop event every chunk so `STOP` is instantaneous rather than waiting for the silence gate. A three-attempt stream strategy (16kHz mono â†’ native WASAPI format â†’ MME host API fallback) ensures compatibility across all Windows audio configurations including exclusive-mode WASAPI devices.
+**Vosk** (`vosk-model-small-en-us-0.15`, ~40 MB) handles both wake-word detection and full transcription on the CPU, eliminating the prior dual-engine stack (Faster-Whisper + OpenWakeWord). Zero VRAM cost — the entire LLM budget stays available for inference. The model is pre-warmed on a daemon thread at startup so the first MIC press has no load latency, and the recognizer uses a restricted grammar of just the configured wake words plus `[unk]` to keep idle-listen CPU usage minimal. A three-attempt stream strategy (16 kHz mono → native WASAPI → MME host API fallback) ensures compatibility across all Windows audio configurations including exclusive-mode WASAPI devices.
 
 ### Text-to-Speech â€” Piper (CPU, Sentence-Streamed)
 
@@ -86,7 +86,7 @@ Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and
 
 <div align="center">
 
-### [â¬‡ Download Albedo-Setup.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/beta-v1.0.01/Albedo-Setup.exe)
+### [⬇ Download Albedo-Setup.exe (v2.0.2)](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v2.0.2/Albedo-Setup.exe)
 
 </div>
 
@@ -349,8 +349,7 @@ In-app updates are also available via **Settings â†’ UPDATE** â€” a si
 | Parameter | Standard â€” RTX 2060 Â· 6 GB VRAM | High-Spec â€” RTX 3080+ Â· 8 GB+ VRAM |
 |---|---|---|
 | `OLLAMA_MODEL` | `llama3.2:3b` | `llama3.1:8b` |
-| `WHISPER_MODEL_SIZE` | `tiny` | `small` |
-| `WHISPER_COMPUTE_TYPE` | `int8` | `float16` |
+| `VOSK_MODEL_PATH` | `vosk-model-small-en-us-0.15` (~40 MB) | `vosk-model-en-us-0.22` (~1.8 GB) |
 | `RAG_TOP_K` | `5` | `10` |
 | `num_ctx` | `2048` | `4096` |
 
@@ -365,8 +364,7 @@ Edit `.env` and restart to switch tiers. No reinstall required.
 | LLM runtime | [Ollama](https://ollama.com) Â· `llama3.2:3b` |
 | Vision model | [Moondream](https://github.com/vikhyat/moondream) via Ollama |
 | Vector store | [ChromaDB](https://www.trychroma.com) Â· CPU embeddings (`all-MiniLM-L6-v2`) |
-| Speech-to-text | [Faster-Whisper](https://github.com/SYSTRAN/faster-whisper) Â· CPU Â· `tiny` Â· `int8` |
-| Wake word | [OpenWakeWord](https://github.com/dscripka/openWakeWord) Â· custom Cortana model |
+| Speech-to-text + wake word | [Vosk](https://alphacephei.com/vosk/) · CPU · `vosk-model-small-en-us-0.15` |
 | Text-to-speech | [Piper](https://github.com/rhasspy/piper) Â· CPU Â· kristin-medium / ryan-medium |
 | Webcam capture | [OpenCV](https://opencv.org) Â· DirectShow |
 | Desktop GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) Â· Cyber-HUD dark mode |

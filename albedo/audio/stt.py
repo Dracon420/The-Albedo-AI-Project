@@ -41,6 +41,18 @@ _MODEL_URL = (
     "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
 )
 
+
+def _short_path(path: Path) -> str:
+    """Return the Windows 8.3 short path to avoid spaces breaking Vosk/Kaldi."""
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(512)
+        if ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 512):
+            return buf.value
+    except Exception:
+        pass
+    return str(path)
+
 _model: "Model | None" = None
 
 
@@ -52,9 +64,15 @@ def _resolve_model_path() -> Path:
     return Path(VOSK_MODEL_PATH).expanduser()
 
 
+def _model_valid(path: Path) -> bool:
+    """Check that the model directory has the minimum required files."""
+    return (path / "am" / "final.mdl").exists() and (path / "conf" / "model.conf").exists()
+
+
 def is_cached() -> bool:
-    """True if the Vosk model directory exists locally (no side effects)."""
-    return _resolve_model_path().exists()
+    """True if the Vosk model directory exists and contains valid model files."""
+    path = _resolve_model_path()
+    return path.exists() and _model_valid(path)
 
 
 # ---------------------------------------------------------------------------
@@ -62,10 +80,15 @@ def is_cached() -> bool:
 # ---------------------------------------------------------------------------
 
 def _ensure_model() -> None:
-    """Download and extract the Vosk model if it is not already present."""
+    """Download and extract the Vosk model if it is absent or incomplete."""
     path = _resolve_model_path()
-    if path.exists():
+    if path.exists() and _model_valid(path):
         return
+    # Directory exists but is corrupt/incomplete — remove it before re-downloading.
+    if path.exists():
+        import shutil
+        print("[stt] Vosk model directory found but incomplete — removing and re-downloading...")
+        shutil.rmtree(path, ignore_errors=True)
 
     parent = path.parent
     parent.mkdir(parents=True, exist_ok=True)
@@ -104,13 +127,18 @@ def _get_model() -> "Model":
     if _model is None:
         _ensure_model()
         path = _resolve_model_path()
+        import time as _time
+        for _attempt in range(5):
+            if path.exists():
+                break
+            _time.sleep(1)
         if not path.exists():
             raise FileNotFoundError(
                 f"Vosk model not found at {path} and auto-download failed. "
                 "Run setup_utility.py to retry."
             )
         print(f"[stt] Loading Vosk model: {path.name}")
-        _model = Model(str(path))
+        _model = Model(_short_path(path))
         print("[stt] Vosk ready.")
     return _model
 

@@ -113,38 +113,47 @@ _GPU_STRIP = re.compile(
 )
 
 
+def _nvml_query(fields: str) -> list[str] | None:
+    """
+    Run nvidia-smi with CREATE_NO_WINDOW so no console flashes on screen.
+    Returns a list of stripped field values, or None on any error.
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=4,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return [v.strip() for v in result.stdout.strip().split(",")]
+    except Exception:
+        pass
+    return None
+
+
 def get_gpu_name() -> str:
     """
     Return a short GPU model label for the telemetry HUD.
-
-    Uses GPUtil if available; falls back to "INTEGRATED" (no dedicated GPU
-    detected) or "SYS GPU" (GPUtil absent / error).
+    Uses nvidia-smi (no subprocess window); falls back to "SYS GPU".
     """
-    try:
-        import GPUtil
-        gpus = GPUtil.getGPUs()
-        if not gpus:
-            return "INTEGRATED"
-        name = gpus[0].name.strip()
-        # Strip all known vendor/class words so "NVIDIA GeForce RTX 2060" → "RTX 2060"
+    vals = _nvml_query("name")
+    if vals:
+        name = vals[0]
         name = _GPU_STRIP.sub("", name).strip()
         return name[:12] if name else "SYS GPU"
-    except ImportError:
-        return "SYS GPU"
-    except Exception:
-        return "SYS GPU"
+    return "SYS GPU"
 
 
 def get_gpu_load() -> float:
     """
     Return GPU utilisation as a 0.0–1.0 fraction.
+    Uses nvidia-smi with CREATE_NO_WINDOW — no console flash.
     Returns 0.0 on any error so the dial simply shows empty rather than crashing.
     """
-    try:
-        import GPUtil
-        gpus = GPUtil.getGPUs()
-        if gpus:
-            return float(gpus[0].load)
-    except Exception:
-        pass
+    vals = _nvml_query("utilization.gpu")
+    if vals:
+        try:
+            return float(vals[0]) / 100.0
+        except ValueError:
+            pass
     return 0.0
