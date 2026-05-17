@@ -20,6 +20,10 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 
 ---
 
+📖 **[Command Reference — docs/COMMANDS.md](docs/COMMANDS.md)** — full catalog of voice and text commands, organized by category.
+
+---
+
 ## OPERATIONAL BRIEFING
 
 Albedo is not a chatbot. It is an AI construct â€” a fully local, offline-capable intelligence framework engineered for absolute system control. No cloud endpoints. No API subscriptions. No telemetry. Every inference cycle executes on your hardware, under your authority.
