@@ -268,6 +268,41 @@ _RE_FILLER     = re.compile(
     r'today|please|check|answer|reply|sentence|fahrenheit)\b',
     re.IGNORECASE,
 )
+# Extracts the location from the canonicalized weather prompt produced by gui.py
+_RE_WEATHER_LOC = re.compile(
+    r'current weather in (.+?)[\?.]', re.IGNORECASE
+)
+
+
+def _get_wttr_weather(location: str) -> str:
+    """
+    Fetch current conditions from wttr.in — free, no API key, no quota.
+    Returns a plain-prose sentence on success, empty string on any failure.
+    """
+    import urllib.request
+    import urllib.parse
+    import json as _json
+    try:
+        encoded = urllib.parse.quote(location.strip())
+        url = f"https://wttr.in/{encoded}?format=j1"
+        req = urllib.request.Request(url, headers={"User-Agent": "curl/7.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = _json.loads(resp.read())
+        c        = data["current_condition"][0]
+        desc     = c["weatherDesc"][0]["value"]
+        temp_f   = c["temp_F"]
+        feels_f  = c["FeelsLikeF"]
+        humidity = c["humidity"]
+        wind_mph = c["windspeedMiles"]
+        print(f"[swarm] wttr.in: {location} → {desc} {temp_f}°F")
+        return (
+            f"Currently {desc} in {location}: {temp_f}°F "
+            f"(feels like {feels_f}°F), humidity {humidity}%, "
+            f"winds at {wind_mph} mph."
+        )
+    except Exception as exc:
+        print(f"[swarm] wttr.in failed ({exc}), falling back to DDG.")
+        return ""
 
 
 def _build_search_prompt(user_prompt: str) -> str:
@@ -304,6 +339,15 @@ def direct_gemini_search(prompt: str) -> str:
     """
     load_swarm_keys()
     prompt = _mutate_location(prompt)
+
+    # ── Weather fast path — wttr.in, no quota, no LLM needed ─────────────
+    if _RE_WEATHER.search(prompt):
+        _loc_m = _RE_WEATHER_LOC.search(prompt)
+        if _loc_m:
+            _weather = _get_wttr_weather(_loc_m.group(1).strip())
+            if _weather:
+                return _weather
+
     final_prompt = _build_search_prompt(prompt)
 
     # ── Gemini attempt ────────────────────────────────────────────────────

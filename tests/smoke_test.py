@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-Smoke test -- verifies two critical paths without requiring Ollama or audio hardware:
+Smoke test — verifies critical paths without requiring Ollama or audio hardware.
 
-  TEST 1 -- Local RAG:
-    Index tests/fixtures/ into ChromaDB -> query -> confirm fixture content retrieved.
+  TEST 1 — Obsidian vault RAG:
+    Write a temp .md fixture → index into isolated temp ChromaDB → query →
+    confirm fixture content is retrieved.
 
-  TEST 2 -- Live web search:
-    DuckDuckGo search for RTX 2060 specs -> confirm results returned with URLs.
+  TEST 2 — Live web search:
+    DuckDuckGo search for RTX 2060 specs → confirm results returned with URLs.
 
-  TEST 3 -- Verify protocol routing:
+  TEST 3 — Verify protocol routing:
     Hardware keyword detection fires correctly.
 
-  TEST 4 -- Memory footprint:
-    Index runs within expected RAM budget (reports peak delta in MB).
+  TEST 4 — Memory footprint:
+    Vault index runs within expected RAM budget.
 
 Run from repo root:
     python tests/smoke_test.py
@@ -23,7 +24,9 @@ import os
 import gc
 import tracemalloc
 import shutil
+import tempfile
 import traceback
+from pathlib import Path
 
 # Force UTF-8 output on Windows
 if sys.stdout.encoding != "utf-8":
@@ -46,41 +49,71 @@ def record(name: str, passed: bool, detail: str = ""):
 
 
 # --------------------------------------------------------------------------
-# Test 1: Local RAG index + query
+# Test 1: Obsidian vault RAG — index -> query in an isolated temp DB
 # --------------------------------------------------------------------------
 
-print("\n== Test 1: Local RAG (index -> query) ==")
+print("\n== Test 1: Obsidian vault RAG (index -> query) ==")
+tmp_vault = None
+tmp_db    = None
 try:
-    from albedo.rag.indexer import index_exotic_os
-    from albedo.rag.retriever import query_exotic_os
+    import memory as _mem
 
-    chroma_path = os.getenv("CHROMA_DB_PATH", "./chroma_db")
-    if os.path.exists(chroma_path):
-        shutil.rmtree(chroma_path)
+    tmp_vault = tempfile.mkdtemp()
+    tmp_db    = tempfile.mkdtemp()
 
-    indexed = index_exotic_os()
-    record("index_exotic_os() runs without error", True, f"{indexed} chunks indexed")
+    # Write a fixture note with distinctive content
+    note = Path(tmp_vault) / "hardware_notes.md"
+    note.write_text(
+        "# GPU Notes\n\n"
+        "The RTX 2060 has 6 GB GDDR6 VRAM. "
+        "Temperature throttling begins around 83 degrees Celsius. "
+        "Driver version 537 fixed the memory clock stability issue.",
+        encoding="utf-8",
+    )
 
-    if indexed == 0:
-        record("Fixture file was indexed", False, "0 chunks -- check EXOTIC_OS_PATH in .env")
-    else:
-        rag_results = query_exotic_os("GPU temperature throttling RTX 2060", top_k=3)
-        has_results = len(rag_results) > 0
-        record("query_exotic_os() returns results", has_results,
-               f"{len(rag_results)} chunks returned")
+    # Redirect memory.py's DB path to the temp dir for this test
+    _orig_db = _mem.DB_PATH
+    _mem.DB_PATH = tmp_db
+    # Also reset the singleton collection cache if present
+    try:
+        _mem._EF_tried = False
+        _mem._EF = None
+    except AttributeError:
+        pass
 
-        if has_results:
-            top = rag_results[0]
-            contains_fixture = "RTX 2060" in top["text"] or "GPU" in top["text"]
-            record(
-                "Top result contains fixture content",
-                contains_fixture,
-                f"Source: {top['source']} | Score: {top['score']:.4f}",
-            )
+    from memory import index_obsidian_vault, search_memory
+
+    status = index_obsidian_vault(tmp_vault)
+    record("index_obsidian_vault() runs without error", True, status)
+
+    chunks = search_memory("RTX 2060 temperature throttling", n_results=3)
+    has_results = len(chunks) > 0
+    record("search_memory() returns results", has_results,
+           f"{len(chunks)} chunks returned")
+
+    if has_results:
+        contains_fixture = any(
+            "RTX 2060" in c or "throttling" in c or "temperature" in c
+            for c in chunks
+        )
+        record("Top result contains fixture content", contains_fixture,
+               chunks[0][:120])
 
 except Exception:
-    record("Local RAG pipeline", False, traceback.format_exc().splitlines()[-1])
+    record("Obsidian vault RAG pipeline", False,
+           traceback.format_exc().splitlines()[-1])
     traceback.print_exc()
+finally:
+    # Restore the real DB path before any further tests
+    try:
+        import memory as _mem
+        _mem.DB_PATH = _orig_db  # type: ignore[possibly-undefined]
+    except Exception:
+        pass
+    if tmp_vault:
+        shutil.rmtree(tmp_vault, ignore_errors=True)
+    if tmp_db:
+        shutil.rmtree(tmp_db, ignore_errors=True)
 
 
 # --------------------------------------------------------------------------
@@ -125,15 +158,15 @@ try:
     from albedo.verify import is_hardware_query
 
     cases = [
-        ("My GPU is overheating", True),
-        ("How do I print a benchy?", False),
-        ("BSOD after driver update", True),
-        ("What is reptile humidity?", False),
+        ("My GPU is overheating",          True),
+        ("How do I print a benchy?",        False),
+        ("BSOD after driver update",        True),
+        ("What is reptile humidity?",       False),
         ("RTX 2060 temperature throttling", True),
     ]
     for query, expected in cases:
         got = is_hardware_query(query)
-        ok = got == expected
+        ok  = got == expected
         record(
             f"is_hardware_query({query!r})",
             ok,
@@ -149,14 +182,26 @@ except Exception:
 # --------------------------------------------------------------------------
 
 print("\n== Test 4: Indexer RAM footprint ==")
+tmp_vault4 = None
+tmp_db4    = None
 try:
-    from albedo.rag.indexer import index_exotic_os as _reindex
+    import memory as _mem
 
-    shutil.rmtree(chroma_path, ignore_errors=True)
+    tmp_vault4 = tempfile.mkdtemp()
+    tmp_db4    = tempfile.mkdtemp()
+
+    note4 = Path(tmp_vault4) / "big_note.md"
+    note4.write_text("# RAM Test\n\n" + ("Sample content line.\n" * 500),
+                     encoding="utf-8")
+
+    _orig_db4 = _mem.DB_PATH
+    _mem.DB_PATH = tmp_db4
+
+    from memory import index_obsidian_vault as _reindex
+
     gc.collect()
-
     tracemalloc.start()
-    _reindex()
+    _reindex(tmp_vault4)
     current, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
@@ -165,11 +210,21 @@ try:
     record(
         "Peak RAM delta during indexing",
         under_budget,
-        f"{peak_mb:.1f} MB peak (budget: <200 MB for fixture set)",
+        f"{peak_mb:.1f} MB peak (budget: <200 MB)",
     )
 
 except Exception:
     record("RAM footprint test", False, traceback.format_exc().splitlines()[-1])
+finally:
+    try:
+        import memory as _mem
+        _mem.DB_PATH = _orig_db4  # type: ignore[possibly-undefined]
+    except Exception:
+        pass
+    if tmp_vault4:
+        shutil.rmtree(tmp_vault4, ignore_errors=True)
+    if tmp_db4:
+        shutil.rmtree(tmp_db4, ignore_errors=True)
 
 
 # --------------------------------------------------------------------------
@@ -178,7 +233,7 @@ except Exception:
 
 print("\n== Summary ==")
 passed = sum(1 for _, ok, _ in results if ok)
-total = len(results)
+total  = len(results)
 print(f"\n  {passed}/{total} tests passed\n")
 
 sys.exit(0 if passed == total else 1)

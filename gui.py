@@ -179,22 +179,18 @@ class SettingsDialog(ctk.CTkToplevel):
         self._build()
 
     def _build(self) -> None:
-        from albedo.config import CHAOTIC_3D_PATH, EXOTIC_OS_PATH
+        import os as _os
+        from dotenv import load_dotenv as _ldenv
+        _ldenv(override=False)
         p = {"padx": 24, "pady": 6}
 
-        # ── RAG directories ────────────────────────────────────────────────
-        ctk.CTkLabel(self, text="RAG DIRECTORIES", font=("Courier New", 15, "bold"),
+        # ── Obsidian vault path ────────────────────────────────────────────
+        ctk.CTkLabel(self, text="OBSIDIAN VAULT", font=("Courier New", 15, "bold"),
                      text_color=C_CYAN).pack(pady=(20, 8))
-        ctk.CTkLabel(self, text="Chaotic 3D  --  STL / gcode / slicer configs",
+        ctk.CTkLabel(self, text="Vault path  --  Obsidian notes indexed for local RAG",
                      font=("Courier New", 11), text_color=C_TEXT).pack(anchor="w", **p)
-        self._var_3d = ctk.StringVar(value=str(CHAOTIC_3D_PATH))
-        ctk.CTkEntry(self, textvariable=self._var_3d, width=530,
-                     font=("Courier New", 11), fg_color=C_BG,
-                     border_color=C_BORDER, text_color=C_TEXT).pack(**p)
-        ctk.CTkLabel(self, text="Exotic OS  --  Python / logs / reptile records",
-                     font=("Courier New", 11), text_color=C_TEXT).pack(anchor="w", **p)
-        self._var_os = ctk.StringVar(value=str(EXOTIC_OS_PATH))
-        ctk.CTkEntry(self, textvariable=self._var_os, width=530,
+        self._var_vault = ctk.StringVar(value=_os.getenv("OBSIDIAN_VAULT_PATH", ""))
+        ctk.CTkEntry(self, textvariable=self._var_vault, width=530,
                      font=("Courier New", 11), fg_color=C_BG,
                      border_color=C_BORDER, text_color=C_TEXT).pack(**p)
 
@@ -234,26 +230,23 @@ class SettingsDialog(ctk.CTkToplevel):
         self._msg.pack()
 
     def _save(self) -> None:
-        _update_env("CHAOTIC_3D_PATH", self._var_3d.get().strip())
-        _update_env("EXOTIC_OS_PATH",  self._var_os.get().strip())
+        _update_env("OBSIDIAN_VAULT_PATH", self._var_vault.get().strip())
         import importlib
         import albedo.config as _cfg
         importlib.reload(_cfg)
 
         self._parent._apply_persona(self._persona_var.get())
-        self._msg.configure(text="Saved. Re-index to apply new RAG paths.",
+        self._msg.configure(text="Saved. Re-index to apply new vault path.",
                             text_color=C_GREEN)
 
     def _reindex(self) -> None:
         self._msg.configure(text="Indexing...", text_color=C_CYAN)
         self.update()
         def _run() -> None:
-            from albedo.rag.indexer import index_all
-            results = index_all()
-            total = sum(results.values())
-            summary = "  ".join(f"{k}: {v}" for k, v in results.items())
+            from memory import index_obsidian_vault
+            status = index_obsidian_vault()
             self.after(0, lambda: self._msg.configure(
-                text=f"Done. {total} new chunks  ({summary})", text_color=C_GREEN))
+                text=status, text_color=C_GREEN))
         threading.Thread(target=_run, daemon=True).start()
 
 
@@ -408,31 +401,34 @@ class ConsoleDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self._parent = parent
         self.title("ALBEDO  //  DEVELOPER CONSOLE")
-        self.geometry("820x500")
+        self.geometry("900x560")
+        self.minsize(600, 380)
         self.configure(fg_color=C_PANEL)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self._build()
         # Populate with buffered history from before the dialog was opened
         if parent._console_buf:
             self._append("".join(parent._console_buf))
+        # Position to the right of the Mission Control window (or left if off-screen)
+        self._place_beside_parent()
 
     def _build(self) -> None:
-        hdr = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0, height=42)
+        hdr = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0, height=46)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
-        ctk.CTkLabel(hdr, text="DEVELOPER CONSOLE  --  stdout / stderr",
-                     font=("Courier New", 12, "bold"),
+        ctk.CTkLabel(hdr, text="DEVELOPER CONSOLE  //  stdout / stderr",
+                     font=("Courier New", 13, "bold"),
                      text_color=C_CYAN).pack(side="left", padx=16, pady=10)
-        ctk.CTkButton(hdr, text="CLEAR", width=70, height=26,
-                      font=("Courier New", 10),
+        ctk.CTkButton(hdr, text="CLEAR", width=76, height=30,
+                      font=("Courier New", 11, "bold"),
                       fg_color=C_BORDER, hover_color=C_DANGER,
                       command=self._clear).pack(side="right", padx=12, pady=8)
 
-        self._txt = ctk.CTkTextbox(self, font=("Courier New", 11),
+        self._txt = ctk.CTkTextbox(self, font=("Courier New", 13),
                                    fg_color=C_BG, text_color=C_TEXT,
                                    wrap="word", state="disabled", border_width=0,
                                    scrollbar_button_color=C_BORDER)
-        self._txt.pack(fill="both", expand=True, padx=4, pady=4)
+        self._txt.pack(fill="both", expand=True, padx=6, pady=6)
 
     def _append(self, text: str) -> None:
         self._txt.configure(state="normal")
@@ -445,6 +441,22 @@ class ConsoleDialog(ctk.CTkToplevel):
         self._txt.delete("1.0", "end")
         self._txt.configure(state="disabled")
         self._parent._console_buf.clear()
+
+    def _place_beside_parent(self) -> None:
+        self.update_idletasks()
+        px = self._parent.winfo_x()
+        py = self._parent.winfo_y()
+        pw = self._parent.winfo_width()
+        dw = self.winfo_width()
+        dh = self.winfo_height()
+        sw = self.winfo_screenwidth()
+        # Try right side first; fall back to left if it would clip off-screen
+        x = px + pw + 8
+        if x + dw > sw:
+            x = max(0, px - dw - 8)
+        self.geometry(f"+{x}+{py}")
+        self.lift()
+        self.focus_force()
 
     def _on_close(self) -> None:
         self._parent._console_win = None
@@ -515,7 +527,7 @@ class AlbedoGUI(ctk.CTk):
         super().__init__()
         self.title("ALBEDO  //  MISSION CONTROL")
         self.geometry("1000x800")
-        self.minsize(800, 640)
+        self.minsize(860, 640)
         self.configure(fg_color=C_BG)
 
         self._state        = "standby"
@@ -529,8 +541,12 @@ class AlbedoGUI(ctk.CTk):
         self._audio_stream = None   # AudioStream, lazy-init
         self._settings_win = None
         self._hardware_win = None
-        self._console_win  = None
+        self._console_win  = None   # kept for compat; panel replaces it
         self._console_buf: list[str] = []
+        self._panel_visible = False
+        self._side_panel: ctk.CTkFrame | None = None
+        self._update_btn: ctk.CTkButton | None = None
+        self._update_available = False
         # Event-loop hygiene — tracked so _on_close() can cancel cleanly
         self._closing       = False
         self._poll_after_id = None
@@ -541,6 +557,7 @@ class AlbedoGUI(ctk.CTk):
         self._audio_btn    = None   # AUDIO ON/MUTE toggle — set by _build_ui
         self._audio_muted  = False  # TTS kill-switch
         self._audio_streamed_for_current_response = False
+        self._tts_override: str | None = None  # spoken prose override (e.g. audit)
         # Hardware labels — detected once at boot for the telemetry HUD
         try:
             from system_stats import get_cpu_name, get_gpu_name
@@ -654,9 +671,45 @@ class AlbedoGUI(ctk.CTk):
 
     def _build_ui(self) -> None:
         # ══════════════════════════════════════════════════════════════════
+        # ROOT HORIZONTAL LAYOUT: main column ║ side panel ║ toggle strip
+        # ══════════════════════════════════════════════════════════════════
+        _root_h = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0)
+        _root_h.pack(fill="both", expand=True)
+        _root_h.grid_columnconfigure(0, weight=1)   # main content — elastic
+        _root_h.grid_columnconfigure(1, weight=0)   # side panel — fixed 265px
+        _root_h.grid_columnconfigure(2, weight=0)   # toggle strip — always 18px
+        _root_h.grid_rowconfigure(0, weight=1)
+
+        # Main content column — receives all dashboard / chat / input widgets
+        _main = ctk.CTkFrame(_root_h, fg_color=C_BG, corner_radius=0)
+        _main.grid(row=0, column=0, sticky="nsew")
+
+        # Side panel — built now, hidden until toggled
+        self._side_panel = ctk.CTkFrame(
+            _root_h, fg_color=C_PANEL, corner_radius=0,
+            border_width=1, border_color=C_BORDER, width=210)
+        self._side_panel.grid(row=0, column=1, sticky="nsew")
+        self._side_panel.grid_propagate(False)
+        self._side_panel.grid_remove()          # hidden by default
+        self._build_side_panel(self._side_panel)
+
+        # Toggle strip — always visible, 18px
+        _tstrip = ctk.CTkFrame(_root_h, fg_color=C_BORDER, corner_radius=0, width=18)
+        _tstrip.grid(row=0, column=2, sticky="nsew")
+        _tstrip.grid_propagate(False)
+        self._toggle_arrow_lbl = ctk.CTkLabel(
+            _tstrip, text="◄", font=("Courier New", 11, "bold"), text_color=C_CYAN)
+        self._toggle_arrow_lbl.place(relx=0.5, rely=0.5, anchor="center")
+        _tstrip.bind("<Button-1>", lambda e: self._toggle_side_panel())
+        self._toggle_arrow_lbl.bind("<Button-1>", lambda e: self._toggle_side_panel())
+
+        # Schedule silent startup update check (5 s after launch)
+        self.after(5000, lambda: self._check_for_updates(_manual=False))
+
+        # ══════════════════════════════════════════════════════════════════
         # UNIFIED DASHBOARD — 3-column grid above chat feed
         # ══════════════════════════════════════════════════════════════════
-        dash = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0)
+        dash = ctk.CTkFrame(_main, fg_color=C_BG, corner_radius=0)
         dash.pack(fill="x", expand=False)
 
         dash.grid_columnconfigure(0, weight=1)
@@ -756,10 +809,10 @@ class AlbedoGUI(ctk.CTk):
         self._gemini_tbar_lbl.pack(fill="x")
 
         # Thin 1 px structural border below the dashboard
-        ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x", expand=False)
+        ctk.CTkFrame(_main, fg_color=C_BORDER, height=1).pack(fill="x", expand=False)
 
         # ── Output log (borderless; only CMD_INPUT row carries the cyan border) ─
-        log_outer = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
+        log_outer = ctk.CTkFrame(_main, fg_color=C_PANEL, corner_radius=8,
                                  border_width=0)
         log_outer.pack(fill="both", expand=True, padx=16, pady=(14, 6))
 
@@ -785,7 +838,7 @@ class AlbedoGUI(ctk.CTk):
         tb.tag_config("error",  foreground=C_DANGER)
 
         # ── CMD_INPUT HUD tag above input row ───────────────────────────────
-        cmd_hdr = ctk.CTkFrame(self, fg_color="transparent", height=18)
+        cmd_hdr = ctk.CTkFrame(_main, fg_color="transparent", height=18)
         cmd_hdr.pack(fill="x", expand=False, padx=18)
         cmd_hdr.pack_propagate(False)
         ctk.CTkLabel(cmd_hdr, text="[ CMD_INPUT ]",
@@ -794,7 +847,7 @@ class AlbedoGUI(ctk.CTk):
                      font=("Courier New", 12, "bold"), text_color=C_GREEN).pack(side="right")
 
         # ── Input row (neon border on entry) ────────────────────────────────
-        row = ctk.CTkFrame(self, fg_color=C_PANEL, corner_radius=8,
+        row = ctk.CTkFrame(_main, fg_color=C_PANEL, corner_radius=8,
                            border_width=2, border_color=C_CYAN)
         row.pack(fill="x", expand=False, padx=16, pady=(2, 12))
 
@@ -824,16 +877,6 @@ class AlbedoGUI(ctk.CTk):
                                        text_color="#000000",
                                        command=self._handle_send)
         self._send_btn.pack(side="left", padx=4, pady=10)
-
-        ctk.CTkButton(row, text="SETTINGS", width=92, height=48,
-                      font=("Courier New", 13, "bold"),
-                      fg_color=C_BORDER, hover_color=C_CYAN,
-                      command=self._open_settings).pack(side="left", padx=4, pady=10)
-
-        ctk.CTkButton(row, text="HARDWARE", width=92, height=48,
-                      font=("Courier New", 13, "bold"),
-                      fg_color=C_BORDER, hover_color=C_CYAN,
-                      command=self._open_hardware_settings).pack(side="left", padx=(4, 4), pady=10)
 
         self._audio_btn = ctk.CTkButton(
             row, text="AUDIO: ON", width=110, height=48,
@@ -1042,6 +1085,32 @@ class AlbedoGUI(ctk.CTk):
             self._canvas.create_oval(CENTER - r, CENTER - r,
                                      CENTER + r, CENTER + r,
                                      outline=C_BORDER, width=1, tags="ring")
+        elif self._state == "processing":
+            # Inner pulsing rings
+            for i, base_gap in enumerate([14, 26, 40]):
+                phase = (self._pulse_phase + i * 0.9) % (2 * math.pi)
+                p = (math.sin(phase) + 1) / 2
+                r = ICON_RADIUS + base_gap + int(7 * p)
+                fade = 1.0 - i * 0.3
+                ring_color = _blend(color, C_BG, 1 - fade * (0.45 + 0.55 * p))
+                width = max(1, int((3 - i) * fade))
+                self._canvas.create_oval(CENTER - r, CENTER - r,
+                                         CENTER + r, CENTER + r,
+                                         outline=ring_color, width=width, tags="ring")
+            # Outer spinning arcs — "thinking" indicator
+            cw_deg  = (math.degrees(self._pulse_phase * 3.5)) % 360
+            ccw_deg = (-math.degrees(self._pulse_phase * 2.2)) % 360
+            r1, r2  = ICON_RADIUS + 52, ICON_RADIUS + 61
+            self._canvas.create_arc(
+                CENTER - r1, CENTER - r1, CENTER + r1, CENTER + r1,
+                start=cw_deg,  extent=80,  outline=C_CYAN,     width=2,
+                style="arc", tags="ring",
+            )
+            self._canvas.create_arc(
+                CENTER - r2, CENTER - r2, CENTER + r2, CENTER + r2,
+                start=ccw_deg, extent=50, outline=C_CYAN_DIM,  width=1,
+                style="arc", tags="ring",
+            )
         else:
             for i, base_gap in enumerate([14, 26, 40]):
                 phase = (self._pulse_phase + i * 0.9) % (2 * math.pi)
@@ -1093,6 +1162,64 @@ class AlbedoGUI(ctk.CTk):
                                     fg_color=C_BORDER, hover_color=C_CYAN_DIM)
 
     # ── Log output ─────────────────────────────────────────────────────────
+
+    def _log_stream_response(self, text: str, speak_text: str | None,
+                             voice: str | None, device) -> None:
+        """
+        Type an Albedo response word-by-word into the chat log, then start
+        TTS after a short head-start so text and audio feel synchronised.
+        Runs entirely on the UI thread via self.after() scheduling.
+        """
+        ts  = datetime.now().strftime("%H:%M")
+        tb  = self._log._textbox
+        WORD_MS = 38   # ~26 words/sec — fast typewriter, easy to follow
+        # Start TTS after 12 words have appeared or 600 ms, whichever comes first
+        words = text.strip().split()
+        tts_start_ms = min(12 * WORD_MS, 600)
+
+        # Write the coloured timestamp + role prefix immediately
+        self._log.configure(state="normal")
+        tb.insert("end", f"\n[{ts}] ALBEDO  ", "albedo")
+        self._log.configure(state="disabled")
+        tb.see("end")
+
+        def _type(i: int) -> None:
+            if self._abort_flag.is_set():
+                return
+            if i >= len(words):
+                self._log.configure(state="normal")
+                tb.insert("end", "\n\n")
+                self._log.configure(state="disabled")
+                tb.see("end")
+                # If muted, transition to standby here
+                if self._audio_muted or speak_text is None:
+                    self._set_state("standby")
+                return
+            self._log.configure(state="normal")
+            tb.insert("end", words[i] + (" " if i < len(words) - 1 else ""))
+            self._log.configure(state="disabled")
+            tb.see("end")
+            self.after(WORD_MS, lambda: _type(i + 1))
+
+        def _launch_tts() -> None:
+            if self._audio_muted or self._abort_flag.is_set() or speak_text is None:
+                return
+            from albedo.audio.tts import enqueue_speech, audio_queue
+            enqueue_speech(speak_text, voice_model=voice, device=device)
+            self._set_state("speaking")
+
+            def _wait() -> None:
+                try:
+                    audio_queue.join()
+                except Exception:
+                    pass
+                finally:
+                    self._ui(lambda: self._set_state("standby"))
+
+            threading.Thread(target=_wait, daemon=True, name="tts-drain").start()
+
+        _type(0)
+        self.after(tts_start_ms, _launch_tts)
 
     def _log_append(self, role: str, text: str) -> None:
         ts = datetime.now().strftime("%H:%M")
@@ -1158,14 +1285,29 @@ class AlbedoGUI(ctk.CTk):
         # STT mishearings like "and" instead of "in".
         if "weather" in lower:
             import re as _re
-            # Strip Vosk filler + common mishearings; keep the location words
+            # Resolve proximity phrases to NODE_LOCATION BEFORE stripping, so
+            # "near me" / "nearby" don't get reduced to bare "near" after "me" is removed.
+            _prox = _re.compile(
+                r'\b(near\s+me|near\s+here|near\s+by|nearby|my\s+location|'
+                r'my\s+area|my\s+city|my\s+town|where\s+i\s+am|'
+                r'locally|around\s+here|around\s+me)\b',
+                _re.IGNORECASE,
+            )
+            text_r = _prox.sub(loc, text)
+            # Strip Vosk filler + common mishearings; keep location words
             stripped = _re.sub(
                 r'\b(what|whats|is|the|weather|tell|me|give|current|forecast|'
                 r'today|please|check|and(?=\s+\w+\s+\w))\b',
-                '', text, flags=_re.IGNORECASE,
+                '', text_r, flags=_re.IGNORECASE,
             ).strip()
-            # If user named a location, use it; otherwise fall back to NODE_LOCATION
-            location = stripped if len(stripped) > 3 else loc
+            # Guard: lone prepositions / proximity words are not valid locations
+            _NOT_LOC = {"near", "here", "there", "nearby", "local",
+                        "locally", "around", "close", "by", "in"}
+            location = (
+                stripped
+                if len(stripped) > 3 and stripped.lower() not in _NOT_LOC
+                else loc
+            )
             text = (
                 f"What is the current weather in {location}? "
                 "Answer in one sentence using Fahrenheit."
@@ -1314,8 +1456,61 @@ class AlbedoGUI(ctk.CTk):
         On any import error, API failure, or missing key the method falls
         through silently to the local pipeline so Albedo never goes dark.
         """
-        # Vault index intercept — runs before the Commander so it always fires.
         q_lower = query.strip().lower()
+
+        # ── Local machine interceptors — MUST run before autonomous_commander ──
+        # Cloud LLMs have zero access to this machine. Route all hardware,
+        # file, and OS-control queries to local Python tools first.
+        try:
+            from albedo.pipeline import (
+                _is_identity_query, _IDENTITY_RESPONSE,
+                _is_audit_query, _extract_file_ext, _count_files_by_ext,
+                _handle_launch, _handle_kill_process, _handle_top_processes,
+                _handle_disk_cleanup, _is_oc_query, _run_oc_query, _strip_markdown,
+            )
+
+            if _is_identity_query(query):
+                return _IDENTITY_RESPONSE
+
+            if _is_audit_query(query):
+                try:
+                    import sys as _sys, os as _pios
+                    _sys.path.insert(0, str(_pios.path.dirname(
+                        _pios.path.dirname(_pios.path.abspath(__file__)))))
+                    from diagnostics import run_tactical_audit, get_spoken_audit
+                    self._tts_override = get_spoken_audit()
+                    return _strip_markdown(run_tactical_audit())
+                except Exception as exc:
+                    self._tts_override = None
+                    return f"Audit error: {exc}"
+
+            _launch = _handle_launch(query)
+            if _launch is not None:
+                return _launch
+
+            _kill = _handle_kill_process(query)
+            if _kill is not None:
+                return _kill
+
+            _top = _handle_top_processes(query)
+            if _top is not None:
+                return _top
+
+            _clean = _handle_disk_cleanup(query)
+            if _clean is not None:
+                return _clean
+
+            _ext = _extract_file_ext(query)
+            if _ext:
+                return _count_files_by_ext(_ext)
+
+            if _is_oc_query(query):
+                return _strip_markdown(_run_oc_query(query))
+
+        except Exception as _local_exc:
+            print(f"[gui] Local intercept error: {_local_exc}")
+
+        # ── Vault index intercept ─────────────────────────────────────────────
         if any(q_lower == kw or q_lower.startswith(kw + " ")
                for kw in ("index vault", "reindex vault", "re-index vault")):
             try:
@@ -1325,7 +1520,7 @@ class AlbedoGUI(ctk.CTk):
             except Exception as exc:
                 return f"[OBSIDIAN VAULT] Indexing failed: {exc}"
 
-        # Dream cycle intercept.
+        # ── Dream cycle intercept ─────────────────────────────────────────────
         if any(q_lower == kw or q_lower.startswith(kw + " ")
                for kw in ("dream cycle", "rem cycle", "initiate dream", "run dream")):
             try:
@@ -1441,6 +1636,7 @@ class AlbedoGUI(ctk.CTk):
                 return
 
             self._audio_streamed_for_current_response = False
+            self._tts_override = None
 
             if is_direct:
                 response = self._run_direct_search(query)
@@ -1462,29 +1658,19 @@ class AlbedoGUI(ctk.CTk):
                 self._chat_history = self._chat_history[-20:]
 
             resp = response
-            self._ui(lambda: self._log_append("albedo", resp))
+            _speak_text = self._tts_override if self._tts_override else resp
+            self._tts_override = None
+            _voice = self._get_tts_voice()
+            _dev   = self._settings.get("audio_output_device")
 
-            if not self._audio_muted and not self._abort_flag.is_set():
-                if not self._audio_streamed_for_current_response:
-                    # Non-streaming route — enqueue full response now
-                    self._ui(lambda: self._set_state("speaking"))
-                    _voice = self._get_tts_voice()
-                    _dev   = self._settings.get("audio_output_device")
-                    from albedo.audio.tts import enqueue_speech
-                    enqueue_speech(resp, voice_model=_voice, device=_dev)
-
-                def _wait_for_audio() -> None:
-                    try:
-                        from albedo.audio.tts import audio_queue
-                        audio_queue.join()
-                    except Exception as e:
-                        print(f"[gui] audio_queue.join error: {e}")
-                    finally:
-                        self._ui(lambda: self._set_state("standby"))
-
-                threading.Thread(target=_wait_for_audio, daemon=True,
-                                 name="tts-drain").start()
+            if not self._audio_streamed_for_current_response:
+                # Non-streaming path: word-by-word typewriter + coordinated TTS
+                _st = _speak_text if not self._audio_muted else None
+                self._ui(lambda r=resp, s=_st, v=_voice, d=_dev:
+                         self._log_stream_response(r, s, v, d))
             else:
+                # Gemini streaming already handled TTS — just show full text
+                self._ui(lambda: self._log_append("albedo", resp))
                 self._ui(lambda: self._set_state("standby"))
 
         except Exception as exc:
@@ -1598,10 +1784,163 @@ class AlbedoGUI(ctk.CTk):
                 "Voice and Wake Word synchronized.",
             )
 
+    # ── Side panel ─────────────────────────────────────────────────────────
+
+    def _build_side_panel(self, panel: ctk.CTkFrame) -> None:
+        """Populate the collapsible right side panel — system controls only."""
+        # Header bar
+        hdr = ctk.CTkFrame(panel, fg_color=C_BG, corner_radius=0, height=46)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        ctk.CTkLabel(hdr, text="// SYS_PANEL",
+                     font=("Courier New", 13, "bold"),
+                     text_color=C_CYAN).pack(expand=True, pady=10)
+
+        ctk.CTkFrame(panel, fg_color=C_BORDER, height=1).pack(fill="x")
+
+        # Spacer so buttons sit centred vertically
+        ctk.CTkFrame(panel, fg_color="transparent").pack(expand=True)
+
+        # System action buttons
+        btn_f = ctk.CTkFrame(panel, fg_color="transparent")
+        btn_f.pack(fill="x", padx=12, pady=0)
+
+        _BTN_FONT = ("Courier New", 15, "bold")
+        _BTN_H    = 52
+
+        ctk.CTkButton(btn_f, text="LOGS", height=_BTN_H,
+                      font=_BTN_FONT,
+                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+                      text_color=C_CYAN,
+                      command=self._open_console).pack(fill="x", pady=(0, 6))
+
+        ctk.CTkButton(btn_f, text="SETTINGS", height=_BTN_H,
+                      font=_BTN_FONT,
+                      fg_color=C_BORDER, hover_color=C_CYAN,
+                      command=self._open_settings).pack(fill="x", pady=(0, 6))
+
+        ctk.CTkButton(btn_f, text="HARDWARE", height=_BTN_H,
+                      font=_BTN_FONT,
+                      fg_color=C_BORDER, hover_color=C_CYAN,
+                      command=self._open_hardware_settings).pack(fill="x", pady=(0, 6))
+
+        self._update_btn = ctk.CTkButton(
+            btn_f, text="CHECK UPDATE", height=_BTN_H,
+            font=_BTN_FONT,
+            fg_color=C_BORDER, hover_color=C_GREEN,
+            command=self._run_update)
+        self._update_btn.pack(fill="x")
+
+        # Bottom spacer
+        ctk.CTkFrame(panel, fg_color="transparent").pack(expand=True)
+
+    def _toggle_side_panel(self) -> None:
+        if self._panel_visible:
+            self._side_panel.grid_remove()
+            self._panel_visible = False
+            self._toggle_arrow_lbl.configure(text="◄")
+        else:
+            self._side_panel.grid()
+            self._panel_visible = True
+            self._toggle_arrow_lbl.configure(text="►")
+
+    # ── Update check & apply ───────────────────────────────────────────────
+
+    def _check_for_updates(self, _manual: bool = False) -> None:
+        """Run git fetch in background; alert user if commits are available."""
+        def _worker():
+            import subprocess as _sp
+            try:
+                fetch = _sp.run(
+                    ["git", "fetch", "--quiet"],
+                    capture_output=True, timeout=15,
+                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
+                )
+                if fetch.returncode != 0 and _manual:
+                    self._ui(lambda: self._reset_update_btn("NOT A GIT REPO"))
+                    return
+                result = _sp.run(
+                    ["git", "log", "HEAD..origin/HEAD", "--oneline"],
+                    capture_output=True, text=True, timeout=10,
+                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
+                )
+                new_commits = result.stdout.strip()
+                if new_commits:
+                    self._update_available = True
+                    self._ui(self._notify_update_available)
+                elif _manual:
+                    self._ui(lambda: self._reset_update_btn("UP TO DATE"))
+            except FileNotFoundError:
+                if _manual:
+                    self._ui(lambda: self._reset_update_btn("GIT NOT FOUND"))
+            except Exception as exc:
+                print(f"[update] check error: {exc}")
+                if _manual:
+                    self._ui(lambda: self._reset_update_btn("CHECK FAILED"))
+        threading.Thread(target=_worker, daemon=True, name="update-check").start()
+
+    def _reset_update_btn(self, label: str = "CHECK UPDATE") -> None:
+        if not self._update_btn:
+            return
+        self._update_btn.configure(
+            text=label, fg_color=C_BORDER,
+            hover_color=C_GREEN, text_color=C_TEXT)
+        # Auto-revert to default label after 4 s
+        if label != "CHECK UPDATE":
+            self.after(4000, lambda: self._update_btn and
+                       self._update_btn.configure(text="CHECK UPDATE"))
+
+    def _notify_update_available(self) -> None:
+        """Flash the update button and log an alert in the chat feed."""
+        if self._update_btn:
+            self._update_btn.configure(
+                text="UPDATE AVAILABLE", fg_color="#005500",
+                hover_color=C_GREEN, text_color=C_GREEN)
+        self._log_append(
+            "system",
+            "UPDATE AVAILABLE — A new version of Albedo is ready. "
+            "Open the side panel and click UPDATE AVAILABLE to install and restart.")
+
+    def _run_update(self) -> None:
+        """Pull latest commits then restart the application."""
+        import subprocess as _sp
+        if not self._update_available:
+            if self._update_btn:
+                self._update_btn.configure(text="CHECKING...", fg_color="#001133")
+            self._check_for_updates(_manual=True)
+            return
+
+        import tkinter.messagebox as _mb
+        confirmed = _mb.askyesno(
+            "Albedo Update",
+            "A new version is ready.\n\nAlbedo will pull the latest commit and restart.\n\nProceed?",
+            parent=self,
+        )
+        if not confirmed:
+            return
+
+        def _apply():
+            try:
+                _sp.run(
+                    ["git", "pull", "--ff-only"],
+                    capture_output=True, timeout=60,
+                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
+                )
+            except Exception as exc:
+                print(f"[update] pull error: {exc}")
+            # Restart: launch a new process then exit this one
+            _sp.Popen(
+                [sys.executable, str(ROOT / "gui.py")],
+                creationflags=_sp.CREATE_NO_WINDOW,
+            )
+            self._ui(self.destroy)
+
+        threading.Thread(target=_apply, daemon=True, name="update-apply").start()
+
     # ── Developer console ──────────────────────────────────────────────────
 
     def _console_write(self, text: str) -> None:
-        """Buffer a console line and forward it to the dialog if open."""
+        """Buffer console output and forward to the floating ConsoleDialog if open."""
         self._console_buf.append(text)
         if len(self._console_buf) > 500:
             self._console_buf = self._console_buf[-500:]

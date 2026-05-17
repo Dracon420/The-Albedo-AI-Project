@@ -151,7 +151,7 @@ def main() -> None:
     print(f"  Found: {len(entries)} files  ({stl} STL · {tmf} 3MF · {obj} OBJ)")
     print(f"  Written: {OUTPUT_FILE}")
     print()
-    print("  Run the following to index the manifest into ChromaDB:")
+    print("  Move the manifest into your Obsidian vault, then index:")
     print("    python main.py --index")
 
 

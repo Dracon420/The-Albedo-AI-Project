@@ -43,7 +43,7 @@ import soundfile as sf
 from albedo.config import PIPER_BINARY, PIPER_VOICE_MODEL, AUDIO_SAMPLE_RATE
 
 # ---------------------------------------------------------------------------
-# Markdown sanitiser
+# Markdown + symbol sanitiser
 # ---------------------------------------------------------------------------
 _MD_IMG       = re.compile(r'!\[[^\]]*\]\([^)]*\)')
 _MD_LINK      = re.compile(r'\[([^\]]+)\]\([^)]*\)')
@@ -58,9 +58,33 @@ _MD_BLOCKQUOT = re.compile(r'^\s*>\s*', re.MULTILINE)
 _MD_HR        = re.compile(r'^[-*_]{3,}\s*$', re.MULTILINE)
 _MD_BLANKS    = re.compile(r'\n{3,}')
 
+# Lines that are pure separator noise (===, ---, ___, or mixed punctuation only)
+_SYM_DIVIDER  = re.compile(r'^\s*[=\-_/*#|]{3,}\s*$', re.MULTILINE)
+# Key : value lines with heavy padding e.g. "CPU     : Intel ..."  →  "CPU: Intel ..."
+_SYM_KV_PAD  = re.compile(r'^(\w[\w\s]{0,20}?)\s{2,}:\s+', re.MULTILINE)
+# Double-slash comment leaders: "//" at start of token
+_SYM_DSLASH  = re.compile(r'\s*//\s*')
+# Pipe separators used as column dividers
+_SYM_PIPE    = re.compile(r'\s*\|\s*')
+# Double-dash used as an em-dash or separator
+_SYM_DDASH   = re.compile(r'\s+--\s+')
+# Trailing colons on ALL-CAPS section headers e.g. "THERMALS:" or "ADVISORY:"
+_SYM_CAPS_HDR = re.compile(r'^([A-Z][A-Z0-9 /]{2,}):?\s*$', re.MULTILINE)
+# Pronunciation corrections — replace before Edge-TTS sees the text
+_SYM_ALBEDO  = re.compile(r'\bAlbedo\b', re.IGNORECASE)
+# Windows drive paths: "C:\"  →  "Drive C"
+_SYM_DRIVE   = re.compile(r'\b([A-Z]):\\')
+# Remaining backslashes (path separators, WMI sensor names, etc.) → space
+_SYM_BSLASH  = re.compile(r'\\')
+# Percent signs — keep the number, say "percent"
+_SYM_PCT     = re.compile(r'(\d)\s*%')
+# Degree symbols
+_SYM_DEG     = re.compile(r'(\d)\s*°\s*C\b')
+
 
 def _sanitize_for_tts(text: str) -> str:
-    """Strip all markdown formatting so TTS speaks clean prose."""
+    """Strip markdown and non-speech symbols so TTS speaks clean prose."""
+    # ── markdown ────────────────────────────────────────────────────────────
     text = _MD_IMG.sub('', text)
     text = _MD_LINK.sub(r'\1', text)
     text = _MD_BARE_LINK.sub(r'\1', text)
@@ -72,7 +96,22 @@ def _sanitize_for_tts(text: str) -> str:
     text = _MD_BULLET.sub('', text)
     text = _MD_BLOCKQUOT.sub('', text)
     text = _MD_HR.sub('', text)
+    # ── symbol noise ────────────────────────────────────────────────────────
+    text = _SYM_DIVIDER.sub('', text)          # pure separator lines
+    text = _SYM_KV_PAD.sub(r'\1: ', text)      # "CPU     : " → "CPU: "
+    text = _SYM_DSLASH.sub(' ', text)           # "//" → space
+    text = _SYM_PIPE.sub(', ', text)            # "|" column divider → comma
+    text = _SYM_DDASH.sub(', ', text)           # " -- " → comma pause
+    text = _SYM_CAPS_HDR.sub('', text)          # drop ALL-CAPS section labels
+    text = _SYM_ALBEDO.sub('Albaydo', text)      # al-bay-doh pronunciation
+    text = _SYM_DRIVE.sub(r'Drive \1, ', text)  # "C:\" → "Drive C, "
+    text = _SYM_BSLASH.sub(' ', text)           # remaining backslashes → space
+    text = _SYM_PCT.sub(r'\1 percent', text)    # "70%" → "70 percent"
+    text = _SYM_DEG.sub(r'\1 degrees Celsius', text)  # "72°C" → "72 degrees Celsius"
+    # ── cleanup ─────────────────────────────────────────────────────────────
     text = _MD_BLANKS.sub('\n\n', text)
+    # Collapse lines that became blank after symbol stripping
+    text = re.sub(r'\n[ \t]*\n', '\n', text)
     return text.strip()
 
 
@@ -437,11 +476,31 @@ def synthesize_to_bytes(text: str,
             pass
 
 
+def _batch_sentences(sentences: list[str], max_words: int = 35) -> list[str]:
+    """Group short sentences into larger chunks to reduce inter-request gaps."""
+    batches: list[str] = []
+    current: list[str] = []
+    current_wc = 0
+    for s in sentences:
+        wc = len(s.split())
+        if current_wc + wc > max_words and current:
+            batches.append(" ".join(current))
+            current = [s]
+            current_wc = wc
+        else:
+            current.append(s)
+            current_wc += wc
+    if current:
+        batches.append(" ".join(current))
+    return batches
+
+
 def enqueue_speech(text: str, voice_model: str | None = None,
                    device: int | None = None) -> None:
     """
-    Split text into sentences and push each as a (text, voice, device) tuple
-    onto the global audio_queue for the persistent _audio_worker to play.
+    Split text into batched chunks and push onto the global audio_queue.
+    Sentences are grouped into ~35-word batches so Edge-TTS makes fewer
+    HTTP round-trips and inter-sentence silence is minimised.
     Returns immediately — synthesis and playback happen asynchronously.
     """
     _stop_event.clear()
@@ -449,6 +508,6 @@ def enqueue_speech(text: str, voice_model: str | None = None,
     if not text:
         return
     model = _resolve_voice(voice_model)
-    for sentence in _split_sentences(text):
-        if sentence:
-            audio_queue.put((sentence, model, device))
+    for batch in _batch_sentences(_split_sentences(text)):
+        if batch:
+            audio_queue.put((batch, model, device))

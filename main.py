@@ -13,12 +13,10 @@ import sys
 
 
 def cmd_index():
-    from albedo.rag.indexer import index_all
-    print("Indexing local directories into ChromaDB...")
-    results = index_all()
-    for collection, count in results.items():
-        print(f"  {collection}: {count} new chunks indexed")
-    print("Done.")
+    from memory import index_obsidian_vault
+    print("Indexing Obsidian vault into ChromaDB...")
+    status = index_obsidian_vault()
+    print(status)
 
 
 def cmd_query(query: str, use_web: bool):

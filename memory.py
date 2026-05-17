@@ -41,8 +41,41 @@ COLLECTION    = "obsidian_vault"
 CHUNK_SIZE    = 1000
 CHUNK_OVERLAP = 200
 
-# Singleton embedding function — loaded once, reused across calls.
-_EF = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+# Singleton embedding function — lazy-loaded on first use to avoid blocking
+# at import time if the model file is corrupt or being downloaded.
+_EF: "SentenceTransformerEmbeddingFunction | None" = None
+_EF_tried = False
+
+
+def _get_ef() -> "SentenceTransformerEmbeddingFunction | None":
+    global _EF, _EF_tried
+    if _EF_tried:
+        return _EF
+    _EF_tried = True
+    try:
+        import os as _os
+        from pathlib import Path as _Path
+        _hf_cache = _Path.home() / ".cache" / "huggingface" / "hub"
+        _prefix    = "models--sentence-transformers--all-MiniLM-L6-v2"
+        _cached    = (
+            any(p.name.startswith(_prefix) for p in _hf_cache.iterdir())
+            if _hf_cache.exists() else False
+        )
+        _prev = _os.environ.get("HF_HUB_OFFLINE")
+        if _cached:
+            _os.environ["HF_HUB_OFFLINE"] = "1"
+        try:
+            _EF = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
+        finally:
+            if _prev is None:
+                _os.environ.pop("HF_HUB_OFFLINE", None)
+            else:
+                _os.environ["HF_HUB_OFFLINE"] = _prev
+        print("[memory] Embedding model loaded (all-MiniLM-L6-v2, CPU).")
+    except Exception as exc:
+        print(f"[memory] WARNING: embedding model unavailable ({exc}). Search will return empty results.")
+        _EF = None
+    return _EF
 
 
 # ---------------------------------------------------------------------------
@@ -53,7 +86,7 @@ def _get_collection() -> chromadb.Collection:
     client = chromadb.PersistentClient(path=DB_PATH)
     return client.get_or_create_collection(
         name=COLLECTION,
-        embedding_function=_EF,
+        embedding_function=_get_ef(),
     )
 
 

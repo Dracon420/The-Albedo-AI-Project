@@ -1,11 +1,11 @@
 """
-Verify Protocol — cross-references local Exotic OS telemetry with live web data
+Verify Protocol — cross-references Obsidian vault knowledge with live web data
 before delivering any hardware diagnosis. Triggered automatically when a query
-contains hardware-related keywords (defined in config.HARDWARE_KEYWORDS).
+contains hardware-related keywords.
 """
 
 from albedo.config import HARDWARE_KEYWORDS
-from albedo.rag.retriever import query_exotic_os
+from memory import search_memory
 from albedo.web.search import web_search, format_web_results
 
 
@@ -14,24 +14,20 @@ def is_hardware_query(query: str) -> bool:
     return any(kw in lower for kw in HARDWARE_KEYWORDS)
 
 
-def _format_local_context(chunks: list[dict]) -> str:
+def _format_local_context(chunks: list[str]) -> str:
     if not chunks:
-        return "No relevant Exotic OS telemetry found in local index."
-    lines = []
-    for i, c in enumerate(chunks, 1):
-        source = c.get("source", "unknown")
-        lines.append(f"[Local {i}] ({source})\n{c['text'].strip()}")
-    return "\n\n".join(lines)
+        return "No relevant knowledge found in local vault."
+    return "\n\n".join(f"[Local {i}]\n{c.strip()}" for i, c in enumerate(chunks, 1))
 
 
 def run_verify(query: str) -> dict:
     """
     Returns a dict with:
-      - local_context: str  (Exotic OS RAG results)
+      - local_context: str  (Obsidian vault RAG results)
       - web_context:   str  (DuckDuckGo results)
       - synthesis_prompt: str  (ready-to-send prompt for the LLM)
     """
-    local_chunks = query_exotic_os(query)
+    local_chunks = search_memory(query)
     web_results = web_search(query)
 
     local_context = _format_local_context(local_chunks)
@@ -42,7 +38,7 @@ def run_verify(query: str) -> dict:
 You are diagnosing a hardware issue. You MUST cross-reference both sources below before
 answering. Do not speculate beyond what these sources support.
 
---- LOCAL EXOTIC OS TELEMETRY ---
+--- LOCAL KNOWLEDGE (OBSIDIAN VAULT) ---
 {local_context}
 
 --- LIVE WEB DATA ---
@@ -51,9 +47,8 @@ answering. Do not speculate beyond what these sources support.
 --- USER QUERY ---
 {query}
 
-Synthesize both sources. If they conflict, state the conflict explicitly. If local telemetry
-confirms a pattern also documented online, say so. Flag any hardware state that requires
-immediate attention.
+Synthesize both sources. If they conflict, state the conflict explicitly.
+Flag any hardware state that requires immediate attention.
 """
 
     return {
