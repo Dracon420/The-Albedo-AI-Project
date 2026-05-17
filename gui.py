@@ -201,21 +201,24 @@ class SettingsDialog(ctk.CTkToplevel):
                              border_color=C_BORDER, text_color=C_TEXT,
                              width=300)
         entry.pack(side="left", padx=(6, 4))
-        # Right-click context menu so users can paste API keys
+        # Right-click context menu — paste API keys
         _ctx = tk.Menu(entry, tearoff=0, bg=C_BG, fg=C_TEXT,
                        activebackground=C_CYAN_DIM, activeforeground=C_TEXT,
                        font=("Courier New", 10))
         _ctx.add_command(label="Paste",
-                         command=lambda e=entry, v=var: (
-                             e.delete(0, "end"),
-                             e.insert(0, e.clipboard_get() or "")))
-        _ctx.add_command(label="Copy",      command=lambda e=entry: e.event_generate("<<Copy>>"))
-        _ctx.add_command(label="Cut",       command=lambda e=entry: e.event_generate("<<Cut>>"))
-        _ctx.add_command(label="Select All",command=lambda e=entry: e.select_range(0, "end"))
-        # Bind to the inner tk.Entry widget — CTkEntry stores it as ._entry
-        _inner = getattr(entry, "_entry", None) or getattr(entry, "_widget", None)
-        if _inner:
-            _inner.bind("<Button-3>", lambda ev, m=_ctx: m.tk_popup(ev.x_root, ev.y_root))
+                         command=lambda v=var, e=entry: v.set(e.clipboard_get()))
+        _ctx.add_command(label="Clear",
+                         command=lambda v=var: v.set(""))
+        _ctx.add_command(label="Select All",
+                         command=lambda e=entry: e.select_range(0, "end"))
+
+        def _popup(ev, m=_ctx):
+            m.tk_popup(ev.x_root, ev.y_root)
+
+        # Bind to the CTkEntry frame AND every child widget inside it
+        entry.bind("<Button-3>", _popup)
+        for _ch in entry.winfo_children():
+            _ch.bind("<Button-3>", _popup)
         # show / hide toggle
         _visible = [False]
         def _toggle(e=entry, v=_visible):
