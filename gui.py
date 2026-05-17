@@ -2252,16 +2252,22 @@ class AlbedoGUI(ctk.CTk):
 
     def _init_cyberpunk_overlay(self) -> None:
         """
-        Transparent topmost Toplevel drawn over Mission Control.
-        '#000000' is the transparentColor — those pixels are invisible.
-        WS_EX_TRANSPARENT (ctypes) makes every pixel click-through so the
-        main window receives all mouse events normally.
-        Static elements are cached per-size; _draw_static only runs on resize.
-        """
-        import math, random
+        Transparent click-through Toplevel drawn over Mission Control.
 
-        TRANSP  = '#000000'
-        CY      = '#00F0FF'   # electric cyan — brackets / dots
+        Transparency is done entirely via Win32 ctypes (not wm_attributes)
+        so it works reliably on Windows 11 regardless of DWM quirks:
+          - SetLayeredWindowAttributes  → color-key transparency
+          - SetWindowPos(HWND_TOPMOST)  → always above the main window
+          - WS_EX_TRANSPARENT           → all clicks fall through to the UI
+
+        BG_KEY ('#000001') is the transparent color.  Every pixel of that
+        exact color becomes invisible; everything else (cyan HUD elements)
+        remains fully opaque and visible.
+        """
+        import math, random, ctypes
+
+        BG_KEY  = '#000001'   # transparent key  (R=0, G=0, B=1 → COLORREF 0x010000)
+        CY      = '#00F0FF'   # electric cyan — brackets / corner dots
         CY_MID  = '#004855'   # mid cyan      — tick marks, edge lines, labels
         CY_DIM  = '#001C24'   # dim cyan      — secondary labels
 
@@ -2269,40 +2275,50 @@ class AlbedoGUI(ctk.CTk):
         ov = tk.Toplevel(self)
         ov.withdraw()
         ov.overrideredirect(True)
-        ov.configure(bg=TRANSP)
-        ov.wm_attributes('-transparentcolor', TRANSP)
-        ov.wm_attributes('-topmost', True)      # must be above the main window
+        ov.configure(bg=BG_KEY)
         self._ov = ov
 
-        cv = tk.Canvas(ov, bg=TRANSP, highlightthickness=0)
+        cv = tk.Canvas(ov, bg=BG_KEY, highlightthickness=0)
         cv.pack(fill='both', expand=True)
 
-        # Click-through: WS_EX_LAYERED | WS_EX_TRANSPARENT
-        try:
-            import ctypes
-            hwnd = ov.winfo_id()
-            cur  = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
-            ctypes.windll.user32.SetWindowLongW(hwnd, -20, cur | 0x80000 | 0x20)
-        except Exception:
-            pass
+        # Force Win32 window creation before touching the HWND
+        ov.update_idletasks()
 
-        # ── geometry sync (only redraws static layer on size change) ─
+        try:
+            u32  = ctypes.windll.user32
+            hwnd = ov.winfo_id()
+
+            # WS_EX_LAYERED (0x80000) — required for SetLayeredWindowAttributes
+            # WS_EX_TRANSPARENT (0x20) — clicks pass through every pixel
+            cur = u32.GetWindowLongW(hwnd, -20)          # GWL_EXSTYLE
+            u32.SetWindowLongW(hwnd, -20, cur | 0x80000 | 0x20)
+
+            # Color-key: BG_KEY '#000001' = R=0,G=0,B=1 → COLORREF = 0x010000
+            u32.SetLayeredWindowAttributes(hwnd, 0x010000, 0, 0x01)  # LWA_COLORKEY
+
+            # HWND_TOPMOST (-1): always above the main window
+            # SWP_NOSIZE|SWP_NOMOVE|SWP_NOACTIVATE = 0x0001|0x0002|0x0010
+            u32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0013)
+
+        except Exception as exc:
+            print(f'[hud] overlay init error: {exc}')
+
+        # ── geometry sync — repositions overlay; redraws static only on resize ─
         _last_wh = [-1, -1]
 
         def _sync(*_):
             if self._closing or not ov.winfo_exists():
                 return
-            # Read geometry without update_idletasks to avoid re-entrant lag
             w, h = self.winfo_width(), self.winfo_height()
             x, y = self.winfo_x(),     self.winfo_y()
             ov.geometry(f'{w}x{h}+{x}+{y}')
-            if [w, h] != _last_wh:
+            if [w, h] != _last_wh and w > 1:
                 _last_wh[:] = [w, h]
                 _draw_static(w, h)
 
         self.bind('<Configure>', lambda e: self.after_idle(_sync))
 
-        # ── static elements ───────────────────────────────────────
+        # ── static HUD layer ──────────────────────────────────────
         def _bracket(x, y, sx, sy, arm=46):
             tick = arm // 3
             cv.create_line(x, y, x+sx*arm, y,
@@ -2311,7 +2327,7 @@ class AlbedoGUI(ctk.CTk):
                            fill=CY, width=2, tags='st', capstyle='round')
             cv.create_line(x+sx*tick, y, x+sx*tick, y+sy*9,
                            fill=CY_MID, width=1, tags='st')
-            cv.create_line(x, y+sy*tick, x+sx*9,    y+sy*tick,
+            cv.create_line(x, y+sy*tick, x+sx*9, y+sy*tick,
                            fill=CY_MID, width=1, tags='st')
             cv.create_oval(x-3, y-3, x+3, y+3, fill=CY, outline='', tags='st')
 
@@ -2324,7 +2340,6 @@ class AlbedoGUI(ctk.CTk):
             _bracket(M,   h-M, sx= 1, sy=-1)
             _bracket(w-M, h-M, sx=-1, sy=-1)
 
-            # Broken edge lines
             for x0, x1 in [(M+ARM+6, w//2-GAP), (w//2+GAP, w-M-ARM-6)]:
                 cv.create_line(x0, M,   x1, M,   fill=CY_MID, width=1, tags='st')
                 cv.create_line(x0, h-M, x1, h-M, fill=CY_MID, width=1, tags='st')
@@ -2332,25 +2347,24 @@ class AlbedoGUI(ctk.CTk):
                 cv.create_line(M,   y0, M,   y1, fill=CY_MID, width=1, tags='st')
                 cv.create_line(w-M, y0, w-M, y1, fill=CY_MID, width=1, tags='st')
 
-            # HUD corner labels
-            cv.create_text(M+ARM+10, M, anchor='w', tags='st',
+            cv.create_text(M+ARM+10,   M,   anchor='w', tags='st',
                            text='ALBEDO // MISSION CONTROL',
                            font=('Courier New', 8), fill=CY_MID)
             cv.create_text(w-M-ARM-10, h-M, anchor='e', tags='st',
                            text='RTX 2060  |  6 GB  |  WIN11',
                            font=('Courier New', 7), fill=CY_MID)
-            cv.create_text(M+ARM+10, h-M, anchor='w', tags='st',
+            cv.create_text(M+ARM+10,   h-M, anchor='w', tags='st',
                            text='SPARTAN-CLASS  //  HYBRID RAG',
                            font=('Courier New', 7), fill=CY_DIM)
-            cv.create_text(w-M-ARM-10, M, anchor='e', tags='st',
+            cv.create_text(w-M-ARM-10, M,   anchor='e', tags='st',
                            text='UNSC AI FRAMEWORK v1.0',
                            font=('Courier New', 7), fill=CY_DIM)
 
-        # ── animated elements ─────────────────────────────────────
-        _st = {'scan_y': -20, 'phase': 0.0, 'streams': {}}
-        HEX = list('0123456789ABCDEF')
+        # ── animated HUD layer ────────────────────────────────────
+        _st  = {'scan_y': -20, 'phase': 0.0, 'streams': {}}
+        HEX  = list('0123456789ABCDEF')
 
-        def _seed_streams(w, h):
+        def _seed(w, h):
             for x in (7, 21, w-21, w-7):
                 if x not in _st['streams']:
                     _st['streams'][x] = [
@@ -2367,7 +2381,6 @@ class AlbedoGUI(ctk.CTk):
             h = self.winfo_height()
             M, ARM = 14, 46
 
-            # Scan line
             sy = _st['scan_y']
             if M < sy < h - M:
                 cv.create_line(M, sy, w-M, sy, fill='#001A22',
@@ -2378,7 +2391,6 @@ class AlbedoGUI(ctk.CTk):
             if _st['scan_y'] > h + 30:
                 _st['scan_y'] = -10
 
-            # Corner bracket pulse
             v  = int(45 + 38 * math.sin(_st['phase']))
             pc = f'#00{min(v,255):02x}{min(v+30,255):02x}'
             for bx, by, fx, fy in [(M, M, 1, 1), (w-M, M, -1, 1),
@@ -2389,8 +2401,7 @@ class AlbedoGUI(ctk.CTk):
                                fill=pc, width=2, tags='an', capstyle='round')
             _st['phase'] += 0.045
 
-            # Falling hex data streams on left / right edges
-            _seed_streams(w, h)
+            _seed(w, h)
             for x, drops in _st['streams'].items():
                 for drop in drops:
                     dy, ch, spd = drop
@@ -2405,7 +2416,7 @@ class AlbedoGUI(ctk.CTk):
             if not self._closing:
                 cv.after(80, _animate)
 
-        # ── minimize / restore ─────────────────────────────────────
+        # ── minimize / restore / focus ────────────────────────────
         def _on_state(*_):
             if self._closing or not ov.winfo_exists():
                 return
@@ -2413,13 +2424,21 @@ class AlbedoGUI(ctk.CTk):
                 ov.withdraw()
             else:
                 ov.deiconify()
+                ov.lift()
 
-        self.bind('<Map>',   _on_state)
-        self.bind('<Unmap>', _on_state)
+        self.bind('<Map>',     _on_state)
+        self.bind('<Unmap>',   _on_state)
+        # Re-raise overlay whenever the main window gets focus
+        self.bind('<FocusIn>',
+                  lambda e: (not self._closing
+                             and ov.winfo_exists()
+                             and ov.lift()))
 
-        # Initial position, show, animate
+        # Initial draw — use update_idletasks once for accurate geometry
+        self.update_idletasks()
         _sync()
         ov.deiconify()
+        ov.lift()
         _animate()
 
     # ── Cleanup ────────────────────────────────────────────────────────────
