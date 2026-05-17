@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-<img src="./albedo_icon.jpg" alt="Albedo" width="180"/>
+<img src="./albedo_logo.png" alt="Albedo" width="180"/>
 
 # ALBEDO // MISSION CONTROL
 
@@ -16,11 +16,9 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Beta%20v1.0.01-00F0FF?style=flat-square)
 
+📖 **[Command Reference](docs/COMMANDS.md)** — full voice &amp; text command catalog
+
 </div>
-
----
-
-📖 **[Command Reference — docs/COMMANDS.md](docs/COMMANDS.md)** — full catalog of voice and text commands, organized by category.
 
 ---
 
