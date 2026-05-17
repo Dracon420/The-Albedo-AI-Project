@@ -171,53 +171,99 @@ class SettingsDialog(ctk.CTkToplevel):
         super().__init__(parent)
         self._parent = parent
         self.title("ALBEDO  //  SETTINGS")
-        self.geometry("580x420")
-        self.resizable(False, False)
+        self.geometry("600x680")
+        self.minsize(560, 480)
+        self.resizable(True, True)
         self.configure(fg_color=C_PANEL)
         self.grab_set()
         self.focus_set()
         self._build()
 
+    # ── helper: labelled password-style entry with show/hide toggle ────────
+    def _api_entry(self, parent, label: str, env_key: str) -> ctk.StringVar:
+        import os as _os
+        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row.pack(fill="x", padx=24, pady=(4, 2))
+        ctk.CTkLabel(row, text=label, font=("Courier New", 11), width=140,
+                     text_color=C_TEXT, anchor="w").pack(side="left")
+        var = ctk.StringVar(value=_os.getenv(env_key, ""))
+        entry = ctk.CTkEntry(row, textvariable=var, show="●",
+                             font=("Courier New", 11), fg_color=C_BG,
+                             border_color=C_BORDER, text_color=C_TEXT,
+                             width=300)
+        entry.pack(side="left", padx=(6, 4))
+        # show / hide toggle
+        _visible = [False]
+        def _toggle(e=entry, v=_visible):
+            v[0] = not v[0]
+            e.configure(show="" if v[0] else "●")
+        ctk.CTkButton(row, text="👁", width=34, height=28,
+                      font=("Courier New", 11),
+                      fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+                      command=_toggle).pack(side="left")
+        return var
+
     def _build(self) -> None:
         import os as _os
         from dotenv import load_dotenv as _ldenv
         _ldenv(override=False)
-        p = {"padx": 24, "pady": 6}
 
-        # ── Obsidian vault path ────────────────────────────────────────────
-        ctk.CTkLabel(self, text="OBSIDIAN VAULT", font=("Courier New", 15, "bold"),
-                     text_color=C_CYAN).pack(pady=(20, 8))
-        ctk.CTkLabel(self, text="Vault path  --  Obsidian notes indexed for local RAG",
-                     font=("Courier New", 11), text_color=C_TEXT).pack(anchor="w", **p)
+        # Scrollable inner frame so the dialog is usable at any height
+        scroll = ctk.CTkScrollableFrame(self, fg_color=C_PANEL, border_width=0)
+        scroll.pack(fill="both", expand=True, padx=0, pady=0)
+        p = {"padx": 24, "pady": 5}
+
+        def _section(title: str) -> None:
+            ctk.CTkFrame(scroll, fg_color=C_BORDER, height=1).pack(
+                fill="x", padx=24, pady=(14, 4))
+            ctk.CTkLabel(scroll, text=title, font=("Courier New", 15, "bold"),
+                         text_color=C_CYAN).pack(pady=(4, 2))
+
+        # ── Obsidian vault ─────────────────────────────────────────────────
+        ctk.CTkLabel(scroll, text="OBSIDIAN VAULT",
+                     font=("Courier New", 15, "bold"),
+                     text_color=C_CYAN).pack(pady=(20, 2))
+        ctk.CTkLabel(scroll, text="Obsidian notes folder — indexed for local RAG",
+                     font=("Courier New", 10), text_color=C_MUTED).pack(**p)
         self._var_vault = ctk.StringVar(value=_os.getenv("OBSIDIAN_VAULT_PATH", ""))
-        ctk.CTkEntry(self, textvariable=self._var_vault, width=530,
+        ctk.CTkEntry(scroll, textvariable=self._var_vault,
                      font=("Courier New", 11), fg_color=C_BG,
-                     border_color=C_BORDER, text_color=C_TEXT).pack(**p)
+                     border_color=C_BORDER, text_color=C_TEXT).pack(
+                         fill="x", padx=24, pady=(0, 4))
 
         # ── Persona / wake word ────────────────────────────────────────────
-        ctk.CTkFrame(self, fg_color=C_BORDER, height=1).pack(fill="x", padx=24, pady=(12, 4))
-        ctk.CTkLabel(self, text="PERSONA  &  WAKE WORD",
-                     font=("Courier New", 15, "bold"),
-                     text_color=C_CYAN).pack(pady=(8, 4))
-        ctk.CTkLabel(self, text="Changes voice model and wake word simultaneously.",
-                     font=("Courier New", 10), text_color=C_MUTED).pack(pady=(0, 6))
-
+        _section("PERSONA  &  WAKE WORD")
+        ctk.CTkLabel(scroll, text="Changes voice model and wake word simultaneously.",
+                     font=("Courier New", 10), text_color=C_MUTED).pack(**p)
         active = self._parent._settings.get("active_persona", "cortana").capitalize()
         if active not in PERSONA_MAP:
             active = "Cortana"
         self._persona_var = ctk.StringVar(value=active)
-        ctk.CTkOptionMenu(self,
+        ctk.CTkOptionMenu(scroll,
                           variable=self._persona_var,
                           values=_PERSONA_DISPLAY,
                           font=("Courier New", 12),
                           fg_color=C_BG, text_color=C_TEXT,
                           button_color=C_BORDER, button_hover_color=C_CYAN_DIM,
                           dropdown_fg_color=C_BG,
-                          dropdown_text_color=C_TEXT).pack(padx=24, fill="x", pady=(0, 4))
+                          dropdown_text_color=C_TEXT).pack(
+                              padx=24, fill="x", pady=(0, 4))
+
+        # ── API Keys ───────────────────────────────────────────────────────
+        _section("API KEYS")
+        ctk.CTkLabel(scroll,
+                     text="Keys are saved to .env and take effect immediately on save.",
+                     font=("Courier New", 10), text_color=C_MUTED).pack(**p)
+
+        self._var_gemini  = self._api_entry(scroll, "Gemini API Key",  "GEMINI_API_KEY")
+        self._var_groq    = self._api_entry(scroll, "Groq API Key",    "GROQ_API_KEY")
+        self._var_together= self._api_entry(scroll, "Together API Key","TOGETHER_API_KEY")
 
         # ── Buttons ────────────────────────────────────────────────────────
-        btn = ctk.CTkFrame(self, fg_color="transparent")
-        btn.pack(pady=16)
+        ctk.CTkFrame(scroll, fg_color=C_BORDER, height=1).pack(
+            fill="x", padx=24, pady=(14, 6))
+        btn = ctk.CTkFrame(scroll, fg_color="transparent")
+        btn.pack(pady=(4, 8))
         ctk.CTkButton(btn, text="SAVE", width=130,
                       font=("Courier New", 12, "bold"),
                       command=self._save).pack(side="left", padx=10)
@@ -225,18 +271,28 @@ class SettingsDialog(ctk.CTkToplevel):
                       font=("Courier New", 12, "bold"),
                       fg_color=C_CYAN_DIM, hover_color=C_CYAN,
                       command=self._reindex).pack(side="left", padx=10)
-        self._msg = ctk.CTkLabel(self, text="", font=("Courier New", 10),
+        self._msg = ctk.CTkLabel(scroll, text="", font=("Courier New", 10),
                                  text_color=C_MUTED)
-        self._msg.pack()
+        self._msg.pack(pady=(0, 12))
 
     def _save(self) -> None:
         _update_env("OBSIDIAN_VAULT_PATH", self._var_vault.get().strip())
-        import importlib
-        import albedo.config as _cfg
+        _update_env("GEMINI_API_KEY",      self._var_gemini.get().strip())
+        _update_env("GROQ_API_KEY",        self._var_groq.get().strip())
+        _update_env("TOGETHER_API_KEY",    self._var_together.get().strip())
+
+        import importlib, albedo.config as _cfg
         importlib.reload(_cfg)
 
+        # Reinitialise swarm clients so new keys take effect without restart
+        try:
+            from swarm import reinit_swarm_clients
+            reinit_swarm_clients()
+        except Exception as exc:
+            print(f"[settings] swarm reinit error: {exc}")
+
         self._parent._apply_persona(self._persona_var.get())
-        self._msg.configure(text="Saved. Re-index to apply new vault path.",
+        self._msg.configure(text="Saved. API clients reloaded.",
                             text_color=C_GREEN)
 
     def _reindex(self) -> None:

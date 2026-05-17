@@ -190,6 +190,17 @@ def load_swarm_keys() -> None:
     _keys_loaded = True
 
 
+def reinit_swarm_clients() -> None:
+    """Force a full re-initialisation of all provider clients from the current .env.
+    Call this after API keys are changed at runtime."""
+    global _keys_loaded, _gemini_client, _groq_client, _together_client
+    _keys_loaded     = False
+    _gemini_client   = None
+    _groq_client     = None
+    _together_client = None
+    load_swarm_keys()
+
+
 # ---------------------------------------------------------------------------
 # Ping functions
 # ---------------------------------------------------------------------------
