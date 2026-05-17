@@ -73,8 +73,10 @@ if (-not (Test-Path $mainPy)) {
 # Package health check -- redirect to wizard if customtkinter is missing
 # ============================================================================
 
-& $python -c "import customtkinter" 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
+$_chk = Start-Process -FilePath $python `
+    -ArgumentList '-c', 'import customtkinter' `
+    -WindowStyle Hidden -PassThru -Wait
+if ($_chk.ExitCode -ne 0) {
     Write-Host ""
     Write-Host "  [!]  Required packages are not installed in the virtual environment." -ForegroundColor Yellow
     Write-Host "       Launching Setup Wizard to complete installation..." -ForegroundColor Yellow

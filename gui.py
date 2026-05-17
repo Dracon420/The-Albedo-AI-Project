@@ -201,6 +201,15 @@ class SettingsDialog(ctk.CTkToplevel):
                              border_color=C_BORDER, text_color=C_TEXT,
                              width=300)
         entry.pack(side="left", padx=(6, 4))
+        # Right-click context menu so users can paste API keys
+        _ctx = tk.Menu(entry, tearoff=0, bg=C_BG, fg=C_TEXT,
+                       activebackground=C_CYAN_DIM, activeforeground=C_TEXT,
+                       font=("Courier New", 10))
+        _ctx.add_command(label="Paste", command=lambda e=entry: e.event_generate("<<Paste>>"))
+        _ctx.add_command(label="Copy",  command=lambda e=entry: e.event_generate("<<Copy>>"))
+        _ctx.add_command(label="Cut",   command=lambda e=entry: e.event_generate("<<Cut>>"))
+        _ctx.add_command(label="Select All", command=lambda e=entry: e.select_range(0, "end"))
+        entry._widget.bind("<Button-3>", lambda ev, m=_ctx: m.tk_popup(ev.x_root, ev.y_root))
         # show / hide toggle
         _visible = [False]
         def _toggle(e=entry, v=_visible):
@@ -2103,9 +2112,11 @@ class AlbedoGUI(ctk.CTk):
                 # Verify we are inside a git repo
                 check = _run(["git", "rev-parse", "--is-inside-work-tree"])
                 if check.returncode != 0:
-                    print("[update] Not a git repository — update check skipped.")
-                    if _manual:
-                        self._ui(lambda: self._reset_update_btn("NOT A GIT REPO"))
+                    print("[update] Not a git repository — opening releases page.")
+                    import webbrowser
+                    webbrowser.open(
+                        "https://github.com/Dracon420/The-Albedo-AI-Project/releases/latest")
+                    self._ui(lambda: self._reset_update_btn("UPDATE"))
                     return
 
                 # Get current HEAD and compare to what was on disk at launch
@@ -2258,8 +2269,11 @@ class AlbedoGUI(ctk.CTk):
                 # Fetch + check remote
                 check = _run(["git", "rev-parse", "--is-inside-work-tree"])
                 if check.returncode != 0:
-                    print("[update] Not a git repository.")
-                    self._ui(lambda: self._reset_update_btn("NOT A GIT REPO"))
+                    print("[update] Not a git repository — opening releases page.")
+                    import webbrowser
+                    webbrowser.open(
+                        "https://github.com/Dracon420/The-Albedo-AI-Project/releases/latest")
+                    self._ui(lambda: self._reset_update_btn("UPDATE"))
                     return
 
                 print("[update] Fetching from remote...")
