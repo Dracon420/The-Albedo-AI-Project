@@ -16,7 +16,7 @@
 #define AppFullName  "Albedo Mission Control"
 #define AppVersion   "1.3.0"
 #define AppPublisher "Chaotic 3D Solutions"
-#define AppURL       "https://github.com/Dracon420/Albedo-Local-AI"
+#define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
 
 [Setup]
