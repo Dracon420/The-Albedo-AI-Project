@@ -84,7 +84,7 @@ Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and
 
 <div align="center">
 
-### [â¬‡ Download Albedo-Setup.exe](https://github.com/Dracon420/The-Albedo-AI-Project/raw/master/Albedo-Setup.exe)
+### [â¬‡ Download Albedo-Setup.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/beta-v1.0.01/Albedo-Setup.exe)
 
 </div>
 
