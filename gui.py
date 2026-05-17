@@ -229,7 +229,11 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkEntry(scroll, textvariable=self._var_vault,
                      font=("Courier New", 11), fg_color=C_BG,
                      border_color=C_BORDER, text_color=C_TEXT).pack(
-                         fill="x", padx=24, pady=(0, 4))
+                         fill="x", padx=24, pady=(0, 6))
+        ctk.CTkButton(scroll, text="RE-INDEX NOW", width=160,
+                      font=("Courier New", 12, "bold"),
+                      fg_color=C_CYAN_DIM, hover_color=C_CYAN,
+                      command=self._reindex).pack(padx=24, pady=(0, 4))
 
         # ── Persona / wake word ────────────────────────────────────────────
         _section("PERSONA  &  WAKE WORD")
@@ -278,7 +282,13 @@ class SettingsDialog(ctk.CTkToplevel):
                           button_color=C_BORDER, button_hover_color=C_CYAN_DIM,
                           dropdown_fg_color=C_BG,
                           dropdown_text_color=C_TEXT).pack(
-                              padx=24, fill="x", pady=(0, 4))
+                              padx=24, fill="x", pady=(0, 6))
+        self._parent._update_btn = ctk.CTkButton(
+            scroll, text="CHECK UPDATE", width=160,
+            font=("Courier New", 12, "bold"),
+            fg_color=C_BORDER, hover_color=C_GREEN,
+            command=self._parent._run_update)
+        self._parent._update_btn.pack(padx=24, pady=(0, 4))
 
         # ── Buttons ────────────────────────────────────────────────────────
         ctk.CTkFrame(scroll, fg_color=C_BORDER, height=1).pack(
@@ -288,10 +298,6 @@ class SettingsDialog(ctk.CTkToplevel):
         ctk.CTkButton(btn, text="SAVE", width=130,
                       font=("Courier New", 12, "bold"),
                       command=self._save).pack(side="left", padx=10)
-        ctk.CTkButton(btn, text="RE-INDEX NOW", width=160,
-                      font=("Courier New", 12, "bold"),
-                      fg_color=C_CYAN_DIM, hover_color=C_CYAN,
-                      command=self._reindex).pack(side="left", padx=10)
         self._msg = ctk.CTkLabel(scroll, text="", font=("Courier New", 10),
                                  text_color=C_MUTED)
         self._msg.pack(pady=(0, 12))
@@ -315,6 +321,7 @@ class SettingsDialog(ctk.CTkToplevel):
         self._parent._settings["auto_update"] = self._var_autoupdate.get()
         _save_settings(self._parent._settings)
         self._parent._apply_persona(self._persona_var.get())
+        self._parent._update_check_ran = False  # allow re-run after settings change
         self._parent._reschedule_update_check()
         self._msg.configure(text="Saved. API clients reloaded.",
                             text_color=C_GREEN)
@@ -628,6 +635,20 @@ class AlbedoGUI(ctk.CTk):
         self._update_btn: ctk.CTkButton | None = None
         self._update_available = False
         self._update_check_after_id: str | None = None
+        self._update_check_ran = False  # guard: only one startup check
+
+        # Capture the git HEAD at launch so we can detect disk-level code changes
+        # even when local HEAD == remote HEAD (same-machine push workflow).
+        try:
+            import subprocess as _sp_init
+            _hc = _sp_init.run(
+                ["git", "rev-parse", "HEAD"],
+                capture_output=True, text=True, timeout=5,
+                cwd=str(ROOT), creationflags=_sp_init.CREATE_NO_WINDOW,
+            )
+            self._startup_commit: str = _hc.stdout.strip() if _hc.returncode == 0 else ""
+        except Exception:
+            self._startup_commit = ""
         # Event-loop hygiene — tracked so _on_close() can cancel cleanly
         self._closing       = False
         self._poll_after_id = None
@@ -1905,13 +1926,6 @@ class AlbedoGUI(ctk.CTk):
                       fg_color=C_BORDER, hover_color=C_CYAN,
                       command=self._open_hardware_settings).pack(fill="x", pady=(0, 6))
 
-        self._update_btn = ctk.CTkButton(
-            btn_f, text="CHECK UPDATE", height=_BTN_H,
-            font=_BTN_FONT,
-            fg_color=C_BORDER, hover_color=C_GREEN,
-            command=self._run_update)
-        self._update_btn.pack(fill="x")
-
         # Bottom spacer
         ctk.CTkFrame(panel, fg_color="transparent").pack(expand=True)
 
@@ -1949,6 +1963,11 @@ class AlbedoGUI(ctk.CTk):
         if setting == "Disabled":
             return
 
+        # Guard: for "On startup only" run exactly once across all callers
+        if setting == "On startup only" and self._update_check_ran:
+            return
+        self._update_check_ran = True
+
         # Run the check now (silent)
         self._check_for_updates(_manual=False)
 
@@ -1978,6 +1997,21 @@ class AlbedoGUI(ctk.CTk):
                     print("[update] Not a git repository — update check skipped.")
                     if _manual:
                         self._ui(lambda: self._reset_update_btn("NOT A GIT REPO"))
+                    return
+
+                # Get current HEAD and compare to what was on disk at launch
+                current_head = _run(["git", "rev-parse", "HEAD"]).stdout.strip()
+                print(f"[update] Launch commit: {self._startup_commit[:7] if self._startup_commit else '?'}")
+                print(f"[update] Current HEAD:  {current_head[:7] if current_head else '?'}")
+
+                if self._startup_commit and current_head and current_head != self._startup_commit:
+                    # Code was committed (and possibly pushed) from this machine since launch —
+                    # the running process has stale bytecode; offer a restart.
+                    local = _run(["git", "log", "-1", "--oneline"])
+                    print(f"[update] Disk code changed since launch → {local.stdout.strip()}")
+                    print("[update] Restart required to apply new code.")
+                    self._update_available = True
+                    self._ui(self._notify_update_available)
                     return
 
                 # Show current local commit
@@ -2028,33 +2062,47 @@ class AlbedoGUI(ctk.CTk):
         threading.Thread(target=_worker, daemon=True, name="update-check").start()
 
     def _reset_update_btn(self, label: str = "CHECK UPDATE") -> None:
-        if not self._update_btn:
+        btn = self._update_btn
+        if not btn:
             return
-        self._update_btn.configure(
-            text=label, fg_color=C_BORDER,
-            hover_color=C_GREEN, text_color=C_TEXT)
-        # Auto-revert to default label after 4 s
+        try:
+            if not btn.winfo_exists():
+                self._update_btn = None
+                return
+        except Exception:
+            self._update_btn = None
+            return
+        btn.configure(text=label, fg_color=C_BORDER,
+                      hover_color=C_GREEN, text_color=C_TEXT)
         if label != "CHECK UPDATE":
-            self.after(4000, lambda: self._update_btn and
-                       self._update_btn.configure(text="CHECK UPDATE"))
+            self.after(4000, lambda: self._reset_update_btn("CHECK UPDATE"))
 
     def _notify_update_available(self) -> None:
         """Flash the update button and log an alert in the chat feed."""
-        if self._update_btn:
-            self._update_btn.configure(
-                text="UPDATE AVAILABLE", fg_color="#005500",
-                hover_color=C_GREEN, text_color=C_GREEN)
+        btn = self._update_btn
+        if btn:
+            try:
+                if btn.winfo_exists():
+                    btn.configure(text="UPDATE AVAILABLE", fg_color="#005500",
+                                  hover_color=C_GREEN, text_color=C_GREEN)
+            except Exception:
+                pass
         self._log_append(
             "system",
             "UPDATE AVAILABLE — A new version of Albedo is ready. "
-            "Open the side panel and click UPDATE AVAILABLE to install and restart.")
+            "Open Settings and click UPDATE AVAILABLE to install and restart.")
 
     def _run_update(self) -> None:
         """Pull latest commits then restart the application."""
         import subprocess as _sp
         if not self._update_available:
-            if self._update_btn:
-                self._update_btn.configure(text="CHECKING...", fg_color="#001133")
+            btn = self._update_btn
+            if btn:
+                try:
+                    if btn.winfo_exists():
+                        btn.configure(text="CHECKING...", fg_color="#001133")
+                except Exception:
+                    pass
             self._check_for_updates(_manual=True)
             return
 
