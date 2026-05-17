@@ -695,6 +695,10 @@ class AlbedoGUI(ctk.CTk):
         self.after(150, self._show_startup_messages)
         self._check_first_boot()
 
+        # Cyberpunk HUD overlay — initialised after window is fully drawn
+        self._ov: tk.Toplevel | None = None
+        self.after(400, self._init_cyberpunk_overlay)
+
     # ── First-boot onboarding (single-root) ───────────────────────────────
 
     def _check_first_boot(self) -> None:
@@ -2208,11 +2212,227 @@ class AlbedoGUI(ctk.CTk):
                 pass
             self._audio_stream = None
 
+    # ── Cyberpunk overlay ──────────────────────────────────────────────────
+
+    def _init_cyberpunk_overlay(self) -> None:
+        """
+        Transparent Toplevel drawn exactly over Mission Control.
+        Black pixels (#000000) are the transparentColor — invisible.
+        Everything drawn in cyan/dim-cyan floats as pure HUD decoration.
+        WS_EX_TRANSPARENT makes the overlay fully click-through so the
+        main window receives all mouse events normally.
+        """
+        import math, random
+
+        TRANSP   = '#000000'   # transparent key colour
+        CY       = '#00F0FF'   # electric cyan  (brackets, corner dots)
+        CY_MID   = '#004855'   # mid cyan       (tick marks, edge lines)
+        CY_DIM   = '#001C24'   # dim cyan       (hex grid, subtle lines)
+
+        # ── create overlay window ─────────────────────────────────
+        ov = tk.Toplevel(self)
+        ov.withdraw()
+        ov.overrideredirect(True)
+        ov.configure(bg=TRANSP)
+        ov.wm_attributes('-transparentcolor', TRANSP)
+        self._ov = ov
+
+        cv = tk.Canvas(ov, bg=TRANSP, highlightthickness=0)
+        cv.pack(fill='both', expand=True)
+
+        # Make overlay click-through on Windows (WS_EX_LAYERED | WS_EX_TRANSPARENT)
+        try:
+            import ctypes
+            hwnd = ov.winfo_id()
+            GWL_EXSTYLE = -20
+            cur = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            ctypes.windll.user32.SetWindowLongW(
+                hwnd, GWL_EXSTYLE, cur | 0x80000 | 0x20)
+        except Exception:
+            pass
+
+        # ── geometry sync ─────────────────────────────────────────
+        def _sync(*_):
+            if self._closing or not ov.winfo_exists():
+                return
+            self.update_idletasks()
+            x = self.winfo_x()
+            y = self.winfo_y()
+            w = self.winfo_width()
+            h = self.winfo_height()
+            ov.geometry(f'{w}x{h}+{x}+{y}')
+            _draw_static()
+
+        self.bind('<Configure>', lambda e: self.after_idle(_sync))
+
+        # ── static elements ───────────────────────────────────────
+        def _bracket(x, y, sx=1, sy=1, arm=46):
+            tick = arm // 3
+            cv.create_line(x, y, x+sx*arm, y,
+                           fill=CY, width=2, tags='st', capstyle='round')
+            cv.create_line(x, y, x, y+sy*arm,
+                           fill=CY, width=2, tags='st', capstyle='round')
+            cv.create_line(x+sx*tick, y, x+sx*tick, y+sy*9,
+                           fill=CY_MID, width=1, tags='st')
+            cv.create_line(x, y+sy*tick, x+sx*9, y+sy*tick,
+                           fill=CY_MID, width=1, tags='st')
+            cv.create_oval(x-3, y-3, x+3, y+3,
+                           fill=CY, outline='', tags='st')
+
+        def _hex_outline(cx, cy, r):
+            pts = []
+            for i in range(6):
+                a = math.radians(60*i - 30)
+                pts += [cx + r*math.cos(a), cy + r*math.sin(a)]
+            cv.create_polygon(pts, outline=CY_DIM, fill='', width=1, tags='st')
+
+        def _draw_static(*_):
+            cv.delete('st')
+            w = cv.winfo_width()  or self.winfo_width()
+            h = cv.winfo_height() or self.winfo_height()
+            M, ARM = 14, 46
+
+            # Corner targeting brackets
+            _bracket(M,   M,   sx= 1, sy= 1)
+            _bracket(w-M, M,   sx=-1, sy= 1)
+            _bracket(M,   h-M, sx= 1, sy=-1)
+            _bracket(w-M, h-M, sx=-1, sy=-1)
+
+            # Edge lines (broken in the middle so they don't cross active UI)
+            GAP = 90
+            for x0, x1 in [(M+ARM+6, w//2-GAP), (w//2+GAP, w-M-ARM-6)]:
+                cv.create_line(x0, M,   x1, M,   fill=CY_MID, width=1, tags='st')
+                cv.create_line(x0, h-M, x1, h-M, fill=CY_MID, width=1, tags='st')
+            for y0, y1 in [(M+ARM+6, h//2-GAP), (h//2+GAP, h-M-ARM-6)]:
+                cv.create_line(M,   y0, M,   y1, fill=CY_MID, width=1, tags='st')
+                cv.create_line(w-M, y0, w-M, y1, fill=CY_MID, width=1, tags='st')
+
+            # Corner HUD labels
+            cv.create_text(M+ARM+10, M,
+                           text='ALBEDO // MISSION CONTROL',
+                           font=('Courier New', 8), fill=CY_MID,
+                           anchor='w', tags='st')
+            cv.create_text(w-M-ARM-10, h-M,
+                           text='RTX 2060  |  6 GB  |  WIN11',
+                           font=('Courier New', 7), fill=CY_MID,
+                           anchor='e', tags='st')
+            cv.create_text(M+ARM+10, h-M,
+                           text='SPARTAN-CLASS  //  HYBRID RAG',
+                           font=('Courier New', 7), fill=CY_DIM,
+                           anchor='w', tags='st')
+            cv.create_text(w-M-ARM-10, M,
+                           text='UNSC AI FRAMEWORK v1.0',
+                           font=('Courier New', 7), fill=CY_DIM,
+                           anchor='e', tags='st')
+
+            # Hex grid background — very subtle
+            HR = 32
+            cols_n = int(w / (HR * 1.732)) + 3
+            rows_n = int(h / (HR * 1.5))   + 3
+            for row in range(rows_n):
+                for col in range(cols_n):
+                    hx = col * HR * 1.732 + (HR * 0.866 if row % 2 else 0) - HR
+                    hy = row * HR * 1.5   - HR
+                    _hex_outline(hx, hy, HR * 0.80)
+
+        # ── animated elements ─────────────────────────────────────
+        _state = {
+            'scan_y':  -20,
+            'phase':   0.0,
+            'streams': {},   # x → [[y, char, speed], ...]
+        }
+        HEX = list('0123456789ABCDEF')
+
+        def _ensure_streams(w, h):
+            xs = [7, 21, w-21, w-7]
+            for x in xs:
+                if x not in _state['streams']:
+                    _state['streams'][x] = [
+                        [random.randint(0, h), random.choice(HEX),
+                         random.uniform(1.2, 3.0)]
+                        for _ in range(10)
+                    ]
+
+        def _animate():
+            if self._closing or not ov.winfo_exists():
+                return
+            cv.delete('an')
+            w = cv.winfo_width()  or self.winfo_width()
+            h = cv.winfo_height() or self.winfo_height()
+            M, ARM = 14, 46
+
+            # ── scan line ─────────────────────────────────────────
+            sy = _state['scan_y']
+            if M < sy < h - M:
+                cv.create_line(M, sy, w-M, sy, fill='#001A22', width=3,
+                               tags='an', capstyle='round')
+                cv.create_line(M, sy, w-M, sy, fill='#002B38', width=1,
+                               tags='an', capstyle='round')
+            _state['scan_y'] += 3
+            if _state['scan_y'] > h + 30:
+                _state['scan_y'] = -10
+
+            # ── corner bracket pulse ──────────────────────────────
+            ph = _state['phase']
+            v  = int(45 + 38 * math.sin(ph))
+            pc = f'#00{min(v,255):02x}{min(v+30,255):02x}'
+            for bx, by, fx, fy in [(M, M, 1, 1), (w-M, M, -1, 1),
+                                    (M, h-M, 1, -1), (w-M, h-M, -1, -1)]:
+                cv.create_line(bx, by, bx+fx*ARM, by,
+                               fill=pc, width=2, tags='an', capstyle='round')
+                cv.create_line(bx, by, bx, by+fy*ARM,
+                               fill=pc, width=2, tags='an', capstyle='round')
+            _state['phase'] += 0.045
+
+            # ── data-stream hex digits (left & right edges) ───────
+            _ensure_streams(w, h)
+            for x, drops in _state['streams'].items():
+                for drop in drops:
+                    dy, ch, spd = drop
+                    br = random.randint(18, 55)
+                    col = f'#00{br:02x}{min(br+28, 255):02x}'
+                    cv.create_text(x, dy, text=ch,
+                                   font=('Courier New', 7),
+                                   fill=col, tags='an')
+                    drop[0] = (dy + spd) % (h + 20)
+                    if random.random() < 0.04:
+                        drop[1] = random.choice(HEX)
+
+            if not self._closing:
+                cv.after(48, _animate)
+
+        # ── minimize / restore ─────────────────────────────────────
+        def _on_state(*_):
+            if self._closing or not ov.winfo_exists():
+                return
+            if self.state() == 'iconic':
+                ov.withdraw()
+            else:
+                ov.deiconify()
+                _sync()
+
+        self.bind('<Map>',     _on_state)
+        self.bind('<Unmap>',   _on_state)
+        self.bind('<FocusIn>', lambda e: ov.winfo_exists() and ov.lift())
+
+        # Initial position + kick off animation
+        _sync()
+        ov.deiconify()
+        ov.lift()
+        _animate()
+
     # ── Cleanup ────────────────────────────────────────────────────────────
 
     def _on_close(self) -> None:
         # Mark closing so threaded UI callables and the queue poll bail out.
         self._closing = True
+
+        # Destroy overlay before the main window goes away
+        try:
+            if self._ov and self._ov.winfo_exists():
+                self._ov.destroy()
+        except Exception:
+            pass
 
         # Cancel any tracked after() callbacks before destroying widgets.
         if self._poll_after_id is not None:
