@@ -259,6 +259,27 @@ class SettingsDialog(ctk.CTkToplevel):
         self._var_groq    = self._api_entry(scroll, "Groq API Key",    "GROQ_API_KEY")
         self._var_together= self._api_entry(scroll, "Together API Key","TOGETHER_API_KEY")
 
+        # ── Auto-update schedule ───────────────────────────────────────────
+        _section("AUTO UPDATE")
+        ctk.CTkLabel(scroll,
+                     text="How often Albedo checks GitHub for new commits.",
+                     font=("Courier New", 10), text_color=C_MUTED).pack(**p)
+        _AU_OPTIONS = ["On startup only", "Every 1 hour", "Every 6 hours",
+                       "Every 24 hours", "Disabled"]
+        current_au = self._parent._settings.get("auto_update", "On startup only")
+        if current_au not in _AU_OPTIONS:
+            current_au = "On startup only"
+        self._var_autoupdate = ctk.StringVar(value=current_au)
+        ctk.CTkOptionMenu(scroll,
+                          variable=self._var_autoupdate,
+                          values=_AU_OPTIONS,
+                          font=("Courier New", 12),
+                          fg_color=C_BG, text_color=C_TEXT,
+                          button_color=C_BORDER, button_hover_color=C_CYAN_DIM,
+                          dropdown_fg_color=C_BG,
+                          dropdown_text_color=C_TEXT).pack(
+                              padx=24, fill="x", pady=(0, 4))
+
         # ── Buttons ────────────────────────────────────────────────────────
         ctk.CTkFrame(scroll, fg_color=C_BORDER, height=1).pack(
             fill="x", padx=24, pady=(14, 6))
@@ -291,7 +312,10 @@ class SettingsDialog(ctk.CTkToplevel):
         except Exception as exc:
             print(f"[settings] swarm reinit error: {exc}")
 
+        self._parent._settings["auto_update"] = self._var_autoupdate.get()
+        _save_settings(self._parent._settings)
         self._parent._apply_persona(self._persona_var.get())
+        self._parent._reschedule_update_check()
         self._msg.configure(text="Saved. API clients reloaded.",
                             text_color=C_GREEN)
 
@@ -603,6 +627,7 @@ class AlbedoGUI(ctk.CTk):
         self._side_panel: ctk.CTkFrame | None = None
         self._update_btn: ctk.CTkButton | None = None
         self._update_available = False
+        self._update_check_after_id: str | None = None
         # Event-loop hygiene — tracked so _on_close() can cancel cleanly
         self._closing       = False
         self._poll_after_id = None
@@ -759,8 +784,8 @@ class AlbedoGUI(ctk.CTk):
         _tstrip.bind("<Button-1>", lambda e: self._toggle_side_panel())
         self._toggle_arrow_lbl.bind("<Button-1>", lambda e: self._toggle_side_panel())
 
-        # Schedule silent startup update check (5 s after launch)
-        self.after(5000, lambda: self._check_for_updates(_manual=False))
+        # Schedule update check according to user preference (5 s grace on startup)
+        self.after(5000, self._reschedule_update_check)
 
         # ══════════════════════════════════════════════════════════════════
         # UNIFIED DASHBOARD — 3-column grid above chat feed
@@ -1901,6 +1926,37 @@ class AlbedoGUI(ctk.CTk):
             self._toggle_arrow_lbl.configure(text="►")
 
     # ── Update check & apply ───────────────────────────────────────────────
+
+    _AU_INTERVALS: dict[str, int] = {
+        "On startup only": 0,
+        "Every 1 hour":    3_600_000,
+        "Every 6 hours":  21_600_000,
+        "Every 24 hours": 86_400_000,
+        "Disabled":        0,
+    }
+
+    def _reschedule_update_check(self) -> None:
+        """Cancel any pending check and set up the next one per current settings."""
+        # Cancel previous scheduled call if any
+        if self._update_check_after_id:
+            try:
+                self.after_cancel(self._update_check_after_id)
+            except Exception:
+                pass
+            self._update_check_after_id = None
+
+        setting = self._settings.get("auto_update", "On startup only")
+        if setting == "Disabled":
+            return
+
+        # Run the check now (silent)
+        self._check_for_updates(_manual=False)
+
+        # Schedule the next recurring check if an interval is set
+        interval_ms = self._AU_INTERVALS.get(setting, 0)
+        if interval_ms > 0:
+            self._update_check_after_id = self.after(
+                interval_ms, self._reschedule_update_check)
 
     def _check_for_updates(self, _manual: bool = False) -> None:
         """Run git fetch in background; alert user if commits are available."""
