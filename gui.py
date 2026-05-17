@@ -284,7 +284,7 @@ class SettingsDialog(ctk.CTkToplevel):
                           dropdown_text_color=C_TEXT).pack(
                               padx=24, fill="x", pady=(0, 6))
         self._parent._update_btn = ctk.CTkButton(
-            scroll, text="CHECK UPDATE", width=160,
+            scroll, text="UPDATE", width=160,
             font=("Courier New", 12, "bold"),
             fg_color=C_BORDER, hover_color=C_GREEN,
             command=self._parent._run_update)
@@ -2070,7 +2070,7 @@ class AlbedoGUI(ctk.CTk):
 
         threading.Thread(target=_worker, daemon=True, name="update-check").start()
 
-    def _reset_update_btn(self, label: str = "CHECK UPDATE") -> None:
+    def _reset_update_btn(self, label: str = "UPDATE") -> None:
         btn = self._update_btn
         if not btn:
             return
@@ -2083,8 +2083,8 @@ class AlbedoGUI(ctk.CTk):
             return
         btn.configure(text=label, fg_color=C_BORDER,
                       hover_color=C_GREEN, text_color=C_TEXT)
-        if label != "CHECK UPDATE":
-            self.after(4000, lambda: self._reset_update_btn("CHECK UPDATE"))
+        if label not in ("UPDATE", "CHECKING..."):
+            self.after(4000, lambda: self._reset_update_btn("UPDATE"))
 
     def _notify_update_available(self) -> None:
         """Flash the update button and log an alert in the chat feed."""
@@ -2098,8 +2098,7 @@ class AlbedoGUI(ctk.CTk):
                 pass
         self._log_append(
             "system",
-            "UPDATE AVAILABLE — A new version of Albedo is ready. "
-            "Open Settings and click UPDATE AVAILABLE to install and restart.")
+            "UPDATE AVAILABLE — Open Settings and click UPDATE to install and restart.")
 
     def _restart_app(self) -> None:
         """Spawn a fresh Albedo process then close this one."""
@@ -2112,40 +2111,77 @@ class AlbedoGUI(ctk.CTk):
         self._ui(self.destroy)
 
     def _run_update(self) -> None:
-        """Pull latest commits and auto-restart."""
+        """Single-click: check → pull (if needed) → restart. No two-step."""
         import subprocess as _sp
-        if not self._update_available:
-            btn = self._update_btn
-            if btn:
-                try:
-                    if btn.winfo_exists():
-                        btn.configure(text="CHECKING...", fg_color="#001133")
-                except Exception:
-                    pass
-            self._check_for_updates(_manual=True)
-            return
 
-        def _apply():
-            try:
-                print("[update] Pulling latest commits...")
-                result = _sp.run(
-                    ["git", "pull", "--ff-only"],
-                    stdout=_sp.PIPE, stderr=_sp.STDOUT,
-                    text=True, timeout=60,
+        self._ui(lambda: self._reset_update_btn("CHECKING..."))
+
+        def _worker():
+            def _run(cmd):
+                return _sp.run(
+                    cmd, stdout=_sp.PIPE, stderr=_sp.STDOUT,
+                    text=True, timeout=30,
                     cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
                 )
-                print(f"[update] pull: {result.stdout.strip()}")
-                if result.returncode != 0:
-                    print("[update] Pull failed — aborting restart.")
+
+            try:
+                # Disk-change detection (same-machine push workflow)
+                current_head = _run(["git", "rev-parse", "HEAD"]).stdout.strip()
+                if (self._startup_commit and current_head
+                        and current_head != self._startup_commit):
+                    print(f"[update] Code changed on disk since launch "
+                          f"({self._startup_commit[:7]} → {current_head[:7]}) — restarting.")
+                    self._restart_app()
+                    return
+
+                # Fetch + check remote
+                check = _run(["git", "rev-parse", "--is-inside-work-tree"])
+                if check.returncode != 0:
+                    print("[update] Not a git repository.")
+                    self._ui(lambda: self._reset_update_btn("NOT A GIT REPO"))
+                    return
+
+                print("[update] Fetching from remote...")
+                fetch = _run(["git", "fetch"])
+                if fetch.returncode != 0:
+                    print(f"[update] Fetch failed.\n{fetch.stdout.strip()}")
+                    self._ui(lambda: self._reset_update_btn("FETCH FAILED"))
+                    return
+
+                branch = _run(["git", "rev-parse", "--abbrev-ref",
+                                "--symbolic-full-name", "@{u}"])
+                remote_ref = (branch.stdout.strip()
+                              if branch.returncode == 0 else "origin/master")
+
+                new_commits = _run(
+                    ["git", "log", f"HEAD..{remote_ref}", "--oneline"]
+                ).stdout.strip()
+
+                if not new_commits:
+                    print("[update] Already up to date.")
+                    self._ui(lambda: self._reset_update_btn("UP TO DATE"))
+                    return
+
+                # Updates available — pull immediately
+                count = len(new_commits.splitlines())
+                print(f"[update] {count} new commit(s) — pulling...")
+                pull = _run(["git", "pull", "--ff-only"])
+                print(f"[update] {pull.stdout.strip()}")
+                if pull.returncode != 0:
+                    print("[update] Pull failed — cannot fast-forward.")
                     self._ui(lambda: self._reset_update_btn("PULL FAILED"))
                     return
-            except Exception as exc:
-                print(f"[update] pull error: {exc}")
-                self._ui(lambda: self._reset_update_btn("PULL FAILED"))
-                return
-            self._restart_app()
 
-        threading.Thread(target=_apply, daemon=True, name="update-apply").start()
+                self._restart_app()
+
+            except FileNotFoundError:
+                print("[update] git not found on PATH.")
+                self._ui(lambda: self._reset_update_btn("GIT NOT FOUND"))
+            except Exception as exc:
+                print(f"[update] error: {exc}")
+                self._ui(lambda: self._reset_update_btn("UPDATE FAILED"))
+
+        threading.Thread(target=_worker, daemon=True, name="update-run").start()
 
     # ── Developer console ──────────────────────────────────────────────────
 
@@ -2216,57 +2252,58 @@ class AlbedoGUI(ctk.CTk):
 
     def _init_cyberpunk_overlay(self) -> None:
         """
-        Transparent Toplevel drawn exactly over Mission Control.
-        Black pixels (#000000) are the transparentColor — invisible.
-        Everything drawn in cyan/dim-cyan floats as pure HUD decoration.
-        WS_EX_TRANSPARENT makes the overlay fully click-through so the
+        Transparent topmost Toplevel drawn over Mission Control.
+        '#000000' is the transparentColor — those pixels are invisible.
+        WS_EX_TRANSPARENT (ctypes) makes every pixel click-through so the
         main window receives all mouse events normally.
+        Static elements are cached per-size; _draw_static only runs on resize.
         """
         import math, random
 
-        TRANSP   = '#000000'   # transparent key colour
-        CY       = '#00F0FF'   # electric cyan  (brackets, corner dots)
-        CY_MID   = '#004855'   # mid cyan       (tick marks, edge lines)
-        CY_DIM   = '#001C24'   # dim cyan       (hex grid, subtle lines)
+        TRANSP  = '#000000'
+        CY      = '#00F0FF'   # electric cyan — brackets / dots
+        CY_MID  = '#004855'   # mid cyan      — tick marks, edge lines, labels
+        CY_DIM  = '#001C24'   # dim cyan      — secondary labels
 
-        # ── create overlay window ─────────────────────────────────
+        # ── overlay window ────────────────────────────────────────
         ov = tk.Toplevel(self)
         ov.withdraw()
         ov.overrideredirect(True)
         ov.configure(bg=TRANSP)
         ov.wm_attributes('-transparentcolor', TRANSP)
+        ov.wm_attributes('-topmost', True)      # must be above the main window
         self._ov = ov
 
         cv = tk.Canvas(ov, bg=TRANSP, highlightthickness=0)
         cv.pack(fill='both', expand=True)
 
-        # Make overlay click-through on Windows (WS_EX_LAYERED | WS_EX_TRANSPARENT)
+        # Click-through: WS_EX_LAYERED | WS_EX_TRANSPARENT
         try:
             import ctypes
             hwnd = ov.winfo_id()
-            GWL_EXSTYLE = -20
-            cur = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            ctypes.windll.user32.SetWindowLongW(
-                hwnd, GWL_EXSTYLE, cur | 0x80000 | 0x20)
+            cur  = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
+            ctypes.windll.user32.SetWindowLongW(hwnd, -20, cur | 0x80000 | 0x20)
         except Exception:
             pass
 
-        # ── geometry sync ─────────────────────────────────────────
+        # ── geometry sync (only redraws static layer on size change) ─
+        _last_wh = [-1, -1]
+
         def _sync(*_):
             if self._closing or not ov.winfo_exists():
                 return
-            self.update_idletasks()
-            x = self.winfo_x()
-            y = self.winfo_y()
-            w = self.winfo_width()
-            h = self.winfo_height()
+            # Read geometry without update_idletasks to avoid re-entrant lag
+            w, h = self.winfo_width(), self.winfo_height()
+            x, y = self.winfo_x(),     self.winfo_y()
             ov.geometry(f'{w}x{h}+{x}+{y}')
-            _draw_static()
+            if [w, h] != _last_wh:
+                _last_wh[:] = [w, h]
+                _draw_static(w, h)
 
         self.bind('<Configure>', lambda e: self.after_idle(_sync))
 
         # ── static elements ───────────────────────────────────────
-        def _bracket(x, y, sx=1, sy=1, arm=46):
+        def _bracket(x, y, sx, sy, arm=46):
             tick = arm // 3
             cv.create_line(x, y, x+sx*arm, y,
                            fill=CY, width=2, tags='st', capstyle='round')
@@ -2274,32 +2311,20 @@ class AlbedoGUI(ctk.CTk):
                            fill=CY, width=2, tags='st', capstyle='round')
             cv.create_line(x+sx*tick, y, x+sx*tick, y+sy*9,
                            fill=CY_MID, width=1, tags='st')
-            cv.create_line(x, y+sy*tick, x+sx*9, y+sy*tick,
+            cv.create_line(x, y+sy*tick, x+sx*9,    y+sy*tick,
                            fill=CY_MID, width=1, tags='st')
-            cv.create_oval(x-3, y-3, x+3, y+3,
-                           fill=CY, outline='', tags='st')
+            cv.create_oval(x-3, y-3, x+3, y+3, fill=CY, outline='', tags='st')
 
-        def _hex_outline(cx, cy, r):
-            pts = []
-            for i in range(6):
-                a = math.radians(60*i - 30)
-                pts += [cx + r*math.cos(a), cy + r*math.sin(a)]
-            cv.create_polygon(pts, outline=CY_DIM, fill='', width=1, tags='st')
-
-        def _draw_static(*_):
+        def _draw_static(w, h):
             cv.delete('st')
-            w = cv.winfo_width()  or self.winfo_width()
-            h = cv.winfo_height() or self.winfo_height()
-            M, ARM = 14, 46
+            M, ARM, GAP = 14, 46, 90
 
-            # Corner targeting brackets
             _bracket(M,   M,   sx= 1, sy= 1)
             _bracket(w-M, M,   sx=-1, sy= 1)
             _bracket(M,   h-M, sx= 1, sy=-1)
             _bracket(w-M, h-M, sx=-1, sy=-1)
 
-            # Edge lines (broken in the middle so they don't cross active UI)
-            GAP = 90
+            # Broken edge lines
             for x0, x1 in [(M+ARM+6, w//2-GAP), (w//2+GAP, w-M-ARM-6)]:
                 cv.create_line(x0, M,   x1, M,   fill=CY_MID, width=1, tags='st')
                 cv.create_line(x0, h-M, x1, h-M, fill=CY_MID, width=1, tags='st')
@@ -2307,74 +2332,54 @@ class AlbedoGUI(ctk.CTk):
                 cv.create_line(M,   y0, M,   y1, fill=CY_MID, width=1, tags='st')
                 cv.create_line(w-M, y0, w-M, y1, fill=CY_MID, width=1, tags='st')
 
-            # Corner HUD labels
-            cv.create_text(M+ARM+10, M,
+            # HUD corner labels
+            cv.create_text(M+ARM+10, M, anchor='w', tags='st',
                            text='ALBEDO // MISSION CONTROL',
-                           font=('Courier New', 8), fill=CY_MID,
-                           anchor='w', tags='st')
-            cv.create_text(w-M-ARM-10, h-M,
+                           font=('Courier New', 8), fill=CY_MID)
+            cv.create_text(w-M-ARM-10, h-M, anchor='e', tags='st',
                            text='RTX 2060  |  6 GB  |  WIN11',
-                           font=('Courier New', 7), fill=CY_MID,
-                           anchor='e', tags='st')
-            cv.create_text(M+ARM+10, h-M,
+                           font=('Courier New', 7), fill=CY_MID)
+            cv.create_text(M+ARM+10, h-M, anchor='w', tags='st',
                            text='SPARTAN-CLASS  //  HYBRID RAG',
-                           font=('Courier New', 7), fill=CY_DIM,
-                           anchor='w', tags='st')
-            cv.create_text(w-M-ARM-10, M,
+                           font=('Courier New', 7), fill=CY_DIM)
+            cv.create_text(w-M-ARM-10, M, anchor='e', tags='st',
                            text='UNSC AI FRAMEWORK v1.0',
-                           font=('Courier New', 7), fill=CY_DIM,
-                           anchor='e', tags='st')
-
-            # Hex grid background — very subtle
-            HR = 32
-            cols_n = int(w / (HR * 1.732)) + 3
-            rows_n = int(h / (HR * 1.5))   + 3
-            for row in range(rows_n):
-                for col in range(cols_n):
-                    hx = col * HR * 1.732 + (HR * 0.866 if row % 2 else 0) - HR
-                    hy = row * HR * 1.5   - HR
-                    _hex_outline(hx, hy, HR * 0.80)
+                           font=('Courier New', 7), fill=CY_DIM)
 
         # ── animated elements ─────────────────────────────────────
-        _state = {
-            'scan_y':  -20,
-            'phase':   0.0,
-            'streams': {},   # x → [[y, char, speed], ...]
-        }
+        _st = {'scan_y': -20, 'phase': 0.0, 'streams': {}}
         HEX = list('0123456789ABCDEF')
 
-        def _ensure_streams(w, h):
-            xs = [7, 21, w-21, w-7]
-            for x in xs:
-                if x not in _state['streams']:
-                    _state['streams'][x] = [
+        def _seed_streams(w, h):
+            for x in (7, 21, w-21, w-7):
+                if x not in _st['streams']:
+                    _st['streams'][x] = [
                         [random.randint(0, h), random.choice(HEX),
                          random.uniform(1.2, 3.0)]
-                        for _ in range(10)
+                        for _ in range(8)
                     ]
 
         def _animate():
             if self._closing or not ov.winfo_exists():
                 return
             cv.delete('an')
-            w = cv.winfo_width()  or self.winfo_width()
-            h = cv.winfo_height() or self.winfo_height()
+            w = self.winfo_width()
+            h = self.winfo_height()
             M, ARM = 14, 46
 
-            # ── scan line ─────────────────────────────────────────
-            sy = _state['scan_y']
+            # Scan line
+            sy = _st['scan_y']
             if M < sy < h - M:
-                cv.create_line(M, sy, w-M, sy, fill='#001A22', width=3,
-                               tags='an', capstyle='round')
-                cv.create_line(M, sy, w-M, sy, fill='#002B38', width=1,
-                               tags='an', capstyle='round')
-            _state['scan_y'] += 3
-            if _state['scan_y'] > h + 30:
-                _state['scan_y'] = -10
+                cv.create_line(M, sy, w-M, sy, fill='#001A22',
+                               width=3, tags='an', capstyle='round')
+                cv.create_line(M, sy, w-M, sy, fill='#002B38',
+                               width=1, tags='an', capstyle='round')
+            _st['scan_y'] += 3
+            if _st['scan_y'] > h + 30:
+                _st['scan_y'] = -10
 
-            # ── corner bracket pulse ──────────────────────────────
-            ph = _state['phase']
-            v  = int(45 + 38 * math.sin(ph))
+            # Corner bracket pulse
+            v  = int(45 + 38 * math.sin(_st['phase']))
             pc = f'#00{min(v,255):02x}{min(v+30,255):02x}'
             for bx, by, fx, fy in [(M, M, 1, 1), (w-M, M, -1, 1),
                                     (M, h-M, 1, -1), (w-M, h-M, -1, -1)]:
@@ -2382,24 +2387,23 @@ class AlbedoGUI(ctk.CTk):
                                fill=pc, width=2, tags='an', capstyle='round')
                 cv.create_line(bx, by, bx, by+fy*ARM,
                                fill=pc, width=2, tags='an', capstyle='round')
-            _state['phase'] += 0.045
+            _st['phase'] += 0.045
 
-            # ── data-stream hex digits (left & right edges) ───────
-            _ensure_streams(w, h)
-            for x, drops in _state['streams'].items():
+            # Falling hex data streams on left / right edges
+            _seed_streams(w, h)
+            for x, drops in _st['streams'].items():
                 for drop in drops:
                     dy, ch, spd = drop
-                    br = random.randint(18, 55)
-                    col = f'#00{br:02x}{min(br+28, 255):02x}'
-                    cv.create_text(x, dy, text=ch,
-                                   font=('Courier New', 7),
-                                   fill=col, tags='an')
+                    br  = random.randint(18, 55)
+                    col = f'#00{br:02x}{min(br+28,255):02x}'
+                    cv.create_text(x, dy, text=ch, fill=col,
+                                   font=('Courier New', 7), tags='an')
                     drop[0] = (dy + spd) % (h + 20)
                     if random.random() < 0.04:
                         drop[1] = random.choice(HEX)
 
             if not self._closing:
-                cv.after(48, _animate)
+                cv.after(80, _animate)
 
         # ── minimize / restore ─────────────────────────────────────
         def _on_state(*_):
@@ -2409,16 +2413,13 @@ class AlbedoGUI(ctk.CTk):
                 ov.withdraw()
             else:
                 ov.deiconify()
-                _sync()
 
-        self.bind('<Map>',     _on_state)
-        self.bind('<Unmap>',   _on_state)
-        self.bind('<FocusIn>', lambda e: ov.winfo_exists() and ov.lift())
+        self.bind('<Map>',   _on_state)
+        self.bind('<Unmap>', _on_state)
 
-        # Initial position + kick off animation
+        # Initial position, show, animate
         _sync()
         ov.deiconify()
-        ov.lift()
         _animate()
 
     # ── Cleanup ────────────────────────────────────────────────────────────
