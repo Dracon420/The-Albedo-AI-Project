@@ -695,9 +695,8 @@ class AlbedoGUI(ctk.CTk):
         self.after(150, self._show_startup_messages)
         self._check_first_boot()
 
-        # Cyberpunk HUD overlay — initialised after window is fully drawn
-        self._ov: tk.Toplevel | None = None
-        self.after(400, self._init_cyberpunk_overlay)
+        self._bg_pil   = None   # PIL Image for background.png (kept for resize)
+        self._bg_photo = None   # ImageTk reference (must stay alive)
 
     # ── First-boot onboarding (single-root) ───────────────────────────────
 
@@ -782,10 +781,75 @@ class AlbedoGUI(ctk.CTk):
 
     def _build_ui(self) -> None:
         # ══════════════════════════════════════════════════════════════════
-        # ROOT HORIZONTAL LAYOUT: main column ║ side panel ║ toggle strip
+        # BACKGROUND CANVAS — fills the window, shows background.png and
+        # corner HUD brackets.  All content sits inside it with padding so
+        # the image is visible as a visible border around the UI.
         # ══════════════════════════════════════════════════════════════════
-        _root_h = ctk.CTkFrame(self, fg_color=C_BG, corner_radius=0)
-        _root_h.pack(fill="both", expand=True)
+        _bg = tk.Canvas(self, bg=C_BG, highlightthickness=0)
+        _bg.pack(fill='both', expand=True)
+
+        _bg_path = ROOT / 'background.png'
+        if _bg_path.exists():
+            try:
+                self._bg_pil = Image.open(_bg_path).convert('RGB')
+                print('[bg] background.png loaded')
+            except Exception as exc:
+                print(f'[bg] failed to load background.png: {exc}')
+
+        _last_bg_sz = [0, 0]
+
+        def _draw_bg(event=None):
+            w, h = _bg.winfo_width(), _bg.winfo_height()
+            if w < 2 or h < 2 or [w, h] == _last_bg_sz:
+                return
+            _last_bg_sz[:] = [w, h]
+            _bg.delete('bg_img', 'hud')
+
+            # Background image (stretched to window size)
+            if self._bg_pil is not None:
+                try:
+                    img = self._bg_pil.resize((w, h), Image.LANCZOS)
+                    self._bg_photo = ImageTk.PhotoImage(img)
+                    _bg.create_image(0, 0, image=self._bg_photo,
+                                     anchor='nw', tags='bg_img')
+                except Exception:
+                    pass
+
+            # Corner HUD brackets drawn in the visible border area
+            M, ARM = 8, 36
+            CMID = '#004855'
+            for x, y, sx, sy in [(M, M, 1, 1), (w-M, M, -1, 1),
+                                  (M, h-M, 1, -1), (w-M, h-M, -1, -1)]:
+                t = ARM // 3
+                _bg.create_line(x, y, x+sx*ARM, y,
+                                fill=C_CYAN, width=2, tags='hud', capstyle='round')
+                _bg.create_line(x, y, x, y+sy*ARM,
+                                fill=C_CYAN, width=2, tags='hud', capstyle='round')
+                _bg.create_line(x+sx*t, y, x+sx*t, y+sy*8,
+                                fill=CMID, width=1, tags='hud')
+                _bg.create_line(x, y+sy*t, x+sx*8, y+sy*t,
+                                fill=CMID, width=1, tags='hud')
+                _bg.create_oval(x-3, y-3, x+3, y+3,
+                                fill=C_CYAN, outline='', tags='hud')
+
+            # Edge lines connecting corners (broken in centre)
+            GAP = 80
+            for x0, x1 in [(M+ARM+4, w//2-GAP), (w//2+GAP, w-M-ARM-4)]:
+                _bg.create_line(x0, M,   x1, M,   fill=CMID, width=1, tags='hud')
+                _bg.create_line(x0, h-M, x1, h-M, fill=CMID, width=1, tags='hud')
+            for y0, y1 in [(M+ARM+4, h//2-GAP), (h//2+GAP, h-M-ARM-4)]:
+                _bg.create_line(M,   y0, M,   y1, fill=CMID, width=1, tags='hud')
+                _bg.create_line(w-M, y0, w-M, y1, fill=CMID, width=1, tags='hud')
+
+        _bg.bind('<Configure>', lambda e: _draw_bg())
+
+        # ══════════════════════════════════════════════════════════════════
+        # ROOT HORIZONTAL LAYOUT: main column ║ side panel ║ toggle strip
+        # Content is inset so the background canvas border is visible.
+        # ══════════════════════════════════════════════════════════════════
+        BORDER = 50   # px of visible background image around the content
+        _root_h = ctk.CTkFrame(_bg, fg_color=C_BG, corner_radius=2)
+        _root_h.pack(fill="both", expand=True, padx=BORDER, pady=BORDER)
         _root_h.grid_columnconfigure(0, weight=1)   # main content — elastic
         _root_h.grid_columnconfigure(1, weight=0)   # side panel — fixed 265px
         _root_h.grid_columnconfigure(2, weight=0)   # toggle strip — always 18px
@@ -2248,211 +2312,11 @@ class AlbedoGUI(ctk.CTk):
                 pass
             self._audio_stream = None
 
-    # ── Cyberpunk overlay ──────────────────────────────────────────────────
-
-    def _init_cyberpunk_overlay(self) -> None:
-        """
-        Transparent click-through Toplevel drawn over Mission Control.
-
-        Transparency is done entirely via Win32 ctypes (not wm_attributes)
-        so it works reliably on Windows 11 regardless of DWM quirks:
-          - SetLayeredWindowAttributes  → color-key transparency
-          - SetWindowPos(HWND_TOPMOST)  → always above the main window
-          - WS_EX_TRANSPARENT           → all clicks fall through to the UI
-
-        BG_KEY ('#000001') is the transparent color.  Every pixel of that
-        exact color becomes invisible; everything else (cyan HUD elements)
-        remains fully opaque and visible.
-        """
-        import math, random, ctypes
-
-        BG_KEY  = '#000001'   # transparent key  (R=0, G=0, B=1 → COLORREF 0x010000)
-        CY      = '#00F0FF'   # electric cyan — brackets / corner dots
-        CY_MID  = '#004855'   # mid cyan      — tick marks, edge lines, labels
-        CY_DIM  = '#001C24'   # dim cyan      — secondary labels
-
-        # ── overlay window ────────────────────────────────────────
-        ov = tk.Toplevel(self)
-        ov.withdraw()
-        ov.overrideredirect(True)
-        ov.configure(bg=BG_KEY)
-        self._ov = ov
-
-        cv = tk.Canvas(ov, bg=BG_KEY, highlightthickness=0)
-        cv.pack(fill='both', expand=True)
-
-        # Force Win32 window creation before touching the HWND
-        ov.update_idletasks()
-
-        try:
-            u32  = ctypes.windll.user32
-            hwnd = ov.winfo_id()
-
-            # WS_EX_LAYERED (0x80000) — required for SetLayeredWindowAttributes
-            # WS_EX_TRANSPARENT (0x20) — clicks pass through every pixel
-            cur = u32.GetWindowLongW(hwnd, -20)          # GWL_EXSTYLE
-            u32.SetWindowLongW(hwnd, -20, cur | 0x80000 | 0x20)
-
-            # Color-key: BG_KEY '#000001' = R=0,G=0,B=1 → COLORREF = 0x010000
-            u32.SetLayeredWindowAttributes(hwnd, 0x010000, 0, 0x01)  # LWA_COLORKEY
-
-            # HWND_TOPMOST (-1): always above the main window
-            # SWP_NOSIZE|SWP_NOMOVE|SWP_NOACTIVATE = 0x0001|0x0002|0x0010
-            u32.SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0013)
-
-        except Exception as exc:
-            print(f'[hud] overlay init error: {exc}')
-
-        # ── geometry sync — repositions overlay; redraws static only on resize ─
-        _last_wh = [-1, -1]
-
-        def _sync(*_):
-            if self._closing or not ov.winfo_exists():
-                return
-            w, h = self.winfo_width(), self.winfo_height()
-            x, y = self.winfo_x(),     self.winfo_y()
-            ov.geometry(f'{w}x{h}+{x}+{y}')
-            if [w, h] != _last_wh and w > 1:
-                _last_wh[:] = [w, h]
-                _draw_static(w, h)
-
-        self.bind('<Configure>', lambda e: self.after_idle(_sync))
-
-        # ── static HUD layer ──────────────────────────────────────
-        def _bracket(x, y, sx, sy, arm=46):
-            tick = arm // 3
-            cv.create_line(x, y, x+sx*arm, y,
-                           fill=CY, width=2, tags='st', capstyle='round')
-            cv.create_line(x, y, x, y+sy*arm,
-                           fill=CY, width=2, tags='st', capstyle='round')
-            cv.create_line(x+sx*tick, y, x+sx*tick, y+sy*9,
-                           fill=CY_MID, width=1, tags='st')
-            cv.create_line(x, y+sy*tick, x+sx*9, y+sy*tick,
-                           fill=CY_MID, width=1, tags='st')
-            cv.create_oval(x-3, y-3, x+3, y+3, fill=CY, outline='', tags='st')
-
-        def _draw_static(w, h):
-            cv.delete('st')
-            M, ARM, GAP = 14, 46, 90
-
-            _bracket(M,   M,   sx= 1, sy= 1)
-            _bracket(w-M, M,   sx=-1, sy= 1)
-            _bracket(M,   h-M, sx= 1, sy=-1)
-            _bracket(w-M, h-M, sx=-1, sy=-1)
-
-            for x0, x1 in [(M+ARM+6, w//2-GAP), (w//2+GAP, w-M-ARM-6)]:
-                cv.create_line(x0, M,   x1, M,   fill=CY_MID, width=1, tags='st')
-                cv.create_line(x0, h-M, x1, h-M, fill=CY_MID, width=1, tags='st')
-            for y0, y1 in [(M+ARM+6, h//2-GAP), (h//2+GAP, h-M-ARM-6)]:
-                cv.create_line(M,   y0, M,   y1, fill=CY_MID, width=1, tags='st')
-                cv.create_line(w-M, y0, w-M, y1, fill=CY_MID, width=1, tags='st')
-
-            cv.create_text(M+ARM+10,   M,   anchor='w', tags='st',
-                           text='ALBEDO // MISSION CONTROL',
-                           font=('Courier New', 8), fill=CY_MID)
-            cv.create_text(w-M-ARM-10, h-M, anchor='e', tags='st',
-                           text='RTX 2060  |  6 GB  |  WIN11',
-                           font=('Courier New', 7), fill=CY_MID)
-            cv.create_text(M+ARM+10,   h-M, anchor='w', tags='st',
-                           text='SPARTAN-CLASS  //  HYBRID RAG',
-                           font=('Courier New', 7), fill=CY_DIM)
-            cv.create_text(w-M-ARM-10, M,   anchor='e', tags='st',
-                           text='UNSC AI FRAMEWORK v1.0',
-                           font=('Courier New', 7), fill=CY_DIM)
-
-        # ── animated HUD layer ────────────────────────────────────
-        _st  = {'scan_y': -20, 'phase': 0.0, 'streams': {}}
-        HEX  = list('0123456789ABCDEF')
-
-        def _seed(w, h):
-            for x in (7, 21, w-21, w-7):
-                if x not in _st['streams']:
-                    _st['streams'][x] = [
-                        [random.randint(0, h), random.choice(HEX),
-                         random.uniform(1.2, 3.0)]
-                        for _ in range(8)
-                    ]
-
-        def _animate():
-            if self._closing or not ov.winfo_exists():
-                return
-            cv.delete('an')
-            w = self.winfo_width()
-            h = self.winfo_height()
-            M, ARM = 14, 46
-
-            sy = _st['scan_y']
-            if M < sy < h - M:
-                cv.create_line(M, sy, w-M, sy, fill='#001A22',
-                               width=3, tags='an', capstyle='round')
-                cv.create_line(M, sy, w-M, sy, fill='#002B38',
-                               width=1, tags='an', capstyle='round')
-            _st['scan_y'] += 3
-            if _st['scan_y'] > h + 30:
-                _st['scan_y'] = -10
-
-            v  = int(45 + 38 * math.sin(_st['phase']))
-            pc = f'#00{min(v,255):02x}{min(v+30,255):02x}'
-            for bx, by, fx, fy in [(M, M, 1, 1), (w-M, M, -1, 1),
-                                    (M, h-M, 1, -1), (w-M, h-M, -1, -1)]:
-                cv.create_line(bx, by, bx+fx*ARM, by,
-                               fill=pc, width=2, tags='an', capstyle='round')
-                cv.create_line(bx, by, bx, by+fy*ARM,
-                               fill=pc, width=2, tags='an', capstyle='round')
-            _st['phase'] += 0.045
-
-            _seed(w, h)
-            for x, drops in _st['streams'].items():
-                for drop in drops:
-                    dy, ch, spd = drop
-                    br  = random.randint(18, 55)
-                    col = f'#00{br:02x}{min(br+28,255):02x}'
-                    cv.create_text(x, dy, text=ch, fill=col,
-                                   font=('Courier New', 7), tags='an')
-                    drop[0] = (dy + spd) % (h + 20)
-                    if random.random() < 0.04:
-                        drop[1] = random.choice(HEX)
-
-            if not self._closing:
-                cv.after(80, _animate)
-
-        # ── minimize / restore / focus ────────────────────────────
-        def _on_state(*_):
-            if self._closing or not ov.winfo_exists():
-                return
-            if self.state() == 'iconic':
-                ov.withdraw()
-            else:
-                ov.deiconify()
-                ov.lift()
-
-        self.bind('<Map>',     _on_state)
-        self.bind('<Unmap>',   _on_state)
-        # Re-raise overlay whenever the main window gets focus
-        self.bind('<FocusIn>',
-                  lambda e: (not self._closing
-                             and ov.winfo_exists()
-                             and ov.lift()))
-
-        # Initial draw — use update_idletasks once for accurate geometry
-        self.update_idletasks()
-        _sync()
-        ov.deiconify()
-        ov.lift()
-        _animate()
-
     # ── Cleanup ────────────────────────────────────────────────────────────
 
     def _on_close(self) -> None:
         # Mark closing so threaded UI callables and the queue poll bail out.
         self._closing = True
-
-        # Destroy overlay before the main window goes away
-        try:
-            if self._ov and self._ov.winfo_exists():
-                self._ov.destroy()
-        except Exception:
-            pass
 
         # Cancel any tracked after() callbacks before destroying widgets.
         if self._poll_after_id is not None:
