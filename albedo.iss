@@ -140,8 +140,10 @@ Name: "{userdesktop}\{#AppFullName}";   Filename: "{sys}\WindowsPowerShell\v1.0\
 ;                        context, so py.exe is found on the user's PATH
 ;   NOT nowait      -- installer waits for the wizard to exit before closing;
 ;                      nowait was the original bug (wizard was killed on exit)
-Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
-  Parameters: "-ExecutionPolicy Bypass -NoProfile -WindowStyle Hidden -Command ""py -3.12 '{app}\setup_utility.py'"""; \
+; pyw -3.12 uses pythonw.exe (windowless) — no console window or taskbar
+; entry appears. PowerShell is no longer needed as the intermediary.
+Filename: "pyw.exe"; \
+  Parameters: "-3.12 ""{app}\setup_utility.py"""; \
   WorkingDir: "{app}"; \
   Description: "Run Albedo Setup Wizard (install Python packages, configure .env, pull AI model)"; \
   Flags: postinstall runasoriginaluser; \
