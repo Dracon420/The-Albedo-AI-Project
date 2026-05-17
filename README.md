@@ -57,19 +57,22 @@ The GUI runs under **`pythonw.exe`** — the windowless Python launcher. No cons
 - Plasma amber (`#FF9900`) system status indicators — SYS / STANDBY
 - Vivid cyan bold telemetry bar — CORE_SYS / BRIDGE / MEM / VEC_DB
 - Danger red (`#FF3A5C`) error tags and MUTE state
+- **Collapsible side panel** — toggleable right-edge console replacing the separate debug dialog
+- **Canvas border frame** with corner HUD brackets and selectable background image (Default or Albedo 1–4)
 
 The **LOGS** button opens an in-app Developer Console capturing all `stdout`/`stderr` output from every module. Background stream redirection ensures nothing is silently discarded under `pythonw.exe`.
 
 ### Hybrid RAG Knowledge Architecture
 
-Three knowledge domains, each scoped to its own ChromaDB collection:
+Local knowledge is indexed into ChromaDB from a single configurable source:
 
 | Collection | Domain | Indexed File Types |
 |---|---|---|
-| `chaotic_3d` | 3D printing — STL manifests, slicer configs, print profiles | `.gcode` `.cfg` `.ini` `.json` `.txt` `.md` `.xml` |
-| `exotic_os` | Python source, logs, reptile husbandry records | `.py` `.sh` `.log` `.txt` `.md` `.json` `.yaml` `.toml` |
+| `obsidian_vault` | Personal notes, project records, research, reptile husbandry | `.md` `.txt` `.json` `.yaml` `.toml` `.py` `.sh` `.log` |
 
-Every query simultaneously hits both local ChromaDB and DuckDuckGo web search. Results are ranked, merged, and injected into the LLM context before generation. File-count queries (e.g. "how many STL files") are intercepted and resolved directly via `pathlib.rglob()` against the configured `CHAOTIC_3D_PATH` — the LLM never guesses the working directory.
+Configure the vault path via **Settings → OBSIDIAN VAULT** and rebuild the index with **RE-INDEX NOW**. Every query that the autonomous commander routes to `"memory"` searches this collection semantically via ChromaDB's `all-MiniLM-L6-v2` embeddings.
+
+Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and is always available on demand with the `web:` prefix. File-count queries (e.g. "how many STL files") are intercepted and resolved directly via `pathlib.rglob()` — the LLM never guesses the working directory.
 
 ---
 
@@ -307,10 +310,17 @@ No code changes are required when switching modes — only the `.env` value chan
 | Voice command | **MIC** → speak → go silent or press **STOP** |
 | Visual environment scan | **SCAN** → Moondream analyses live webcam frame |
 | Mute / restore TTS audio | **AUDIO: ON** toggle → **AUDIO: MUTE** kills playback instantly |
-| Switch persona / wake word | **SETTINGS** → Persona dropdown → **SAVE** |
+| Switch persona / wake word | **SETTINGS** → Persona & Wake Word dropdown → **SAVE** |
 | Assign audio hardware | **HARDWARE** → select input/output device → **SAVE** |
-| RAG directory configuration | **SETTINGS** → update paths → **RE-INDEX NOW** |
+| RAG directory configuration | **SETTINGS** → Obsidian Vault path → **RE-INDEX NOW** |
+| API key management | **SETTINGS** → API Keys section → **SAVE** |
+| Background image | **SETTINGS** → Background dropdown (Default / Albedo 1–4) → **SAVE** |
+| Auto-update schedule | **SETTINGS** → Auto Update dropdown → **SAVE** |
+| Manual update | **SETTINGS** → **UPDATE** — checks, pulls, and restarts in one click |
+| Restart Mission Control | **SETTINGS** → **RESTART** |
 | Developer console | **LOGS** → live stdout/stderr buffer with CLEAR |
+
+For the complete list of voice and text commands — including hardware audit phrases, launch targets, process management, weather, web search, and cloud routing — see **[docs/COMMANDS.md](docs/COMMANDS.md)**.
 
 ---
 
@@ -325,6 +335,8 @@ Three Start Menu shortcuts manage the full Albedo lifecycle:
 | **Uninstall Albedo** | Removes `.venv`, shortcuts, optional ChromaDB wipe |
 
 Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.
+
+In-app updates are also available via **Settings → UPDATE** — a single click checks for new commits, pulls them, and restarts Mission Control automatically. Auto-update frequency (startup only, hourly, 6h, 24h, or disabled) is configurable in the same panel.
 
 ---
 
