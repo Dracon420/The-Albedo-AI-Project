@@ -1906,33 +1906,69 @@ class AlbedoGUI(ctk.CTk):
         """Run git fetch in background; alert user if commits are available."""
         def _worker():
             import subprocess as _sp
+
+            def _run(cmd):
+                return _sp.run(
+                    cmd, capture_output=False,
+                    stdout=_sp.PIPE, stderr=_sp.STDOUT,
+                    text=True, timeout=20,
+                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
+                )
+
             try:
-                fetch = _sp.run(
-                    ["git", "fetch", "--quiet"],
-                    capture_output=True, timeout=15,
-                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
-                )
-                if fetch.returncode != 0 and _manual:
-                    self._ui(lambda: self._reset_update_btn("NOT A GIT REPO"))
+                # Verify we are inside a git repo
+                check = _run(["git", "rev-parse", "--is-inside-work-tree"])
+                if check.returncode != 0:
+                    print("[update] Not a git repository — update check skipped.")
+                    if _manual:
+                        self._ui(lambda: self._reset_update_btn("NOT A GIT REPO"))
                     return
-                result = _sp.run(
-                    ["git", "log", "HEAD..origin/HEAD", "--oneline"],
-                    capture_output=True, text=True, timeout=10,
-                    cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
-                )
-                new_commits = result.stdout.strip()
+
+                # Show current local commit
+                local = _run(["git", "log", "-1", "--oneline"])
+                print(f"[update] Local:  {local.stdout.strip()}")
+
+                # Fetch from remote
+                print("[update] Fetching from remote...")
+                fetch = _run(["git", "fetch"])
+                if fetch.stdout.strip():
+                    print(f"[update] fetch: {fetch.stdout.strip()}")
+                if fetch.returncode != 0:
+                    print(f"[update] Fetch failed (returncode {fetch.returncode}).")
+                    if _manual:
+                        self._ui(lambda: self._reset_update_btn("FETCH FAILED"))
+                    return
+
+                # Determine remote branch (origin/HEAD or origin/<branch>)
+                branch = _run(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"])
+                remote_ref = branch.stdout.strip() if branch.returncode == 0 else "origin/master"
+                print(f"[update] Tracking: {remote_ref}")
+
+                # Count new commits on remote
+                log = _run(["git", "log", f"HEAD..{remote_ref}", "--oneline"])
+                new_commits = log.stdout.strip()
+
                 if new_commits:
+                    count = len(new_commits.splitlines())
+                    print(f"[update] {count} new commit(s) available:\n{new_commits}")
                     self._update_available = True
                     self._ui(self._notify_update_available)
-                elif _manual:
-                    self._ui(lambda: self._reset_update_btn("UP TO DATE"))
+                else:
+                    remote_log = _run(["git", "log", "-1", "--oneline", remote_ref])
+                    print(f"[update] Remote: {remote_log.stdout.strip()}")
+                    print("[update] Already up to date.")
+                    if _manual:
+                        self._ui(lambda: self._reset_update_btn("UP TO DATE"))
+
             except FileNotFoundError:
+                print("[update] git not found on PATH.")
                 if _manual:
                     self._ui(lambda: self._reset_update_btn("GIT NOT FOUND"))
             except Exception as exc:
                 print(f"[update] check error: {exc}")
                 if _manual:
                     self._ui(lambda: self._reset_update_btn("CHECK FAILED"))
+
         threading.Thread(target=_worker, daemon=True, name="update-check").start()
 
     def _reset_update_btn(self, label: str = "CHECK UPDATE") -> None:
@@ -1977,14 +2013,23 @@ class AlbedoGUI(ctk.CTk):
 
         def _apply():
             try:
-                _sp.run(
+                print("[update] Pulling latest commits...")
+                result = _sp.run(
                     ["git", "pull", "--ff-only"],
-                    capture_output=True, timeout=60,
+                    stdout=_sp.PIPE, stderr=_sp.STDOUT,
+                    text=True, timeout=60,
                     cwd=str(ROOT), creationflags=_sp.CREATE_NO_WINDOW,
                 )
+                print(f"[update] pull: {result.stdout.strip()}")
+                if result.returncode != 0:
+                    print(f"[update] Pull failed — aborting restart.")
+                    self._ui(lambda: self._reset_update_btn("PULL FAILED"))
+                    return
             except Exception as exc:
                 print(f"[update] pull error: {exc}")
-            # Restart: launch a new process then exit this one
+                self._ui(lambda: self._reset_update_btn("PULL FAILED"))
+                return
+            print("[update] Restarting Albedo Mission Control...")
             _sp.Popen(
                 [sys.executable, str(ROOT / "gui.py")],
                 creationflags=_sp.CREATE_NO_WINDOW,
