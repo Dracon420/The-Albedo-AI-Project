@@ -65,6 +65,15 @@ PERSONA_MAP: dict[str, dict[str, str]] = {
 }
 _PERSONA_DISPLAY = list(PERSONA_MAP.keys())  # ["Cortana", "Jarvis"]
 
+# Background image options — display name → filename (None = plain dark)
+_BG_FILES: dict[str, str | None] = {
+    "Default":  None,
+    "Albedo 1": "Albedo-mission-control-background-1.png",
+    "Albedo 2": "albedo-mission-control-background-2.png",
+    "Albedo 3": "albedo-mission-control-background-3.png",
+    "Albedo 4": "albedo-mission-control-background-4.png",
+}
+
 
 # ── Settings persistence ───────────────────────────────────────────────────
 
@@ -290,6 +299,24 @@ class SettingsDialog(ctk.CTkToplevel):
             command=self._parent._run_update)
         self._parent._update_btn.pack(padx=24, pady=(0, 4))
 
+        # ── Background image ───────────────────────────────────────────────
+        _section("BACKGROUND")
+        ctk.CTkLabel(scroll, text="Border image shown around the main UI.",
+                     font=("Courier New", 10), text_color=C_MUTED).pack(**p)
+        current_bg = self._parent._settings.get("background", "Default")
+        if current_bg not in _BG_FILES:
+            current_bg = "Default"
+        self._var_bg = ctk.StringVar(value=current_bg)
+        ctk.CTkOptionMenu(scroll,
+                          variable=self._var_bg,
+                          values=list(_BG_FILES.keys()),
+                          font=("Courier New", 12),
+                          fg_color=C_BG, text_color=C_TEXT,
+                          button_color=C_BORDER, button_hover_color=C_CYAN_DIM,
+                          dropdown_fg_color=C_BG,
+                          dropdown_text_color=C_TEXT).pack(
+                              padx=24, fill="x", pady=(0, 6))
+
         # ── Buttons ────────────────────────────────────────────────────────
         ctk.CTkFrame(scroll, fg_color=C_BORDER, height=1).pack(
             fill="x", padx=24, pady=(14, 6))
@@ -324,6 +351,9 @@ class SettingsDialog(ctk.CTkToplevel):
             print(f"[settings] swarm reinit error: {exc}")
 
         self._parent._settings["auto_update"] = self._var_autoupdate.get()
+        bg_choice = self._var_bg.get()
+        self._parent._settings["background"] = bg_choice
+        self._parent._apply_background(bg_choice)
         _save_settings(self._parent._settings)
         self._parent._apply_persona(self._persona_var.get())
         self._parent._update_check_ran = False  # allow re-run after settings change
@@ -787,20 +817,25 @@ class AlbedoGUI(ctk.CTk):
         # ══════════════════════════════════════════════════════════════════
         _bg = tk.Canvas(self, bg=C_BG, highlightthickness=0)
         _bg.pack(fill='both', expand=True)
+        self._bg_canvas = _bg
 
-        _bg_path = ROOT / 'background.png'
-        if _bg_path.exists():
-            try:
-                self._bg_pil = Image.open(_bg_path).convert('RGB')
-                print('[bg] background.png loaded')
-            except Exception as exc:
-                print(f'[bg] failed to load background.png: {exc}')
+        # Load whichever background the user last selected (or none for Default)
+        _bg_choice = self._settings.get("background", "Default")
+        _bg_fname  = _BG_FILES.get(_bg_choice)
+        if _bg_fname:
+            _bg_path = ROOT / _bg_fname
+            if _bg_path.exists():
+                try:
+                    self._bg_pil = Image.open(_bg_path).convert('RGB')
+                    print(f'[bg] {_bg_fname} loaded')
+                except Exception as exc:
+                    print(f'[bg] failed to load {_bg_fname}: {exc}')
 
         _last_bg_sz = [0, 0]
 
-        def _draw_bg(event=None):
+        def _draw_bg(event=None, force: bool = False):
             w, h = _bg.winfo_width(), _bg.winfo_height()
-            if w < 2 or h < 2 or [w, h] == _last_bg_sz:
+            if w < 2 or h < 2 or ([w, h] == _last_bg_sz and not force):
                 return
             _last_bg_sz[:] = [w, h]
             _bg.delete('bg_img', 'hud')
@@ -842,6 +877,7 @@ class AlbedoGUI(ctk.CTk):
                 _bg.create_line(w-M, y0, w-M, y1, fill=CMID, width=1, tags='hud')
 
         _bg.bind('<Configure>', lambda e: _draw_bg())
+        self._draw_bg = _draw_bg   # allow _apply_background to force a redraw
 
         # ══════════════════════════════════════════════════════════════════
         # ROOT HORIZONTAL LAYOUT: main column ║ side panel ║ toggle strip
@@ -2163,6 +2199,27 @@ class AlbedoGUI(ctk.CTk):
         self._log_append(
             "system",
             "UPDATE AVAILABLE — Open Settings and click UPDATE to install and restart.")
+
+    def _apply_background(self, name: str) -> None:
+        """Load the selected background image and force a canvas redraw."""
+        fname = _BG_FILES.get(name)
+        if fname is None:
+            self._bg_pil = None
+        else:
+            path = ROOT / fname
+            if path.exists():
+                try:
+                    self._bg_pil = Image.open(path).convert('RGB')
+                except Exception as exc:
+                    print(f'[bg] failed to load {fname}: {exc}')
+                    self._bg_pil = None
+            else:
+                print(f'[bg] file not found: {fname}')
+                self._bg_pil = None
+        self._bg_photo = None
+        if hasattr(self, '_draw_bg'):
+            self._bg_canvas.delete('bg_img')
+            self._draw_bg(force=True)
 
     def _restart_app(self) -> None:
         """Spawn a fresh Albedo process then close this one."""
