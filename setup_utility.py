@@ -494,10 +494,21 @@ class DirectoryPage(Page):
         _lbl(row, label, size=10, bg=C_PANEL).pack(anchor="w")
         inner = tk.Frame(row, bg=C_PANEL)
         inner.pack(fill="x")
-        tk.Entry(inner, textvariable=var, bg=C_BG, fg=C_TEXT,
-                 insertbackground=C_CYAN, relief="flat", bd=2,
-                 font=FONT_SMALL, show="•").pack(
-                     side="left", fill="x", expand=True, padx=(0, 4))
+        _ent = tk.Entry(inner, textvariable=var, bg=C_BG, fg=C_TEXT,
+                        insertbackground=C_CYAN, relief="flat", bd=2,
+                        font=FONT_SMALL, show="•")
+        _ent.pack(side="left", fill="x", expand=True, padx=(0, 4))
+
+        # Right-click context menu for pasting API keys
+        _ctx = tk.Menu(_ent, tearoff=0, bg=C_BG, fg=C_TEXT,
+                       activebackground=C_CYAN, activeforeground="#000000",
+                       font=FONT_SMALL)
+        _ctx.add_command(label="Paste",
+                         command=lambda v=var, e=_ent: v.set(e.clipboard_get()))
+        _ctx.add_command(label="Clear", command=lambda v=var: v.set(""))
+        _ent.bind("<Button-3>",
+                  lambda ev, m=_ctx: m.tk_popup(ev.x_root, ev.y_root))
+
         _btn(inner, " ? ", lambda u=help_url: webbrowser.open(u),
              width=3).pack(side="left")
 
