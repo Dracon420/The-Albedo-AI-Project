@@ -99,6 +99,8 @@ Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and
 | Ollama | Latest | Yes, via winget |
 | GPU VRAM | 4 GB minimum Â· 6 GB recommended | â€” |
 
+> **Windows SmartScreen notice:** Windows may show a "Windows protected your PC" warning when running the installer. This is expected for unsigned software. Click **More info** then **Run anyway** to proceed — the installer contains no malware or telemetry.
+
 **Deployment sequence:**
 
 1. **Download** `Albedo-Setup.exe` from the link above
