@@ -1,6 +1,6 @@
 ﻿<div align="center">
 
-<img src="./albedo_logo.png" alt="Albedo" width="180"/>
+<img src="https://github.com/Dracon420/The-Albedo-AI-Project/blob/master/albedo_logo.png?raw=true" alt="Albedo" width="180"/>
 
 # ALBEDO // MISSION CONTROL
 
