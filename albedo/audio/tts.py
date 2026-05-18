@@ -1,5 +1,19 @@
 """
-Text-to-speech with Edge-TTS (primary) and Piper (offline fallback).
+Text-to-speech with Edge-TTS (primary), Piper (offline fallback), and
+Kokoro (optional offline high-quality engine).
+
+Engine selection (AUDIO_TTS env var):
+  - "piper"  (default, v2.x compatibility) — Edge-TTS primary,
+                                              Piper subprocess fallback.
+  - "kokoro" — Kokoro ONNX local engine for synthesize_to_bytes(),
+               with Piper as the failure fallback. Streaming speak()
+               paths still use Edge+Piper (sentence-level pipelining
+               is wired to that stack; will migrate in Phase 4 N+2).
+
+Phase 4 N+1 wires the dispatcher into the synthesize_to_bytes() path
+that the FastAPI server uses for mobile delivery. The streaming local
+playback paths (speak / speak_streamed / enqueue_speech) keep the
+existing Edge+Piper code so v2.0.2 desktop behaviour is unchanged.
 
 Primary path — Edge-TTS:
   Streams audio from Microsoft's TTS cloud service using the edge-tts
@@ -10,6 +24,11 @@ Fallback path — Piper (subprocess):
   If edge-tts fails for any reason (no internet, library absent, decode
   error) the call transparently retries via the local Piper binary.
   Piper runs on CPU so it uses zero VRAM — keeps the RTX 2060 clean.
+
+Optional path — Kokoro (ONNX, CPU-bound per resource_policy):
+  When AUDIO_TTS=kokoro and the Kokoro model files exist on disk, the
+  synthesize_to_bytes() path uses Kokoro first and only falls through
+  to Piper if Kokoro fails to load or synthesize.
 
 Streaming TTS:
   speak_streamed() splits the response into sentences and pipelines
@@ -440,14 +459,14 @@ def speak_streamed(text: str, device: int | None = None,
                     blocking=True, device=device)
 
 
-def synthesize_to_bytes(text: str,
-                        voice_model: str | None = None) -> bytes | None:
-    """
-    Run Piper and return raw WAV bytes.
-    Used by the FastAPI server for mobile client audio delivery.
-    """
-    text = _sanitize_for_tts(text)
-    if not text or not _check_piper_binary():
+def _active_tts_engine() -> str:
+    """Read AUDIO_TTS env var at call time so .env edits take effect on next call."""
+    return (os.environ.get("AUDIO_TTS", "piper") or "piper").strip().lower()
+
+
+def _synthesize_to_bytes_piper(text: str, voice_model: str | None) -> bytes | None:
+    """Piper subprocess path — extracted so the dispatcher can call it as a fallback."""
+    if not _check_piper_binary():
         return None
     model = _resolve_voice(voice_model)
     if not os.path.isfile(model):
@@ -474,6 +493,43 @@ def synthesize_to_bytes(text: str,
             os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def synthesize_to_bytes(text: str,
+                        voice_model: str | None = None) -> bytes | None:
+    """
+    Return raw WAV bytes — routed through the engine selected by AUDIO_TTS.
+
+    Used by the FastAPI server for mobile client audio delivery.
+
+    AUDIO_TTS=kokoro -> tries Kokoro first; falls back to Piper on failure
+    AUDIO_TTS=piper  -> Piper only (the v2.x default; backward-compatible)
+
+    Both paths sanitise the input identically and return None on every
+    failure so the caller can decide whether to send a text-only reply.
+    """
+    text = _sanitize_for_tts(text)
+    if not text:
+        return None
+
+    engine = _active_tts_engine()
+    if engine == "kokoro":
+        try:
+            from albedo.audio import tts_kokoro
+        except ImportError:
+            tts_kokoro = None
+        if tts_kokoro is not None and tts_kokoro.is_available():
+            wav = tts_kokoro.synthesize_to_bytes(text)
+            if wav is not None:
+                return wav
+            err = tts_kokoro.load_error() or "synthesis returned no audio"
+            print(f"[tts] Kokoro failed ({err}) — falling back to Piper")
+        else:
+            err = tts_kokoro.load_error() if tts_kokoro is not None else None
+            reason = err or "kokoro-onnx not installed or model files missing"
+            print(f"[tts] Kokoro unavailable: {reason} — falling back to Piper")
+
+    return _synthesize_to_bytes_piper(text, voice_model)
 
 
 def _batch_sentences(sentences: list[str], max_words: int = 35) -> list[str]:

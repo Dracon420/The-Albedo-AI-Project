@@ -234,6 +234,13 @@ def _write_env(
         "WAKE_WORDS":           wake_words,
         "OLLAMA_MODEL":         "llama3.2:3b",
         "VOSK_MODEL_PATH":      str(ROOT.resolve() / "vosk_models" / "vosk-model-small-en-us-0.15"),
+        # Phase 4 N+1: TTS engine selector. Piper stays default for v2.x
+        # backward compatibility; users opt into Kokoro by editing .env.
+        "AUDIO_TTS":            "piper",
+        "KOKORO_MODEL_PATH":    str(ROOT.resolve() / "voices" / "kokoro-v1.0.onnx"),
+        "KOKORO_VOICES_PATH":   str(ROOT.resolve() / "voices" / "voices-v1.0.bin"),
+        "KOKORO_VOICE":         "af_sky",
+        "KOKORO_SPEED":         "1.0",
     }
     def _env_format(val: str) -> str:
         # python-dotenv interprets \v \n \t etc inside DOUBLE quotes —
