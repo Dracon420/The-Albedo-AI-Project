@@ -14,8 +14,8 @@ on the 2.x line while the bigger Eel + audio work lives on its own branch.
 | 1 | Black box + hardware cache | shipped | `62d09e5` |
 | 3 | Live telemetry with deltas | shipped | `39021f5` |
 | 5 | Safety interceptor + 127.0.0.1 webhook | shipped | `8b76b7f` |
-| 6 | Hardware assignment protocol | **queued — implement at start of Phase 4** | — |
-| 4 | Audio stack (Kokoro + Deepgram + distil-whisper + wake-word toggle) | not started | — |
+| 6 | Hardware assignment protocol | **shipped — Phase 4 first sub-task complete** | this commit |
+| 4 | Audio stack (Kokoro + Deepgram + distil-whisper + wake-word toggle) | **in progress (Phase 6 done, audio loaders pending)** | — |
 | 2 | Eel + HTML/CSS/JS frontend | not started | — |
 
 ## Phase ordering rationale

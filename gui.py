@@ -2412,9 +2412,11 @@ def main() -> None:
     # Install the global crash recorder before constructing the UI so any
     # exception during init lands in logs/albedo_crash_report.txt rather
     # than vanishing with the window.
-    from albedo import black_box, hardware_profile
+    from albedo import black_box, hardware_profile, resource_policy
     black_box.install()
     hardware_profile.get_hardware()   # warm/build the cache on first boot
+    resource_policy.detect()          # CUDA/CPU map for ML components
+    resource_policy.log_resource_map()
 
     app = AlbedoGUI()
     app.mainloop()

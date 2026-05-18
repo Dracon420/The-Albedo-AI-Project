@@ -22,6 +22,13 @@ black_box.install()
 from albedo import hardware_profile
 hardware_profile.get_hardware()
 
+# Detect CUDA + ONNX provider availability and build the effective resource
+# map (which model gets which device). Logged to logs/resource_map.log and
+# merged into hardware_config.json so crash reports include it.
+from albedo import resource_policy
+resource_policy.detect()
+resource_policy.log_resource_map()
+
 
 def cmd_index():
     from memory import index_obsidian_vault
