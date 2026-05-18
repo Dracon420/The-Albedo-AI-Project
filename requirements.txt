@@ -27,6 +27,10 @@ faster-whisper>=1.0.0
 # Deepgram SDK is the cloud primary; only consulted when DEEPGRAM_API_KEY is set.
 deepgram-sdk>=3.7.0
 
+# Phase 2 alpha — Eel HTML/CSS/JS frontend. Opt-in via ALBEDO_UI=eel in .env.
+# Tk GUI remains the default. Eel ships its own bottle/gevent stack.
+eel>=0.16.0
+
 # FastAPI server (Tailscale bridge for mobile client)
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0

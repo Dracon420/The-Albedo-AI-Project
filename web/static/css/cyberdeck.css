@@ -1,0 +1,275 @@
+/* ============================================================
+   cyberdeck.css — base palette, typography, layout, frosted glass
+
+   Theme tokens are CSS variables so JS can flip the active accent
+   per persona without touching the rest of the stylesheet.
+   ============================================================ */
+
+:root {
+  /* Palette — Halo / mission-control inspired cyan + tactical orange */
+  --c-bg:           #050a0e;
+  --c-bg-panel:     rgba(8, 16, 22, 0.62);
+  --c-bg-panel-2:   rgba(10, 22, 30, 0.78);
+  --c-border:       rgba(0, 245, 255, 0.18);
+  --c-border-bright:rgba(0, 245, 255, 0.55);
+  --c-text:         #c7f5ff;
+  --c-text-dim:     #6c93a3;
+  --c-cyan:         #00f5ff;
+  --c-cyan-dim:     #0099ad;
+  --c-green:        #2eff7a;
+  --c-orange:       #ff9a1f;
+  --c-red:          #ff4868;
+  --c-purple:       #b16bff;
+
+  /* Sizing */
+  --grid-cols:      280px 1fr 280px;
+  --topbar-h:       54px;
+  --drawer-w:       380px;
+
+  /* Effects */
+  --glass-blur:     18px;
+  --shadow-glow:    0 0 24px rgba(0, 245, 255, 0.15);
+  --shadow-deep:    0 8px 32px rgba(0, 0, 0, 0.55);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: var(--c-text);
+  font-family: "Consolas", "Courier New", "Menlo", monospace;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+}
+
+body {
+  background: var(--c-bg) center/cover no-repeat fixed;
+  position: relative;
+}
+
+/* The 4 toggleable backgrounds — data-background on <body> picks one. */
+body[data-background="bg1"] { background-image: url("../backgrounds/Albedo-mission-control-background-1.png"); }
+body[data-background="bg2"] { background-image: url("../backgrounds/albedo-mission-control-background-2.png"); }
+body[data-background="bg3"] { background-image: url("../backgrounds/albedo-mission-control-background-3.png"); }
+body[data-background="bg4"] { background-image: url("../backgrounds/albedo-mission-control-background-4.png"); }
+
+/* Dark scrim over the background image so panels read clearly */
+body::before {
+  content: "";
+  position: fixed; inset: 0;
+  background: linear-gradient(180deg, rgba(2, 8, 12, 0.55), rgba(2, 8, 12, 0.72));
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ============================================================
+   Top bar
+   ============================================================ */
+.topbar {
+  position: relative;
+  z-index: 5;
+  height: var(--topbar-h);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 24px;
+  padding: 0 18px;
+  background: var(--c-bg-panel-2);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--c-border);
+}
+.topbar__title { display: flex; align-items: center; gap: 8px; }
+.topbar__brand { font-size: 18px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; }
+.topbar__sep   { color: var(--c-text-dim); }
+.topbar__sub   { color: var(--c-text); letter-spacing: 0.18em; }
+
+.drawer__toggle {
+  background: var(--c-bg-panel);
+  color: var(--c-cyan);
+  border: 1px solid var(--c-border-bright);
+  font-family: inherit;
+  font-size: 20px;
+  width: 40px; height: 40px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.drawer__toggle:hover { background: var(--c-cyan); color: #000; }
+
+/* ============================================================
+   Swarm status pills
+   ============================================================ */
+.swarm {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.swarm__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--c-bg-panel);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  color: var(--c-text-dim);
+}
+.swarm__dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--c-orange);
+  box-shadow: 0 0 8px var(--c-orange);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.swarm__dot[data-state="standby"] { background: var(--c-orange); box-shadow: 0 0 8px var(--c-orange);  }
+.swarm__dot[data-state="active"]  { background: var(--c-cyan);   box-shadow: 0 0 12px var(--c-cyan);   }
+.swarm__dot[data-state="error"]   { background: var(--c-red);    box-shadow: 0 0 12px var(--c-red);    }
+
+/* ============================================================
+   Three-column grid: left wing | centre | right wing
+   ============================================================ */
+.grid {
+  position: relative;
+  z-index: 1;
+  height: calc(100% - var(--topbar-h));
+  display: grid;
+  grid-template-columns: var(--grid-cols);
+  gap: 14px;
+  padding: 14px;
+}
+
+.wing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 10px;
+  background: var(--c-bg-panel);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-glow);
+}
+.wing__apex { display: flex; justify-content: center; width: 100%; }
+.wing__main { display: flex; flex-direction: column; gap: 20px; align-items: center; flex: 1; }
+
+/* ============================================================
+   Centre column: chat + input
+   ============================================================ */
+.centre {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--c-bg-panel-2);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-glow);
+  padding: 16px;
+  min-height: 0;
+}
+.chat {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 4px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--c-text);
+}
+.chat__line { margin-bottom: 6px; }
+.chat__line--user   { color: var(--c-green); }
+.chat__line--albedo { color: var(--c-cyan); }
+.chat__line--system { color: var(--c-orange); }
+.chat__line--error  { color: var(--c-red);  }
+.chat__line code    {
+  background: var(--c-bg-panel);
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: var(--c-cyan);
+}
+
+.chat::-webkit-scrollbar { width: 6px; }
+.chat::-webkit-scrollbar-track { background: transparent; }
+.chat::-webkit-scrollbar-thumb { background: var(--c-cyan-dim); border-radius: 3px; }
+
+/* Header strip */
+.cmd-header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  padding: 0 2px;
+}
+.cmd-header__left  { color: var(--c-cyan); font-weight: 700; }
+.cmd-header__right { color: var(--c-green); font-weight: 700; }
+
+/* Input row */
+.cmd-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 10px;
+  background: var(--c-bg-panel);
+  border: 1px solid var(--c-cyan-dim);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+.cmd-row #queryInput {
+  flex: 1;
+  min-width: 200px;
+  height: 42px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--c-text);
+  background: var(--c-bg);
+  border: 1px solid var(--c-cyan-dim);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.cmd-row #queryInput:focus { border-color: var(--c-cyan); }
+.cmd-row #queryInput::placeholder { color: var(--c-text-dim); }
+
+.cmd-btn {
+  background: var(--c-border);
+  color: var(--c-text);
+  border: 1px solid var(--c-cyan-dim);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cmd-btn:hover           { background: var(--c-cyan); color: #000; }
+.cmd-btn:active          { transform: translateY(1px); }
+.cmd-btn[disabled]       { opacity: 0.45; cursor: not-allowed; }
+.cmd-btn--accent         { background: var(--c-cyan-dim); color: #000; }
+.cmd-btn--accent:hover   { background: var(--c-cyan); }
+.cmd-btn--send           { background: var(--c-cyan); color: #000; }
+.cmd-btn--send:hover     { background: #6effff; }
+.cmd-btn--green          { background: var(--c-green); color: #000; }
+.cmd-btn--green.is-muted { background: var(--c-red);   color: #000; }
+
+/* When MIC is actively recording, indicate it visually */
+.cmd-btn--accent.is-recording {
+  background: var(--c-red);
+  box-shadow: 0 0 12px var(--c-red);
+}
+.cmd-btn[data-state="armed"]    { background: var(--c-green); color: #000; }
+.cmd-btn[data-state="ptt"]      { background: var(--c-purple); color: #fff; }

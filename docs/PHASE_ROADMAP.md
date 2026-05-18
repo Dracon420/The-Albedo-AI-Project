@@ -16,7 +16,7 @@ on the 2.x line while the bigger Eel + audio work lives on its own branch.
 | 5 | Safety interceptor + 127.0.0.1 webhook | shipped | `8b76b7f` |
 | 6 | Hardware assignment protocol | shipped | `fe8bbb6` |
 | 4 | Audio stack (Kokoro + Deepgram + distil-whisper + wake-word toggle) | **shipped** | N+1 `41370b8`, N+2 `6b2f4a6`, N+3 this commit |
-| 2 | Eel + HTML/CSS/JS frontend | not started — only remaining phase | — |
+| 2 | Eel + HTML/CSS/JS frontend | **alpha shipped — Tk + Eel coexist on this branch** | this commit |
 
 ## Phase ordering rationale
 

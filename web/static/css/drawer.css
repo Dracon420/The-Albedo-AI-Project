@@ -1,0 +1,111 @@
+/* ============================================================
+   drawer.css — off-canvas tactical drawer
+   ============================================================ */
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: var(--drawer-w);
+  z-index: 30;
+  background: var(--c-bg-panel-2);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px));
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px));
+  border-left: 1px solid var(--c-border-bright);
+  box-shadow: var(--shadow-deep);
+  overflow-y: auto;
+  transform: translateX(100%);
+  transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.drawer.is-open { transform: translateX(0); }
+
+.drawer__head {
+  position: sticky; top: 0;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 18px;
+  background: var(--c-bg-panel-2);
+  border-bottom: 1px solid var(--c-border);
+  z-index: 2;
+}
+.drawer__head h2 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--c-cyan);
+  letter-spacing: 0.2em;
+  font-weight: 700;
+}
+.drawer__close {
+  background: transparent;
+  color: var(--c-text);
+  border: 1px solid var(--c-border);
+  width: 32px; height: 32px;
+  border-radius: 4px;
+  font-size: 18px;
+  cursor: pointer;
+}
+.drawer__close:hover { background: var(--c-cyan); color: #000; }
+
+.drawer__section {
+  padding: 18px;
+  border-bottom: 1px solid var(--c-border);
+}
+.drawer__section h3 {
+  margin: 0 0 12px;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  color: var(--c-cyan-dim);
+  font-weight: 700;
+}
+
+.drawer__readout {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--c-text);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 10px;
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Background thumbnails */
+.drawer__bg-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.drawer__bg-thumb {
+  height: 64px;
+  border: 2px solid var(--c-border);
+  border-radius: 4px;
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.drawer__bg-thumb:hover { border-color: var(--c-cyan); transform: scale(1.03); }
+.drawer__bg-thumb.is-active { border-color: var(--c-cyan); box-shadow: 0 0 12px var(--c-cyan); }
+
+.drawer__bg-thumb[data-bg="bg1"] { background-image: url("../backgrounds/Albedo-mission-control-background-1.png"); }
+.drawer__bg-thumb[data-bg="bg2"] { background-image: url("../backgrounds/albedo-mission-control-background-2.png"); }
+.drawer__bg-thumb[data-bg="bg3"] { background-image: url("../backgrounds/albedo-mission-control-background-3.png"); }
+.drawer__bg-thumb[data-bg="bg4"] { background-image: url("../backgrounds/albedo-mission-control-background-4.png"); }
+
+/* Scrim (covers grid behind the drawer so clicks outside close it) */
+.drawer__scrim {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 25;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+.drawer__scrim.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}

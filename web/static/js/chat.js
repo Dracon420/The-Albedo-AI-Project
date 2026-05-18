@@ -1,0 +1,151 @@
+// ============================================================
+// chat.js — chat feed, input handling, send button, mode/wake toggles,
+//           and the webhook update poller that surfaces remote commands
+//           into the chat feed.
+// ============================================================
+
+const Chat = (() => {
+  let _feedEl, _inputEl, _sendBtn, _micBtn, _scanBtn, _audioBtn, _modeBtn, _wakeBtn;
+  let _audioMuted = false;
+  let _commMode   = "latch";   // matches CommMode.LATCH.value
+  let _wakeState  = "disarmed";
+
+  function _ts() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    return `[${pad(d.getHours())}:${pad(d.getMinutes())}]`;
+  }
+
+  function appendLine(kind, text) {
+    const line = document.createElement("div");
+    line.className = `chat__line chat__line--${kind}`;
+    line.textContent = `${_ts()} ${text}`;
+    _feedEl.appendChild(line);
+    _feedEl.scrollTop = _feedEl.scrollHeight;
+  }
+
+  async function _send() {
+    const raw = _inputEl.value.trim();
+    if (!raw) return;
+    _inputEl.value = "";
+    _sendBtn.disabled = true;
+    _sendBtn.textContent = "...";
+    appendLine("user", "> " + raw);
+    try {
+      const r = await eel.send_query(raw, false)();
+      if (r && r.ok) {
+        appendLine("albedo", r.reply || "(no response)");
+      } else {
+        appendLine("error", "[SYS] " + (r && r.error ? r.error : "no response"));
+      }
+    } catch (err) {
+      appendLine("error", "[SYS] " + err);
+    } finally {
+      _sendBtn.disabled = false;
+      _sendBtn.textContent = "SEND";
+      _inputEl.focus();
+    }
+  }
+
+  // ── Mode toggle (LATCH ↔ PTT) ────────────────────────────────────────
+  function _renderMode() {
+    if (!_modeBtn) return;
+    _modeBtn.textContent = _commMode === "ptt" ? "MODE: PTT" : "MODE: LATCH";
+    _modeBtn.setAttribute("data-state", _commMode === "ptt" ? "ptt" : "");
+  }
+  async function _toggleMode() {
+    const next = _commMode === "latch" ? "ptt" : "latch";
+    try {
+      const r = await eel.set_comm_mode(next)();
+      if (r && r.ok) {
+        _commMode = r.mode;
+        _renderMode();
+        appendLine("system", `[SYS] MIC mode: ${_commMode === "ptt" ? "Push-to-Talk" : "Latch"}`);
+      }
+    } catch (err) { appendLine("error", "[SYS] " + err); }
+  }
+
+  // ── Wake-word arm/disarm ─────────────────────────────────────────────
+  function _renderWake() {
+    if (!_wakeBtn) return;
+    _wakeBtn.textContent = _wakeState === "armed" ? "WAKE: ARMED" : "WAKE: OFF";
+    _wakeBtn.setAttribute("data-state", _wakeState === "armed" ? "armed" : "");
+  }
+  async function _toggleWake() {
+    const next = _wakeState === "armed" ? "disarmed" : "armed";
+    try {
+      const r = await eel.set_wake_state(next)();
+      if (r && r.ok) {
+        _wakeState = r.state;
+        _renderWake();
+        appendLine("system",
+          `[SYS] Wake-word listener ${_wakeState === "armed" ? "ARMED" : "DISARMED"}`);
+      }
+    } catch (err) { appendLine("error", "[SYS] " + err); }
+  }
+
+  // ── Audio mute (client-side flag for now — server still sends WAV) ──
+  function _toggleAudio() {
+    _audioMuted = !_audioMuted;
+    _audioBtn.classList.toggle("is-muted", _audioMuted);
+    _audioBtn.textContent = _audioMuted ? "AUDIO: OFF" : "AUDIO: ON";
+  }
+
+  // ── Webhook poller — drains pending remote commands into the feed ───
+  async function _pollWebhook() {
+    try {
+      const r = await eel.pop_webhook_updates()();
+      if (r && r.ok && Array.isArray(r.updates)) {
+        for (const u of r.updates) {
+          appendLine("system",
+            `[WEBHOOK] ${u.source}: ${u.kind} ${JSON.stringify(u.payload || {})}`);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  async function _initState() {
+    try {
+      const cm = await eel.get_comm_mode()();
+      if (cm && cm.ok) { _commMode = cm.mode; _renderMode(); }
+    } catch { /* ignore */ }
+    try {
+      const ws = await eel.get_wake_state()();
+      if (ws && ws.ok) { _wakeState = ws.state; _renderWake(); }
+    } catch { /* ignore */ }
+  }
+
+  function init() {
+    _feedEl   = document.getElementById("chat");
+    _inputEl  = document.getElementById("queryInput");
+    _sendBtn  = document.getElementById("sendBtn");
+    _micBtn   = document.getElementById("micBtn");
+    _scanBtn  = document.getElementById("scanBtn");
+    _audioBtn = document.getElementById("audioBtn");
+    _modeBtn  = document.getElementById("modeBtn");
+    _wakeBtn  = document.getElementById("wakeBtn");
+
+    _sendBtn .addEventListener("click", _send);
+    _inputEl .addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") _send();
+    });
+    _audioBtn.addEventListener("click", _toggleAudio);
+    _modeBtn .addEventListener("click", _toggleMode);
+    _wakeBtn .addEventListener("click", _toggleWake);
+
+    // MIC + SCAN are placeholders in the alpha — full voice loop ports
+    // in a follow-up. Show a friendly note instead of silently doing nothing.
+    _micBtn .addEventListener("click", () =>
+      appendLine("system", "[SYS] MIC voice loop is wired into the Tk GUI today; Eel mic capture is queued for the next alpha."));
+    _scanBtn.addEventListener("click", () =>
+      appendLine("system", "[SYS] SCAN (visual capture) is queued for a follow-up alpha."));
+
+    _initState();
+    setInterval(_pollWebhook, 1500);
+    _inputEl.focus();
+  }
+
+  return { init, appendLine };
+})();
+
+window.Chat = Chat;

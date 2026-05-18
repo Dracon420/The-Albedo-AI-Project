@@ -1,0 +1,82 @@
+/* ============================================================
+   gauges.css — SVG ring gauges for the winged-triangle HUD
+
+   The "ring fill" uses stroke-dasharray on a circle. JS sets the
+   --gauge-pct custom property (0..1); CSS turns it into a dash
+   offset of the right length. circumference = 2πr.
+
+   Large rings  : r=82,  c ≈ 515.22
+   Small rings  : r=48,  c ≈ 301.59
+   ============================================================ */
+
+.gauge {
+  display: block;
+  filter: drop-shadow(0 0 6px rgba(0, 245, 255, 0.18));
+}
+
+.gauge--large { width: 200px; height: 200px; }
+.gauge--small { width: 140px; height: 140px; }
+
+/* Background track (unfilled portion of the ring) */
+.gauge__bg {
+  fill: none;
+  stroke: rgba(0, 245, 255, 0.08);
+  stroke-width: 10;
+}
+.gauge--small .gauge__bg { stroke-width: 7; }
+
+/* Foreground fill — JS varies the dash offset */
+.gauge__fill {
+  fill: none;
+  stroke: var(--c-cyan);
+  stroke-width: 10;
+  stroke-linecap: round;
+  /* Start the ring at 12 o'clock and go clockwise */
+  transform: rotate(-90deg);
+  transform-origin: center;
+  transition: stroke-dashoffset 0.6s ease, stroke 0.3s;
+  /* Circumference for r=82 is ~515.22; JS sets dasharray + offset */
+  stroke-dasharray: 515.22;
+  stroke-dashoffset: 515.22;   /* empty by default */
+}
+.gauge--small .gauge__fill {
+  stroke-width: 7;
+  stroke-dasharray: 301.59;
+  stroke-dashoffset: 301.59;
+}
+
+/* Severity tinting — JS adds these classes when percentage crosses thresholds */
+.gauge__fill.is-warn   { stroke: var(--c-orange); }
+.gauge__fill.is-crit   { stroke: var(--c-red);    }
+.gauge__fill.is-active { stroke: var(--c-cyan);   }
+
+/* Centre text */
+.gauge__value {
+  font-family: "Courier New", monospace;
+  font-weight: 700;
+  font-size: 38px;
+  fill: var(--c-text);
+}
+.gauge--small .gauge__value { font-size: 26px; }
+
+.gauge__unit {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  fill: var(--c-text-dim);
+  text-transform: uppercase;
+}
+.gauge--small .gauge__unit { font-size: 9px; }
+
+.gauge__sub {
+  font-size: 10px;
+  fill: var(--c-cyan-dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.gauge__label {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  fill: var(--c-cyan);
+  font-weight: 700;
+}

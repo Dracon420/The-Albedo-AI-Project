@@ -2601,6 +2601,24 @@ def main() -> None:
     resource_policy.detect()          # CUDA/CPU map for ML components
     resource_policy.log_resource_map()
 
+    # Phase 2 (alpha): when ALBEDO_UI=eel in .env, launch the Eel UI
+    # instead of the Tk GUI. Default remains Tk so v2.0.2 installs upgrade
+    # with zero behaviour change.
+    import os
+    ui_choice = (os.environ.get("ALBEDO_UI", "tk") or "tk").strip().lower()
+    if ui_choice == "eel":
+        try:
+            from albedo.eel_app.app import run as run_eel, is_eel_available
+            if not is_eel_available():
+                print("[gui] ALBEDO_UI=eel but eel package missing — "
+                      "falling back to Tk. Run 'pip install eel'.")
+            else:
+                print("[gui] Launching Eel UI (ALBEDO_UI=eel)...")
+                run_eel()
+                return
+        except Exception as exc:
+            print(f"[gui] Eel launch failed: {exc} — falling back to Tk.")
+
     app = AlbedoGUI()
     app.mainloop()
 

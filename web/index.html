@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALBEDO  //  MISSION CONTROL</title>
+
+  <!-- Eel JS bridge -->
+  <script type="text/javascript" src="/eel.js"></script>
+
+  <link rel="stylesheet" href="static/css/cyberdeck.css" />
+  <link rel="stylesheet" href="static/css/gauges.css" />
+  <link rel="stylesheet" href="static/css/drawer.css" />
+</head>
+<body data-background="bg2">
+  <!-- ── Top bar ──────────────────────────────────────────────────────── -->
+  <header class="topbar">
+    <div class="topbar__title">
+      <span class="topbar__brand">ALBEDO</span>
+      <span class="topbar__sep">//</span>
+      <span class="topbar__sub">MISSION CONTROL</span>
+    </div>
+
+    <!-- Swarm status bar (LEDs for AI agents) -->
+    <nav class="swarm" aria-label="Swarm status">
+      <div class="swarm__pill" data-agent="ALBEDO_CORE">
+        <span class="swarm__dot" data-state="standby"></span>
+        <span class="swarm__label">ALBEDO_CORE</span>
+      </div>
+      <div class="swarm__pill" data-agent="WEB_SCRAPER">
+        <span class="swarm__dot" data-state="standby"></span>
+        <span class="swarm__label">WEB_SCRAPER</span>
+      </div>
+      <div class="swarm__pill" data-agent="EXECUTION_OVERRIDE">
+        <span class="swarm__dot" data-state="standby"></span>
+        <span class="swarm__label">EXECUTION_OVERRIDE</span>
+      </div>
+    </nav>
+
+    <button class="drawer__toggle" id="drawerToggle" aria-label="Open tactical drawer">≡</button>
+  </header>
+
+  <!-- ── Main grid: left wing, chat, right wing ──────────────────────── -->
+  <main class="grid">
+    <!-- LEFT WING  —  apex Network · CPU · RAM -->
+    <aside class="wing wing--left">
+      <div class="wing__apex">
+        <!-- Smaller apex dial: Network Throughput -->
+        <svg class="gauge gauge--small" viewBox="0 0 120 120" data-gauge="net">
+          <circle class="gauge__bg"    cx="60" cy="60" r="48" />
+          <circle class="gauge__fill"  cx="60" cy="60" r="48" />
+          <text class="gauge__value" x="60" y="56" text-anchor="middle" data-value="net">0</text>
+          <text class="gauge__unit"  x="60" y="74" text-anchor="middle">Mbps ↓↑</text>
+          <text class="gauge__label" x="60" y="108" text-anchor="middle">NETWORK</text>
+        </svg>
+      </div>
+      <div class="wing__main">
+        <svg class="gauge gauge--large" viewBox="0 0 200 200" data-gauge="cpu">
+          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+          <circle class="gauge__fill" cx="100" cy="100" r="82" />
+          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="cpu">0</text>
+          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  CPU</text>
+          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="cpu_freq">-- GHz</text>
+        </svg>
+        <svg class="gauge gauge--large" viewBox="0 0 200 200" data-gauge="ram">
+          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+          <circle class="gauge__fill" cx="100" cy="100" r="82" />
+          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="ram">0</text>
+          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  RAM</text>
+          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="ram_gb">-- / -- GB</text>
+        </svg>
+      </div>
+    </aside>
+
+    <!-- CENTRE  —  chat feed + input -->
+    <section class="centre">
+      <div class="chat" id="chat">
+        <div class="chat__line chat__line--system">[SYS] Albedo Mission Control online.</div>
+        <div class="chat__line chat__line--system">[SYS] Type a query and press SEND. Prefix with <code>web:</code> to force a live web search.</div>
+      </div>
+
+      <!-- CMD_INPUT header strip -->
+      <div class="cmd-header">
+        <span class="cmd-header__left">[ CMD_INPUT ]</span>
+        <span class="cmd-header__right" id="inputStatus">// INPUT_READY</span>
+      </div>
+
+      <!-- Input row -->
+      <div class="cmd-row">
+        <button id="micBtn"  class="cmd-btn cmd-btn--accent" title="MIC (Push-to-Talk in PTT mode)">MIC</button>
+        <button id="scanBtn" class="cmd-btn">SCAN</button>
+        <input  id="queryInput" type="text" autocomplete="off"
+                placeholder="Type a query or press MIC..." />
+        <button id="sendBtn" class="cmd-btn cmd-btn--send">SEND</button>
+        <button id="audioBtn"  class="cmd-btn cmd-btn--green">AUDIO: ON</button>
+        <button id="modeBtn"   class="cmd-btn">MODE: LATCH</button>
+        <button id="wakeBtn"   class="cmd-btn">WAKE: OFF</button>
+      </div>
+    </section>
+
+    <!-- RIGHT WING  —  apex Disk I/O · GPU · SSD -->
+    <aside class="wing wing--right">
+      <div class="wing__apex">
+        <svg class="gauge gauge--small" viewBox="0 0 120 120" data-gauge="disk_io">
+          <circle class="gauge__bg"   cx="60" cy="60" r="48" />
+          <circle class="gauge__fill" cx="60" cy="60" r="48" />
+          <text class="gauge__value" x="60" y="56" text-anchor="middle" data-value="disk_io">0</text>
+          <text class="gauge__unit"  x="60" y="74" text-anchor="middle">MB/s R/W</text>
+          <text class="gauge__label" x="60" y="108" text-anchor="middle">DISK I/O</text>
+        </svg>
+      </div>
+      <div class="wing__main">
+        <svg class="gauge gauge--large" viewBox="0 0 200 200" data-gauge="gpu">
+          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+          <circle class="gauge__fill" cx="100" cy="100" r="82" />
+          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="gpu">0</text>
+          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  GPU</text>
+          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="gpu_temp">-- °C</text>
+        </svg>
+        <svg class="gauge gauge--large" viewBox="0 0 200 200" data-gauge="ssd">
+          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+          <circle class="gauge__fill" cx="100" cy="100" r="82" />
+          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="ssd">0</text>
+          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  SSD C:</text>
+          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="vram">VRAM --</text>
+        </svg>
+      </div>
+    </aside>
+  </main>
+
+  <!-- ── Tactical drawer (off-canvas) ───────────────────────────────── -->
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <header class="drawer__head">
+      <h2>TACTICAL DRAWER</h2>
+      <button class="drawer__close" id="drawerClose" aria-label="Close drawer">×</button>
+    </header>
+
+    <section class="drawer__section">
+      <h3>BACKGROUND</h3>
+      <div class="drawer__bg-grid">
+        <button class="drawer__bg-thumb" data-bg="bg1" title="Background 1"></button>
+        <button class="drawer__bg-thumb" data-bg="bg2" title="Background 2"></button>
+        <button class="drawer__bg-thumb" data-bg="bg3" title="Background 3"></button>
+        <button class="drawer__bg-thumb" data-bg="bg4" title="Background 4"></button>
+      </div>
+    </section>
+
+    <section class="drawer__section">
+      <h3>HARDWARE</h3>
+      <pre class="drawer__readout" id="hwReadout">loading...</pre>
+    </section>
+
+    <section class="drawer__section">
+      <h3>SOFTWARE</h3>
+      <pre class="drawer__readout" id="versionReadout">loading...</pre>
+    </section>
+
+    <section class="drawer__section">
+      <h3>RESOURCE POLICY</h3>
+      <pre class="drawer__readout" id="resourceReadout">loading...</pre>
+    </section>
+  </aside>
+
+  <!-- Drawer scrim for click-to-close -->
+  <div class="drawer__scrim" id="drawerScrim"></div>
+
+  <!-- ── JS ─────────────────────────────────────────────────────────── -->
+  <script src="static/js/gauges.js"></script>
+  <script src="static/js/telemetry.js"></script>
+  <script src="static/js/swarm.js"></script>
+  <script src="static/js/drawer.js"></script>
+  <script src="static/js/chat.js"></script>
+  <script src="static/js/app.js"></script>
+</body>
+</html>

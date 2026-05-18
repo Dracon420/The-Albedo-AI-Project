@@ -105,6 +105,9 @@ Source: "CLAUDE.md";                DestDir: "{app}"; Flags: ignoreversion
 ; ── Docs ───────────────────────────────────────────────────────────────────
 Source: "docs\*";               DestDir: "{app}\docs";              Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
+; ── Eel frontend (Phase 2 alpha — HTML/CSS/JS) ─────────────────────────────
+Source: "web\*";                DestDir: "{app}\web";               Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
 ; ── Background images ──────────────────────────────────────────────────────
 Source: "Albedo-mission-control-background-1.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "albedo-mission-control-background-2.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
