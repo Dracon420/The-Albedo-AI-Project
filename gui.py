@@ -679,6 +679,12 @@ class AlbedoGUI(ctk.CTk):
         self._hud_ssd_dial      = None   # set by _build_ui
         self._gemini_tbar_lbl   = None   # set by _build_ui
         self._audio_stream = None   # AudioStream, lazy-init
+        # Phase 4 N+3: wake-word background listener handle. None while disarmed.
+        # Populated with a threading.Event by wakeword.start_background_listener()
+        # when the user arms wake; setting the event tears the listener down.
+        self._wake_stop_event: threading.Event | None = None
+        self._mode_btn:        ctk.CTkButton | None = None  # set in _build_input_row
+        self._wake_btn:        ctk.CTkButton | None = None
         self._settings_win = None
         self._hardware_win = None
         self._console_win  = None   # kept for compat; panel replaces it
@@ -734,6 +740,19 @@ class AlbedoGUI(ctk.CTk):
         self._build_ui()
         self._start_queue_poll()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        # Phase 4 N+3: register comm-mode observers + apply persisted state
+        try:
+            from albedo.audio import comm_mode as _cm
+            _cm.on_mode_change(self._on_comm_mode_change)
+            _cm.on_wake_change(self._on_wake_state_change)
+            # Fire the observers once with the persisted state so the buttons
+            # reflect settings.json from the first frame (and arm the wake
+            # listener if the user had armed it before).
+            self._on_comm_mode_change(_cm.get_mode())
+            self._on_wake_state_change(_cm.get_wake_state())
+        except Exception as exc:
+            print(f"[gui] comm_mode init failed (non-fatal): {exc}")
 
         # Pre-warm Vosk in background so first MIC press is instant
         threading.Thread(target=self._prewarm_vosk, daemon=True).start()
@@ -1121,6 +1140,9 @@ class AlbedoGUI(ctk.CTk):
                                       fg_color=C_BORDER, hover_color=C_CYAN,
                                       command=self._handle_mic)
         self._mic_btn.pack(side="left", padx=(10, 4), pady=10)
+        # Phase 4 N+3: hold-to-talk bindings — only act in PTT mode (see _on_mic_press).
+        self._mic_btn.bind("<ButtonPress-1>",   self._on_mic_press)
+        self._mic_btn.bind("<ButtonRelease-1>", self._on_mic_release)
 
         self._scan_btn = ctk.CTkButton(row, text="SCAN", width=68, height=48,
                                        font=("Courier New", 13, "bold"),
@@ -1150,7 +1172,27 @@ class AlbedoGUI(ctk.CTk):
             text_color="#000000",
             command=self._toggle_audio_mute,
         )
-        self._audio_btn.pack(side="left", padx=(0, 10), pady=10)
+        self._audio_btn.pack(side="left", padx=(0, 4), pady=10)
+
+        # ── Phase 4 N+3: voice mode + wake-word arm toggles ─────────────────
+        # MODE toggles between LATCH (click MIC to start/stop) and PTT
+        # (hold MIC to talk). WAKE arms/disarms the background wake-word
+        # listener thread. Both states persist in settings.json.
+        self._mode_btn = ctk.CTkButton(
+            row, text="MODE: LATCH", width=120, height=48,
+            font=("Courier New", 12, "bold"),
+            fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+            command=self._toggle_comm_mode,
+        )
+        self._mode_btn.pack(side="left", padx=(0, 4), pady=10)
+
+        self._wake_btn = ctk.CTkButton(
+            row, text="WAKE: OFF", width=110, height=48,
+            font=("Courier New", 12, "bold"),
+            fg_color=C_BORDER, hover_color=C_CYAN_DIM,
+            command=self._toggle_wake_state,
+        )
+        self._wake_btn.pack(side="left", padx=(0, 10), pady=10)
 
     # ── Circuit board background ───────────────────────────────────────────
 
@@ -1620,8 +1662,19 @@ class AlbedoGUI(ctk.CTk):
     # ── Voice input ────────────────────────────────────────────────────────
 
     def _handle_mic(self) -> None:
+        """
+        Click-to-toggle MIC handler. CTkButton fires this on button RELEASE.
+
+        In Latch mode (the v2.0.2 default) this is the only thing the MIC
+        button does — first click starts recording, second click stops.
+        In Push-to-Talk mode it does nothing; _on_mic_press / _on_mic_release
+        bound to the underlying button handle start/stop on hold instead.
+        """
+        from albedo.audio.comm_mode import get_mode, CommMode
+        if get_mode() == CommMode.PUSH_TO_TALK:
+            return  # PTT routes through press/release bindings
+
         if self._state == "listening":
-            # Signal the recording loop to stop immediately
             self._voice_stop.set()
             return
         if self._state in ("processing", "speaking"):
@@ -1629,6 +1682,124 @@ class AlbedoGUI(ctk.CTk):
         self._voice_stop.clear()
         self._set_state("listening")
         threading.Thread(target=self._run_voice, daemon=True).start()
+
+    # ── Phase 4 N+3: Push-to-Talk press/release handlers ───────────────────
+
+    def _on_mic_press(self, _event=None) -> None:
+        """PTT mode: button pressed → start recording. No-op in Latch mode."""
+        from albedo.audio.comm_mode import get_mode, CommMode
+        if get_mode() != CommMode.PUSH_TO_TALK:
+            return
+        if self._state != "standby":
+            return
+        self._voice_stop.clear()
+        self._set_state("listening")
+        threading.Thread(target=self._run_voice, daemon=True).start()
+
+    def _on_mic_release(self, _event=None) -> None:
+        """PTT mode: button released → stop recording. No-op in Latch mode."""
+        from albedo.audio.comm_mode import get_mode, CommMode
+        if get_mode() != CommMode.PUSH_TO_TALK:
+            return
+        if self._state == "listening":
+            self._voice_stop.set()
+
+    # ── Phase 4 N+3: comm-mode + wake-word panel handlers ──────────────────
+
+    def _toggle_comm_mode(self) -> None:
+        """MODE button: flip between LATCH and PTT. Observer updates the label."""
+        from albedo.audio.comm_mode import get_mode, set_mode, CommMode
+        new = CommMode.PUSH_TO_TALK if get_mode() == CommMode.LATCH else CommMode.LATCH
+        set_mode(new)
+
+    def _toggle_wake_state(self) -> None:
+        """WAKE button: arm/disarm the wake-word listener. Observer (re)acts."""
+        from albedo.audio.comm_mode import get_wake_state, set_wake_state, WakeState
+        new = WakeState.DISARMED if get_wake_state() == WakeState.ARMED else WakeState.ARMED
+        set_wake_state(new)
+
+    def _on_comm_mode_change(self, mode) -> None:
+        """Observer fired from comm_mode.set_mode. Updates MODE button label."""
+        from albedo.audio.comm_mode import CommMode
+        text = "MODE: PTT" if mode == CommMode.PUSH_TO_TALK else "MODE: LATCH"
+        def _apply():
+            if self._mode_btn is not None:
+                try:
+                    self._mode_btn.configure(text=text)
+                except Exception:
+                    pass
+        self.after(0, _apply)
+
+    def _on_wake_state_change(self, state) -> None:
+        """
+        Observer fired from comm_mode.set_wake_state. Repaints the WAKE
+        button AND starts/stops the background wake-word listener thread.
+        """
+        from albedo.audio.comm_mode import WakeState
+        if state == WakeState.ARMED:
+            self._start_wake_listener()
+            label, color = "WAKE: ARMED", C_GREEN
+        else:
+            self._stop_wake_listener()
+            label, color = "WAKE: OFF", C_BORDER
+
+        def _apply():
+            if self._wake_btn is not None:
+                try:
+                    self._wake_btn.configure(text=label, fg_color=color)
+                except Exception:
+                    pass
+        self.after(0, _apply)
+
+    def _start_wake_listener(self) -> None:
+        """Spin up the background wake-word listener if not already running."""
+        if self._wake_stop_event is not None:
+            return  # already armed
+
+        # Lazy-create the shared audio stream — same lifecycle as _run_voice
+        if self._audio_stream is None:
+            try:
+                from albedo.audio.capture import AudioStream
+                in_dev = self._settings.get("audio_input_device") \
+                         if hasattr(self, "_settings") else None
+                self._audio_stream = AudioStream(device=in_dev)
+                self._audio_stream.start()
+            except Exception as exc:
+                print(f"[gui] wake listener — audio stream init failed: {exc}")
+                return
+
+        try:
+            from albedo.audio import wakeword
+            self._wake_stop_event = wakeword.start_background_listener(
+                self._audio_stream, callback=self._on_wake_triggered)
+        except Exception as exc:
+            print(f"[gui] wake listener start failed: {exc}")
+            self._wake_stop_event = None
+
+    def _stop_wake_listener(self) -> None:
+        """Tear down the background wake-word listener."""
+        if self._wake_stop_event is None:
+            return
+        try:
+            self._wake_stop_event.set()
+        except Exception:
+            pass
+        self._wake_stop_event = None
+
+    def _on_wake_triggered(self) -> None:
+        """
+        Callback from the wake-word listener thread. Marshal to the UI
+        thread and start a recording cycle exactly as if the user clicked
+        MIC in Latch mode — the VAD silence-detector ends the recording
+        automatically when the user stops speaking.
+        """
+        def _fire():
+            if self._state != "standby":
+                return  # already busy — ignore the wake hit
+            self._voice_stop.clear()
+            self._set_state("listening")
+            threading.Thread(target=self._run_voice, daemon=True).start()
+        self.after(0, _fire)
 
     def _run_voice(self) -> None:
         """
@@ -2382,6 +2553,18 @@ class AlbedoGUI(ctk.CTk):
 
         sys.stdout = self._stdout_orig
         sys.stderr = self._stderr_orig
+
+        # Phase 4 N+3: tear down the wake-word listener before releasing the
+        # audio stream so its daemon thread isn't reading from a stopped device.
+        try:
+            self._stop_wake_listener()
+        except Exception:
+            pass
+        try:
+            from albedo.audio import comm_mode as _cm
+            _cm.clear_observers()
+        except Exception:
+            pass
 
         # Stop TTS playback first so the audio thread isn't holding the device.
         try:

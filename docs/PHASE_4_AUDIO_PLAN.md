@@ -8,10 +8,16 @@ remaining Phase 4 work so the next session can resume cleanly.
 | Sub-task | Status |
 |---|---|
 | Phase 6 — `albedo/resource_policy.py` | ✅ shipped, 16 tests |
-| Kokoro TTS loader | not started |
-| Deepgram WebSocket STT | not started |
-| distil-whisper fallback (lazy CUDA) | not started |
-| Wake-word toggle UI panel | not started |
+| Kokoro TTS loader (N+1) | ✅ shipped, 13 tests |
+| Deepgram REST STT (N+2) | ✅ shipped, 10 tests |
+| distil-whisper fallback, lazy CUDA (N+2) | ✅ shipped, 10 tests |
+| STT router with failover audit (N+2) | ✅ shipped, 8 tests |
+| Wake-word toggle UI panel + PTT (N+3) | ✅ shipped, 14 tests |
+
+**Phase 4 complete.** All audio sub-tasks have shipped to the
+`phase-2-cyberdeck` branch. The remaining cyberdeck work is **Phase 2 —
+Eel HTML/CSS/JS frontend**, which is independent and can be its own
+dedicated multi-session project.
 
 The resource policy is the **contract** every audio loader must consume.
 The pre-existing `albedo/audio/` modules (stt.py = Vosk, tts.py = Piper)
