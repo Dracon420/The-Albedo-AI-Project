@@ -715,6 +715,9 @@ class AlbedoGUI(ctk.CTk):
         self._tts_override: str | None = None  # spoken prose override (e.g. audit)
         # Hardware labels — detected once at boot for the telemetry HUD.
         # Initialise with placeholders; background thread fills them in.
+        # Shared telemetry snapshot — populated by _hud_poll_loop, read by
+        # anything that needs CPU/GPU/disk/network without polling itself.
+        self._last_telemetry: dict = {}
         self._hw_cpu_label = "CPU"
         self._hw_gpu_label = "SYS GPU"
         threading.Thread(target=self._detect_hw_labels, daemon=True).start()
@@ -817,21 +820,26 @@ class AlbedoGUI(ctk.CTk):
         threading.Thread(target=self._hud_poll_loop, daemon=True).start()
 
     def _hud_poll_loop(self) -> None:
-        """Background daemon: collects hardware stats every 2 s, updates dials via after()."""
+        """Background daemon: collects hardware stats every 2 s, updates dials via after().
+
+        Backed by albedo.telemetry.get_full_telemetry() — one call returns
+        CPU/RAM/GPU/disk/network. Throughput numbers are delta-based; we
+        also stash the latest full snapshot on self._last_telemetry so
+        anything else in the UI (logs panel, future Eel rings) can read
+        the same shared sample without polling separately.
+        """
         import time
-        import psutil
-        from system_stats import get_gpu_load
+        from albedo.telemetry import get_full_telemetry
         while not self._closing:
             try:
-                cpu  = psutil.cpu_percent() / 100.0
-                ram  = psutil.virtual_memory().percent / 100.0
-                disk = psutil.disk_usage("C:").percent / 100.0
+                t = get_full_telemetry()
+                cpu  = t["cpu"]["percent"]    / 100.0
+                ram  = t["ram"]["percent"]    / 100.0
+                disk = t["disk"]["percent_used_c"] / 100.0
+                gpu  = t["gpu"]["load_percent"] / 100.0
+                self._last_telemetry = t
             except Exception:
-                cpu = ram = disk = 0.0
-            try:
-                gpu = get_gpu_load()
-            except Exception:
-                gpu = 0.0
+                cpu = ram = disk = gpu = 0.0
 
             def _apply(c=cpu, r=ram, d=disk, g=gpu) -> None:
                 if self._closing:
