@@ -144,22 +144,42 @@ def _get_model() -> "Model":
 
 
 def prewarm() -> None:
-    """Load the Vosk model now so the first transcription is instant."""
-    _get_model()
+    """
+    Load the active STT engine so the first transcribe() call is fast.
+
+    Routes by AUDIO_STT env var — same dispatch as transcribe(). For Vosk
+    this loads the Kaldi model; for Deepgram it does nothing (cloud is
+    stateless); for whisper-direct it loads the WhisperModel.
+    """
+    engine = _active_stt_engine()
+    if engine == "vosk":
+        _get_model()
+    elif engine == "whisper":
+        from albedo.audio import stt_whisper
+        stt_whisper.prewarm()
+    # deepgram / router need no prewarm — REST cloud calls are stateless.
+    # whisper prewarm under the router happens lazily on first failover.
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# Engine dispatcher (Phase 4 N+2)
+#
+# AUDIO_STT controls which engine the public transcribe() routes to.
+# Default "vosk" preserves v2.0.2 behaviour exactly — no v2.x install
+# is affected until the user opts in.
+#
+#   AUDIO_STT=vosk     -> _transcribe_vosk() — the original code below
+#   AUDIO_STT=deepgram -> stt_router.transcribe() — Deepgram with whisper fallback
+#   AUDIO_STT=whisper  -> stt_whisper.transcribe() — offline-only, skip cloud
 # ---------------------------------------------------------------------------
 
-def transcribe(audio: np.ndarray) -> str:
-    """
-    Transcribe a numpy array (16 kHz mono) to text.
+def _active_stt_engine() -> str:
+    """Read AUDIO_STT at call time so .env edits take effect on next call."""
+    return (os.environ.get("AUDIO_STT", "vosk") or "vosk").strip().lower()
 
-    Accepts float32 in [-1, 1] or int16 directly.
-    Returns an empty string if the audio is too short, silent, or if
-    Vosk is unavailable.
-    """
+
+def _transcribe_vosk(audio: np.ndarray) -> str:
+    """The original Vosk-based transcribe(). Preserved verbatim under the dispatcher."""
     if not _VOSK_AVAILABLE:
         return ""
     if audio is None or len(audio) < AUDIO_SAMPLE_RATE * 0.3:
@@ -175,3 +195,34 @@ def transcribe(audio: np.ndarray) -> str:
 
     result = json.loads(recognizer.FinalResult())
     return result.get("text", "").strip()
+
+
+# ---------------------------------------------------------------------------
+# Public API — dispatcher routes to the engine selected by AUDIO_STT
+# ---------------------------------------------------------------------------
+
+def transcribe(audio: np.ndarray) -> str:
+    """
+    Transcribe a numpy audio buffer to text.
+
+    Engine selection follows AUDIO_STT (read at every call so .env edits
+    apply on the next request without a restart):
+
+      vosk     -> _transcribe_vosk() (the original v2.x path)
+      deepgram -> stt_router.transcribe() (Deepgram -> whisper failover)
+      whisper  -> stt_whisper.transcribe() (offline-only)
+
+    Returns the transcript or an empty string. Never raises.
+    """
+    engine = _active_stt_engine()
+
+    if engine == "deepgram":
+        from albedo.audio import stt_router
+        return stt_router.transcribe(audio, sample_rate=AUDIO_SAMPLE_RATE)
+
+    if engine == "whisper":
+        from albedo.audio import stt_whisper
+        return stt_whisper.transcribe(audio, sample_rate=AUDIO_SAMPLE_RATE)
+
+    # Default — and explicit "vosk" — uses the original code path
+    return _transcribe_vosk(audio)

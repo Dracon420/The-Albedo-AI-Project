@@ -241,6 +241,15 @@ def _write_env(
         "KOKORO_VOICES_PATH":   str(ROOT.resolve() / "voices" / "voices-v1.0.bin"),
         "KOKORO_VOICE":         "af_sky",
         "KOKORO_SPEED":         "1.0",
+        # Phase 4 N+2: STT engine selector. Vosk stays default for v2.x
+        # backward compatibility. Users opt into Deepgram (cloud, with
+        # whisper failover) or whisper (offline-only) by editing .env.
+        # DEEPGRAM_API_KEY is intentionally NOT pre-filled — the dispatcher
+        # falls back to Vosk silently when the key is absent.
+        "AUDIO_STT":            "vosk",
+        "DEEPGRAM_MODEL":       "nova-2",
+        "DEEPGRAM_LANGUAGE":    "en",
+        "DEEPGRAM_TIMEOUT":     "10",
     }
     def _env_format(val: str) -> str:
         # python-dotenv interprets \v \n \t etc inside DOUBLE quotes —

@@ -20,6 +20,13 @@ scipy>=1.13.0
 # downloaded by setup_utility.py from github.com/thewh1teagle/kokoro-onnx/releases
 kokoro-onnx>=0.5.0
 
+# STT engines (Phase 4 N+2 — opt-in via AUDIO_STT=deepgram|whisper; Vosk remains default)
+# faster-whisper provides the distil-small.en offline fallback. Already listed
+# under the install set above (not re-pinned here to avoid version drift).
+faster-whisper>=1.0.0
+# Deepgram SDK is the cloud primary; only consulted when DEEPGRAM_API_KEY is set.
+deepgram-sdk>=3.7.0
+
 # FastAPI server (Tailscale bridge for mobile client)
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0
