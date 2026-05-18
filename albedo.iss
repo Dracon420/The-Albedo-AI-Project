@@ -14,7 +14,7 @@
 ; ── Build metadata ─────────────────────────────────────────────────────────
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "2.0.2"
+#define AppVersion   "3.0.0"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -42,7 +42,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup
+OutputBaseFilename=Albedo-Setup-3.0.0-alpha
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
 
