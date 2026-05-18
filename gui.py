@@ -2401,6 +2401,13 @@ class AlbedoGUI(ctk.CTk):
 # ── Entry point ────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # Install the global crash recorder before constructing the UI so any
+    # exception during init lands in logs/albedo_crash_report.txt rather
+    # than vanishing with the window.
+    from albedo import black_box, hardware_profile
+    black_box.install()
+    hardware_profile.get_hardware()   # warm/build the cache on first boot
+
     app = AlbedoGUI()
     app.mainloop()
 

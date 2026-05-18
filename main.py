@@ -11,6 +11,17 @@ Usage:
 import argparse
 import sys
 
+# Install crash hooks FIRST — before any other import can fail.
+# Any unhandled exception (main thread or worker) is dumped to
+# logs/albedo_crash_report.txt with full traceback and system snapshot.
+from albedo import black_box
+black_box.install()
+
+# Prime the hardware profile cache on first boot. Subsequent calls hit the
+# JSON cache so we never re-probe WMI/nvidia-smi on every launch.
+from albedo import hardware_profile
+hardware_profile.get_hardware()
+
 
 def cmd_index():
     from memory import index_obsidian_vault

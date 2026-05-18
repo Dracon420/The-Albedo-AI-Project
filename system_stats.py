@@ -61,7 +61,20 @@ def get_cpu_name() -> str:
     """
     Return a short CPU model label for the telemetry HUD.
     Never raises — falls back through strategies until something works.
+
+    Cache-first: reads from hardware_config.json if available (instant), so
+    we never re-probe WMI on every GUI refresh. Live probing is preserved
+    as the fallback path when the cache is absent.
     """
+    # Strategy 0: cached hardware profile written on first boot
+    try:
+        from albedo.hardware_profile import cpu_short
+        cached = cpu_short()
+        if cached and cached != "CPU":
+            return cached
+    except Exception:
+        pass
+
     # Strategy 1: PowerShell Get-WmiObject — works on Windows 11 where
     # the deprecated wmic.exe may not be on PATH.
     try:
@@ -134,8 +147,18 @@ def _nvml_query(fields: str) -> list[str] | None:
 def get_gpu_name() -> str:
     """
     Return a short GPU model label for the telemetry HUD.
-    Uses nvidia-smi (no subprocess window); falls back to "SYS GPU".
+    Cache-first (hardware_config.json), then live nvidia-smi probe,
+    then "SYS GPU" fallback. Never raises.
     """
+    # Strategy 0: cached hardware profile written on first boot
+    try:
+        from albedo.hardware_profile import gpu_short
+        cached = gpu_short()
+        if cached and cached != "SYS GPU":
+            return cached
+    except Exception:
+        pass
+
     vals = _nvml_query("name")
     if vals:
         name = vals[0]
