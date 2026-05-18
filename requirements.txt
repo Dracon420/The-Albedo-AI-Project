@@ -15,6 +15,11 @@ soundfile>=0.12.1
 numpy>=1.26.0
 scipy>=1.13.0
 
+# Kokoro TTS (Phase 4 — opt-in via AUDIO_TTS=kokoro; Piper remains the default)
+# Model files (kokoro-v1.0.onnx + voices-v1.0.bin, ~340 MB total) are
+# downloaded by setup_utility.py from github.com/thewh1teagle/kokoro-onnx/releases
+kokoro-onnx>=0.5.0
+
 # FastAPI server (Tailscale bridge for mobile client)
 fastapi>=0.111.0
 uvicorn[standard]>=0.30.0

@@ -659,6 +659,7 @@ class InstallPage(Page):
             self._step_playwright()
             self._step_env(dirs)
             self._step_download_voices()
+            self._step_download_kokoro()
             self._step_vosk_model()
             self._step_ollama()
             self._push("", "info", 1.0)
@@ -754,6 +755,56 @@ class InstallPage(Page):
                        "info")
         else:
             self._push("  Voice models ready.", "ok", 0.83)
+
+    def _step_download_kokoro(self) -> None:
+        """
+        Download the Kokoro TTS model + voices files (~340 MB total) from
+        the kokoro-onnx GitHub release, into <project_root>/voices/.
+
+        Skipped silently if both files already exist. Failures are
+        non-fatal — the dispatcher falls back to Piper when Kokoro
+        files are missing, so the install still completes.
+        """
+        target_dir = ROOT / "voices"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        files = [
+            ("kokoro-v1.0.onnx",
+             "https://github.com/thewh1teagle/kokoro-onnx/releases/"
+             "download/model-files-v1.0/kokoro-v1.0.onnx",
+             311 * 1024 * 1024),       # rough expected size for progress message
+            ("voices-v1.0.bin",
+             "https://github.com/thewh1teagle/kokoro-onnx/releases/"
+             "download/model-files-v1.0/voices-v1.0.bin",
+             27 * 1024 * 1024),
+        ]
+        all_present = all((target_dir / name).exists() for name, _, _ in files)
+        if all_present:
+            self._push("  Kokoro model files already present — skipping.", "ok", 0.835)
+            return
+
+        self._push("Downloading Kokoro TTS model (~340 MB, one-time)...",
+                   "info", 0.832)
+        for name, url, _ in files:
+            dest = target_dir / name
+            if dest.exists():
+                self._push(f"  {name} already present — skipping.", "info")
+                continue
+            self._push(f"  Fetching {name}...", "info")
+            try:
+                urllib.request.urlretrieve(url, dest)
+                self._push(f"  {name} downloaded ({dest.stat().st_size // (1024*1024)} MB).",
+                           "ok")
+            except Exception as exc:
+                self._push(
+                    f"  {name} download failed (non-fatal): {exc}.  "
+                    "Kokoro will be unavailable until you fetch it manually from "
+                    "github.com/thewh1teagle/kokoro-onnx/releases.",
+                    "info")
+                # Remove partial file so a retry doesn't see a stale 0-byte dest.
+                try:
+                    dest.unlink()
+                except OSError:
+                    pass
 
     def _step_vosk_model(self) -> None:
         """
