@@ -21,8 +21,9 @@
   --c-red:          #ff4868;
   --c-purple:       #b16bff;
 
-  /* Sizing */
-  --grid-cols:      280px 1fr 280px;
+  /* Sizing — wings are wide enough for two 170px medium gauges
+     side-by-side plus padding. Centre takes whatever is left. */
+  --grid-cols:      380px 1fr 380px;
   --topbar-h:       54px;
   --drawer-w:       380px;
 
@@ -145,12 +146,20 @@ body::before {
   padding: 14px;
 }
 
+/* ============================================================
+   Wing layout — triangular gauge cluster
+
+   Each wing is a relatively-positioned container. The apex gauge
+   (Network / Disk I/O) is absolutely positioned at the top centre
+   so it floats OFFSET ABOVE the pair of base gauges below it,
+   forming an inverted-V "winged triangle" silhouette.
+   ============================================================ */
 .wing {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-  padding: 18px 10px;
+  padding: 92px 14px 24px;      /* extra top padding leaves room for the apex */
   background: var(--c-bg-panel);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -158,8 +167,26 @@ body::before {
   border-radius: 10px;
   box-shadow: var(--shadow-glow);
 }
-.wing__apex { display: flex; justify-content: center; width: 100%; }
-.wing__main { display: flex; flex-direction: column; gap: 20px; align-items: center; flex: 1; }
+
+/* Apex dial floats up out of the wing's top edge so it sits
+   physically ABOVE the pair of base gauges — that's the "offset"
+   the directive calls for. */
+.wing__apex {
+  position: absolute;
+  top: -22px;                     /* protrudes above the wing's top edge */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
+/* The base row: two medium gauges side-by-side. */
+.wing__base {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: center;
+  width: 100%;
+}
 
 /* ============================================================
    Centre column: chat + input

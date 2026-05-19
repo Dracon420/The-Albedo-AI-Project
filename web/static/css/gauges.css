@@ -14,8 +14,9 @@
   filter: drop-shadow(0 0 6px rgba(0, 245, 255, 0.18));
 }
 
-.gauge--large { width: 200px; height: 200px; }
-.gauge--small { width: 140px; height: 140px; }
+.gauge--large  { width: 200px; height: 200px; }
+.gauge--medium { width: 170px; height: 170px; }   /* base of the winged triangle */
+.gauge--small  { width: 130px; height: 130px; }   /* apex above the pair */
 
 /* Background track (unfilled portion of the ring) */
 .gauge__bg {
@@ -23,7 +24,8 @@
   stroke: rgba(0, 245, 255, 0.08);
   stroke-width: 10;
 }
-.gauge--small .gauge__bg { stroke-width: 7; }
+.gauge--medium .gauge__bg { stroke-width: 9; }
+.gauge--small  .gauge__bg { stroke-width: 7; }
 
 /* Foreground fill — JS varies the dash offset */
 .gauge__fill {
@@ -57,7 +59,8 @@
   font-size: 38px;
   fill: var(--c-text);
 }
-.gauge--small .gauge__value { font-size: 26px; }
+.gauge--medium .gauge__value { font-size: 34px; }
+.gauge--small  .gauge__value { font-size: 26px; }
 
 .gauge__unit {
   font-size: 11px;

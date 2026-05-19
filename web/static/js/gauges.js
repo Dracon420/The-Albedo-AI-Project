@@ -12,11 +12,17 @@
 //   small (r=48): 2 * π * 48 ≈ 301.59
 // ============================================================
 
-const GAUGE_CIRC = { large: 515.22, small: 301.59 };
+// Circumference (2 * π * r) for each gauge size. All three SVGs use r=82
+// (200 viewBox) or r=48 (120 viewBox); the medium dial is just the same
+// 200/82 ring rendered smaller, so its stroke-dasharray base is identical
+// to the large dial — only the rendered pixel size changes.
+const GAUGE_CIRC = { large: 515.22, medium: 515.22, small: 301.59 };
 
 const Gauges = (() => {
   function _ringSize(svg) {
-    return svg.classList.contains("gauge--small") ? "small" : "large";
+    if (svg.classList.contains("gauge--small"))  return "small";
+    if (svg.classList.contains("gauge--medium")) return "medium";
+    return "large";
   }
 
   /**
