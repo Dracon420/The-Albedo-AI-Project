@@ -11,6 +11,7 @@ build-installer:
   image: scottyhardy/docker-wine:latest
   script:
     - mkdir -p $OUTPUT_DIR
+    - apt-get update -qq && apt-get install -y -qq curl
     - echo "Downloading Inno Setup..."
     - curl -L -o /tmp/innosetup.exe "$INNO_SETUP_INSTALLER"
     - echo "Installing Inno Setup silently..."
