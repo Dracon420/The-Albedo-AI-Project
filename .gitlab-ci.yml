@@ -1,0 +1,44 @@
+stages:
+  - build
+  - release
+
+variables:
+  OUTPUT_DIR: "installer_output"
+  INNO_SETUP_VERSION: "6.2.2"
+
+build-installer:
+  stage: build
+  image: amake/innosetup:latest
+  script:
+    - mkdir -p $OUTPUT_DIR
+    - wine /opt/innosetup/ISCC.exe /O"$OUTPUT_DIR" albedo.iss
+    - echo "Build complete! Files in $OUTPUT_DIR:"
+    - ls -la $OUTPUT_DIR/
+  artifacts:
+    paths:
+      - $OUTPUT_DIR/*.exe
+    expire_in: 7 days
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+create-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: build-installer
+      artifacts: true
+  script:
+    - echo "Creating release for tag $CI_COMMIT_TAG"
+    - |
+      EXE_FILE=$(ls $OUTPUT_DIR/*.exe | head -1)
+      echo "Found installer: $EXE_FILE"
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    name: 'Albedo AI $CI_COMMIT_TAG'
+    description: 'Albedo AI installer release $CI_COMMIT_TAG'
+    assets:
+      links:
+        - name: 'Albedo-AI-Setup.exe'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/$OUTPUT_DIR/Albedo-AI-Setup.exe?job=build-installer'
+  rules:
+    - if: '$CI_COMMIT_TAG'
