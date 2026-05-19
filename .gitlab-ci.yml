@@ -11,7 +11,7 @@ build-installer:
   image: amake/innosetup:latest
   script:
     - mkdir -p $OUTPUT_DIR
-    - wine /opt/innosetup/ISCC.exe /O"$OUTPUT_DIR" albedo.iss
+    - ISCC /O$OUTPUT_DIR albedo.iss
     - echo "Build complete! Files in $OUTPUT_DIR:"
     - ls -la $OUTPUT_DIR/
   artifacts:
