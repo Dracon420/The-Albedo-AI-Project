@@ -2601,11 +2601,19 @@ def main() -> None:
     resource_policy.detect()          # CUDA/CPU map for ML components
     resource_policy.log_resource_map()
 
+    # IMPORTANT — load .env before any ALBEDO_UI / engine-dispatcher check.
+    # None of black_box/hardware_profile/resource_policy imports config.py,
+    # so without this line .env is still unread and the dispatcher checks
+    # os.environ which is empty, silently falling back to Tk regardless of
+    # what the user set in their .env.
+    from albedo import config        # noqa: F401  -- triggers load_dotenv()
+
     # Phase 2 (alpha): when ALBEDO_UI=eel in .env, launch the Eel UI
     # instead of the Tk GUI. Default remains Tk so v2.0.2 installs upgrade
     # with zero behaviour change.
     import os
     ui_choice = (os.environ.get("ALBEDO_UI", "tk") or "tk").strip().lower()
+    print(f"[gui] ALBEDO_UI resolved to: {ui_choice!r}")
     if ui_choice == "eel":
         try:
             from albedo.eel_app.app import run as run_eel, is_eel_available
