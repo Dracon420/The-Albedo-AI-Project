@@ -11,22 +11,27 @@
   /* Panels: was 0.62 / 0.78 — now far more see-through */
   --c-bg-panel:     rgba(6, 14, 22, 0.30);
   --c-bg-panel-2:   rgba(8, 18, 28, 0.42);
-  --c-border:       rgba(0, 245, 255, 0.30);
-  --c-border-bright:rgba(0, 245, 255, 0.7);
-  /* Text: pure neon. Primary is near-white with cyan cast, "dim" is
-     now a punchy neon cyan-grey (used to read as muted; user wants
-     EVERY text element to glow). */
-  --c-text:         #f0ffff;
-  --c-text-dim:     #5ee3ff;
-  /* Accents punched to true-neon */
-  --c-cyan:         #00ffff;
-  --c-cyan-dim:     #00b8c4;
+  --c-border:       rgba(208, 0, 255, 0.30);
+  --c-border-bright:rgba(208, 0, 255, 0.7);
+  /* Text: bright neon. Primary is near-white with magenta cast; "dim"
+     is now a punchy neon magenta-grey so every text element glows. */
+  --c-text:         #f8e8ff;
+  --c-text-dim:     #d68bff;
+  /* Accents — primary is bright neon PURPLE so it punches against the
+     cyan/blue tones in the mission-control background images. The
+     variable is still named --c-cyan throughout the codebase to avoid
+     a hundred-edit rename; its value is purple. */
+  --c-cyan:         #d000ff;       /* primary accent (vivid neon purple) */
+  --c-cyan-dim:     #7d00b5;       /* dim variant of the primary purple */
   --c-green:        #39ff14;
   --c-orange:       #ffae00;
   --c-red:          #ff2a6d;
-  --c-purple:       #c97bff;
-  /* Standard glow filters — reused on text-shadow + box-shadow */
-  --glow-cyan:      0 0 6px var(--c-cyan), 0 0 14px rgba(0, 255, 255, 0.45);
+  --c-purple:       #00ffff;       /* secondary accent (now cyan, used by
+                                       dream button + apex highlights so
+                                       it pops against the new purple) */
+  /* Standard glow filters — reused on text-shadow + box-shadow.
+     glow-cyan = purple now (matches --c-cyan), name kept for code reuse. */
+  --glow-cyan:      0 0 6px var(--c-cyan), 0 0 14px rgba(208, 0, 255, 0.55);
   --glow-green:     0 0 6px var(--c-green), 0 0 14px rgba(57, 255, 20, 0.45);
   --glow-orange:    0 0 6px var(--c-orange), 0 0 14px rgba(255, 174, 0, 0.45);
   --glow-red:       0 0 6px var(--c-red), 0 0 14px rgba(255, 42, 109, 0.5);
@@ -37,7 +42,7 @@
 
   /* Effects */
   --glass-blur:     18px;
-  --shadow-glow:    0 0 24px rgba(0, 245, 255, 0.15);
+  --shadow-glow:    0 0 24px rgba(208, 0, 255, 0.15);
   --shadow-deep:    0 8px 32px rgba(0, 0, 0, 0.55);
 }
 
@@ -53,7 +58,7 @@ html, body {
   font-size: 20px;             /* base — every UI font is +4 from prior pass */
   letter-spacing: 0.03em;
   /* Default neon glow on every text node so nothing reads as flat grey. */
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.35);
+  text-shadow: 0 0 6px rgba(208, 0, 255, 0.35);
 }
 
 body {
@@ -97,7 +102,7 @@ body::before {
 .topbar__title { display: flex; align-items: center; gap: 12px; }
 .topbar__brand { font-size: 26px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; text-shadow: var(--glow-cyan); }
 .topbar__sep   { font-size: 20px; color: var(--c-text-dim); }
-.topbar__sub   { font-size: 20px; color: var(--c-text); letter-spacing: 0.18em; text-shadow: 0 0 6px rgba(0, 255, 255, 0.35); }
+.topbar__sub   { font-size: 20px; color: var(--c-text); letter-spacing: 0.18em; text-shadow: 0 0 6px rgba(208, 0, 255, 0.35); }
 
 .drawer__toggle {
   background: var(--c-bg-panel);
@@ -133,7 +138,7 @@ body::before {
   font-weight: 700;
   letter-spacing: 0.14em;
   color: var(--c-text);
-  text-shadow: 0 0 7px rgba(0, 255, 255, 0.55);
+  text-shadow: 0 0 7px rgba(208, 0, 255, 0.55);
 }
 .swarm__dot {
   width: 12px; height: 12px;
@@ -236,7 +241,7 @@ body::before {
   color: var(--c-cyan);
   text-shadow:
     0 0 6px var(--c-cyan),
-    0 0 16px rgba(0, 255, 255, 0.55);
+    0 0 16px rgba(208, 0, 255, 0.55);
 }
 .dial__caption--top {
   font-size: 18px;
@@ -244,7 +249,7 @@ body::before {
   color: var(--c-cyan);
   text-shadow:
     0 0 6px var(--c-cyan),
-    0 0 14px rgba(0, 255, 255, 0.55);
+    0 0 14px rgba(208, 0, 255, 0.55);
 }
 
 /* HUD centre — Albedo orb + state badge stacked vertically.
@@ -296,8 +301,8 @@ body::before {
   border-radius: 50%;
   object-fit: cover;
   filter:
-    drop-shadow(0 0 24px rgba(0, 245, 255, 0.6))
-    drop-shadow(0 0 48px rgba(0, 245, 255, 0.3));
+    drop-shadow(0 0 24px rgba(208, 0, 255, 0.6))
+    drop-shadow(0 0 48px rgba(208, 0, 255, 0.3));
   z-index: 2;
 }
 .hero__ring {
@@ -317,7 +322,7 @@ body::before {
 .hero__ring--inner {
   inset: 14px;
   border-style: dashed;
-  border-color: rgba(0, 245, 255, 0.4);
+  border-color: rgba(208, 0, 255, 0.4);
   animation: orbSpin 14s linear infinite reverse;
 }
 @keyframes orbSpin {
@@ -334,11 +339,11 @@ body::before {
   border: 1px solid var(--c-cyan-dim);
   border-radius: 16px;
   color: var(--c-cyan);
-  background: rgba(0, 255, 255, 0.08);
+  background: rgba(208, 0, 255, 0.08);
   text-shadow: var(--glow-cyan);
 }
 .hero__state[data-state="STANDBY"]  { color: var(--c-orange); border-color: var(--c-orange); background: rgba(255, 154, 31, 0.07); }
-.hero__state[data-state="ACTIVE"]   { color: var(--c-cyan);   border-color: var(--c-cyan);   background: rgba(0, 245, 255, 0.1);  animation: statePulse 1.4s ease-in-out infinite; }
+.hero__state[data-state="ACTIVE"]   { color: var(--c-cyan);   border-color: var(--c-cyan);   background: rgba(208, 0, 255, 0.1);  animation: statePulse 1.4s ease-in-out infinite; }
 .hero__state[data-state="LISTENING"]{ color: var(--c-green);  border-color: var(--c-green);  background: rgba(46, 255, 122, 0.1); animation: statePulse 1.0s ease-in-out infinite; }
 .hero__state[data-state="ERROR"]    { color: var(--c-red);    border-color: var(--c-red);    background: rgba(255, 72, 104, 0.1); animation: statePulse 0.7s ease-in-out infinite; }
 @keyframes statePulse {
@@ -388,7 +393,7 @@ body::before {
   font-weight: 700;
   letter-spacing: 0.1em;
   border-radius: 4px;
-  background: rgba(0, 245, 255, 0.04);
+  background: rgba(208, 0, 255, 0.04);
   border: 1px solid transparent;
   white-space: nowrap;
 }
@@ -413,7 +418,7 @@ body::before {
 .link__name  {
   color: var(--c-text);
   font-weight: 700;
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.55);
+  text-shadow: 0 0 6px rgba(208, 0, 255, 0.55);
 }
 .link__label {
   color: var(--c-cyan);
@@ -438,7 +443,7 @@ body::before {
 .chat__line--system { color: var(--c-orange); text-shadow: var(--glow-orange);}
 .chat__line--error  { color: var(--c-red);    text-shadow: var(--glow-red);   }
 .chat__line code    {
-  background: rgba(0, 255, 255, 0.08);
+  background: rgba(208, 0, 255, 0.08);
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.9em;
@@ -485,10 +490,10 @@ body::before {
   border-radius: 6px;
   outline: none;
   transition: border-color 0.15s;
-  text-shadow: 0 0 6px rgba(0, 255, 255, 0.55);
+  text-shadow: 0 0 6px rgba(208, 0, 255, 0.55);
 }
-.cmd-row #queryInput:focus { border-color: var(--c-cyan); box-shadow: 0 0 12px rgba(0, 255, 255, 0.3); }
-.cmd-row #queryInput::placeholder { color: var(--c-cyan-dim); text-shadow: 0 0 4px rgba(0, 255, 255, 0.35); }
+.cmd-row #queryInput:focus { border-color: var(--c-cyan); box-shadow: 0 0 12px rgba(208, 0, 255, 0.3); }
+.cmd-row #queryInput::placeholder { color: var(--c-cyan-dim); text-shadow: 0 0 4px rgba(208, 0, 255, 0.35); }
 
 .cmd-btn {
   background: rgba(0, 60, 80, 0.35);

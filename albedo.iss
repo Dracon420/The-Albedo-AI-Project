@@ -14,7 +14,7 @@
 ; ── Build metadata ─────────────────────────────────────────────────────────
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.0.0"
+#define AppVersion   "3.0.1"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -42,7 +42,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.0.0-alpha
+OutputBaseFilename=Albedo-Setup-3.0.0-alpha2
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
 
@@ -106,7 +106,27 @@ Source: "CLAUDE.md";                DestDir: "{app}"; Flags: ignoreversion
 Source: "docs\*";               DestDir: "{app}\docs";              Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 ; ── Eel frontend (Phase 2 alpha — HTML/CSS/JS) ─────────────────────────────
+; recursesubdirs picks up every file under web/ — index.html, the CSS, all
+; the JS modules (gauges/telemetry/swarm/neural/drawer/settings/chat/app),
+; and the background PNGs under web/static/backgrounds/.
 Source: "web\*";                DestDir: "{app}\web";               Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; ── Phase 1-6 backend modules ─────────────────────────────────────────────
+; The Source: "albedo\*" rule near the top of this section already pulls in
+; every new module via recursesubdirs:
+;   albedo/black_box.py            (Phase 1 crash recorder)
+;   albedo/hardware_profile.py     (Phase 1 hw cache)
+;   albedo/telemetry.py            (Phase 3 live delta poller)
+;   albedo/safety_catch.py         (Phase 5 subprocess interceptor)
+;   albedo/webhook.py              (Phase 5 loopback uplink)
+;   albedo/resource_policy.py      (Phase 6 device assignment)
+;   albedo/audio/comm_mode.py      (Phase 4 N+3 mic/wake state)
+;   albedo/audio/stt_whisper.py    (Phase 4 N+2 offline STT)
+;   albedo/audio/stt_deepgram.py   (Phase 4 N+2 cloud STT)
+;   albedo/audio/stt_router.py     (Phase 4 N+2 STT failover)
+;   albedo/audio/tts_kokoro.py     (Phase 4 N+1 Kokoro TTS)
+;   albedo/eel_app/{app,bridge}.py (Phase 2 alpha UI launcher + JS bridge)
+; No explicit Source: lines needed for those — listed here as documentation.
 
 ; ── Background images ──────────────────────────────────────────────────────
 Source: "Albedo-mission-control-background-1.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist

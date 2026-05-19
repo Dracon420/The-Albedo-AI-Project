@@ -74,7 +74,7 @@
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+  text-shadow: 0 0 5px rgba(208, 0, 255, 0.5);
 }
 
 /* ============================================================
@@ -105,13 +105,13 @@
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   text-shadow: var(--glow-cyan);
 }
-.drawer__tab:hover    { color: var(--c-cyan); border-color: var(--c-cyan); box-shadow: 0 0 10px rgba(0,255,255,0.4); }
+.drawer__tab:hover    { color: var(--c-cyan); border-color: var(--c-cyan); box-shadow: 0 0 10px rgba(208, 0, 255,0.4); }
 .drawer__tab.is-active {
   background: var(--c-cyan);
   color: #000;
   border-color: var(--c-cyan);
   text-shadow: none;
-  box-shadow: 0 0 12px rgba(0,255,255,0.5);
+  box-shadow: 0 0 12px rgba(208, 0, 255,0.5);
 }
 
 .drawer__pane                 { display: none; }
@@ -182,7 +182,7 @@
   background: var(--c-cyan);
   color: #000;
   text-shadow: none;
-  box-shadow: 0 0 14px rgba(0, 255, 255, 0.55);
+  box-shadow: 0 0 14px rgba(208, 0, 255, 0.55);
 }
 .drawer__action--accent {
   border-color: var(--c-purple);
