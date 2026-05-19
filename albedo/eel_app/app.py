@@ -95,7 +95,7 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     try:
         eel.start(
             "index.html",
-            size=(1280, 900),
+            size=(1140, 900),
             port=actual_port,
             mode=(mode if mode is not None else "chrome"),
             block=True,
@@ -112,7 +112,7 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
         try:
             eel.start(
                 "index.html",
-                size=(1280, 900),
+                size=(1140, 900),
                 port=actual_port,
                 mode="default",
                 block=True,
