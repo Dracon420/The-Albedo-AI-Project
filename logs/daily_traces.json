@@ -1,1 +1,146 @@
-[]
+[
+  {
+    "timestamp": "2026-05-15T23:23:02.199463+00:00",
+    "query": "whats the weather in raymond wa",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-15T23:30:48.689689+00:00",
+    "query": "What's the weather in Raymond Washington?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-15T23:51:09.882185+00:00",
+    "query": "What's the weather in Raymond Washington?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T00:37:15.072751+00:00",
+    "query": "hello",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T00:37:38.892145+00:00",
+    "query": "whats the weather in raymond wa",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T00:58:00.761896+00:00",
+    "query": "what's the weather and raymond washington",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T01:22:54.565244+00:00",
+    "query": "what's the weather and raymond washington",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T01:44:17.750850+00:00",
+    "query": "what is the weather and raymond washington",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T14:12:16.434835+00:00",
+    "query": "whats the weather near me?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T14:29:23.487214+00:00",
+    "query": "whats the weather near me",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T14:46:13.596484+00:00",
+    "query": "what is the weather near me?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T15:23:46.551533+00:00",
+    "query": "whats the weather near me",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T15:26:06.300352+00:00",
+    "query": "what is the weather in raymond Washington",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T15:42:53.993294+00:00",
+    "query": "what is the weather near me",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T15:43:58.226648+00:00",
+    "query": "what is the weather for Raymond, Washington",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T15:58:57.590870+00:00",
+    "query": "whats the weather near me?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T15:59:31.267974+00:00",
+    "query": "whats the weather near me",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T16:36:58.563118+00:00",
+    "query": "What is the current weather in Raymond, Washington, United States? Reply in exactly one short sentence with the temperature and conditions.",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T22:04:36.734076+00:00",
+    "query": "how many stl files are on my computer?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T22:12:29.640440+00:00",
+    "query": "how many .stl files are on my computer",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T22:19:28.764290+00:00",
+    "query": "how many .stl files are on my computer?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T22:20:18.521362+00:00",
+    "query": "what is my computer hardware?",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-16T22:37:22.750391+00:00",
+    "query": "what is my computers hardware",
+    "route": "local",
+    "success": true
+  },
+  {
+    "timestamp": "2026-05-17T00:14:37.694205+00:00",
+    "query": "who are you?",
+    "route": "local",
+    "success": true
+  }
+]

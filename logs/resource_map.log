@@ -1,0 +1,8 @@
+# Albedo resource map  2026-05-18T17:52:34
+
+  wakeword        onnx      cpu                                   eager  -- OpenWakeWord persistent listener
+  tts_kokoro      onnx      cpu                                   eager  -- Kokoro TTS ONNX runtime
+  stt_whisper     torch     cpu (demoted: torch CPU-only build)   lazy  -- distil-whisper offline STT fallback
+  stt_deepgram    network   network                               eager  -- Deepgram cloud STT WebSocket
+  eel_server      python    cpu                                   eager  -- Eel desktop window asyncio loop
+  telemetry       python    cpu                                   eager  -- Live host telemetry delta calculator

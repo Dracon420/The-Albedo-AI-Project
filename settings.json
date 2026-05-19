@@ -1,5 +1,8 @@
 {
   "audio_input_device": 11,
   "audio_output_device": 4,
-  "vision_temperature": 0.2
+  "vision_temperature": 0.2,
+  "auto_update": "Every 24 hours",
+  "active_persona": "cortana",
+  "background": "Albedo 2"
 }
