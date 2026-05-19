@@ -40,7 +40,7 @@ html, body {
   overflow: hidden;
   color: var(--c-text);
   font-family: "Consolas", "Courier New", "Menlo", monospace;
-  font-size: 14px;
+  font-size: 16px;             /* base bumped 14 -> 16 for readability */
   letter-spacing: 0.03em;
 }
 
@@ -81,10 +81,10 @@ body::before {
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--c-border);
 }
-.topbar__title { display: flex; align-items: center; gap: 8px; }
-.topbar__brand { font-size: 18px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; }
-.topbar__sep   { color: var(--c-text-dim); }
-.topbar__sub   { color: var(--c-text); letter-spacing: 0.18em; }
+.topbar__title { display: flex; align-items: center; gap: 10px; }
+.topbar__brand { font-size: 22px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; }
+.topbar__sep   { font-size: 16px; color: var(--c-text-dim); }
+.topbar__sub   { font-size: 16px; color: var(--c-text); letter-spacing: 0.18em; }
 
 .drawer__toggle {
   background: var(--c-bg-panel);
@@ -111,17 +111,18 @@ body::before {
 .swarm__pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 10px;
+  padding: 8px 14px;
   background: var(--c-bg-panel);
   border: 1px solid var(--c-border);
   border-radius: 4px;
-  font-size: 11px;
+  font-size: 13px;
+  font-weight: 700;
   letter-spacing: 0.14em;
   color: var(--c-text-dim);
 }
 .swarm__dot {
-  width: 10px; height: 10px;
+  width: 12px; height: 12px;
   border-radius: 50%;
   background: var(--c-orange);
   box-shadow: 0 0 8px var(--c-orange);
@@ -146,7 +147,7 @@ body::before {
   z-index: 1;
   height: calc(100% - var(--topbar-h));
   display: grid;
-  grid-template-rows: minmax(440px, auto) auto 1fr;
+  grid-template-rows: minmax(540px, auto) auto 1fr;
   gap: 12px;
   padding: 14px;
   min-height: 0;
@@ -160,8 +161,8 @@ body::before {
   display: grid;
   grid-template-columns: 1fr auto 1fr;   /* wings stretch, centre auto-sized */
   align-items: center;
-  gap: 28px;
-  padding: 110px 32px 28px;              /* generous top room for the apex dials */
+  gap: 40px;                              /* more breathing room between cluster + orb */
+  padding: 150px 40px 40px;               /* top room for apex caption + apex dial */
   background: var(--c-bg-panel-2);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -172,38 +173,70 @@ body::before {
 }
 
 /* Each wing is a relative box; the small apex dial floats above
-   its pair of medium base dials to form an inverted-V silhouette. */
+   its pair of medium base dials to form an inverted-V silhouette.
+   Wings push to the OUTER edges of their grid columns so the
+   centre orb has breathing room rather than the triangles hugging it. */
 .hud__wing {
   position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
 }
-.hud__wing--left  { justify-self: end;   }  /* hug the centre orb */
-.hud__wing--right { justify-self: start; }
+.hud__wing--left  { justify-self: start; }  /* hug LEFT edge */
+.hud__wing--right { justify-self: end;   }  /* hug RIGHT edge */
 
+/* Apex wrapper (now a .dial div, holds caption + SVG). Floats above
+   the base pair. Vertical offset accounts for caption + dial height. */
 .wing__apex {
   position: absolute;
-  top: -78px;
+  top: -118px;                  /* caption + dial sit above the wing top */
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
 }
 .wing__base {
   display: flex;
-  gap: 14px;
+  gap: 18px;
   align-items: flex-start;
   justify-content: center;
 }
 
-/* HUD centre — Albedo orb + state badge stacked vertically. */
+/* Dial wrapper — flex column for SVG + outside caption */
+.dial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.dial--apex {
+  gap: 4px;
+}
+
+/* Captions OUTSIDE the SVG ring. NETWORK / DISK I/O sit ABOVE
+   their apex dials, CPU / RAM / GPU / SSD sit BELOW their base dials. */
+.dial__caption {
+  font-family: "Courier New", monospace;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: var(--c-cyan);
+  text-shadow: 0 0 8px rgba(0, 245, 255, 0.45);
+}
+.dial__caption--top {
+  font-size: 14px;             /* apex labels slightly smaller */
+  letter-spacing: 0.26em;
+  color: var(--c-cyan);
+}
+
+/* HUD centre — Albedo orb + state badge stacked vertically.
+   Padded out so the wings don't crowd it. */
 .hud__centre {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  padding: 0 12px;
+  gap: 14px;
+  padding: 0 40px;
 }
 
 /* ============================================================
@@ -225,24 +258,24 @@ body::before {
 }
 
 /* ============================================================
-   Albedo orb — centred in the HUD strip
+   Albedo orb — centred in the HUD strip, sized to anchor the cluster
    ============================================================ */
 .hero__orb {
   position: relative;
-  width: 124px;
-  height: 124px;
+  width: 200px;
+  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .hero__logo {
-  width: 92px;
-  height: 92px;
+  width: 160px;
+  height: 160px;
   border-radius: 50%;
   object-fit: cover;
   filter:
-    drop-shadow(0 0 18px rgba(0, 245, 255, 0.55))
-    drop-shadow(0 0 36px rgba(0, 245, 255, 0.25));
+    drop-shadow(0 0 24px rgba(0, 245, 255, 0.6))
+    drop-shadow(0 0 48px rgba(0, 245, 255, 0.3));
   z-index: 2;
 }
 .hero__ring {
@@ -271,13 +304,13 @@ body::before {
 }
 
 .hero__state {
-  margin-top: 2px;
-  padding: 3px 14px;
-  font-size: 12px;
+  margin-top: 4px;
+  padding: 5px 20px;
+  font-size: 15px;
   font-weight: 700;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.28em;
   border: 1px solid var(--c-cyan-dim);
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--c-cyan);
   background: rgba(0, 245, 255, 0.06);
 }
@@ -310,7 +343,7 @@ body::before {
 .links__header {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 13px;
   letter-spacing: 0.18em;
 }
 .links__title  { color: var(--c-cyan); font-weight: 700; }
@@ -321,24 +354,25 @@ body::before {
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: 6px 20px;
+  gap: 8px 24px;
 }
 .link {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  font-size: 11px;
+  gap: 10px;
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 700;
   letter-spacing: 0.1em;
-  border-radius: 3px;
+  border-radius: 4px;
   background: rgba(0, 245, 255, 0.04);
   border: 1px solid transparent;
   white-space: nowrap;
 }
 .link:hover { border-color: var(--c-border); }
 .link__dot {
-  width: 9px;
-  height: 9px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--c-text-dim);
   box-shadow: 0 0 4px transparent;
@@ -361,7 +395,7 @@ body::before {
   color: var(--c-text);
   text-align: right;
   font-family: "Courier New", monospace;
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.06em;
 }
 .chat {
@@ -369,11 +403,11 @@ body::before {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px 4px;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.55;
   color: var(--c-text);
 }
-.chat__line { margin-bottom: 6px; }
+.chat__line { margin-bottom: 8px; }
 .chat__line--user   { color: var(--c-green); }
 .chat__line--albedo { color: var(--c-cyan); }
 .chat__line--system { color: var(--c-orange); }
@@ -394,7 +428,7 @@ body::before {
 .cmd-header {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.14em;
   padding: 0 2px;
 }
@@ -415,10 +449,10 @@ body::before {
 .cmd-row #queryInput {
   flex: 1;
   min-width: 200px;
-  height: 42px;
-  padding: 0 12px;
+  height: 46px;
+  padding: 0 14px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 16px;
   color: var(--c-text);
   background: var(--c-bg);
   border: 1px solid var(--c-cyan-dim);
@@ -434,11 +468,11 @@ body::before {
   color: var(--c-text);
   border: 1px solid var(--c-cyan-dim);
   font-family: inherit;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.12em;
-  height: 42px;
-  padding: 0 14px;
+  height: 46px;
+  padding: 0 16px;
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
