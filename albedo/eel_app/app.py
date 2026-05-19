@@ -27,6 +27,42 @@ _ROOT    = Path(__file__).resolve().parent.parent.parent
 _WEB_DIR = _ROOT / "web"
 
 
+def _half_screen_size() -> tuple[int, int]:
+    """
+    Return (w, h) sized to occupy roughly the left or right half of the
+    primary display. Width is exactly half the screen; height is ~92%
+    of the screen so the window comfortably fits between taskbar and
+    title bar without going full-height edge-to-edge.
+
+    Falls back to a reasonable default (1140 x 900) if screen detection
+    fails for any reason.
+    """
+    # Try tkinter first — stdlib, cross-platform, no extra deps.
+    try:
+        import tkinter as _tk
+        root = _tk.Tk()
+        root.withdraw()
+        sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        root.destroy()
+        if sw > 0 and sh > 0:
+            return (max(900, sw // 2), max(700, int(sh * 0.92)))
+    except Exception:
+        pass
+
+    # Windows fallback via ctypes (in case tkinter is missing).
+    try:
+        import ctypes
+        u = ctypes.windll.user32
+        u.SetProcessDPIAware()
+        sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
+        if sw > 0 and sh > 0:
+            return (max(900, sw // 2), max(700, int(sh * 0.92)))
+    except Exception:
+        pass
+
+    return (1140, 900)
+
+
 def is_eel_available() -> bool:
     """True when the eel package is importable. Cheap; safe to call repeatedly."""
     try:
@@ -89,13 +125,16 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     from albedo.eel_app import bridge       # noqa: F401  — registers @eel.expose
 
     actual_port = _free_port(port)
+    win_size = _half_screen_size()
+    print(f"[eel_app] Window size: {win_size[0]} x {win_size[1]} "
+          f"(half-screen auto-sized)")
 
     # mode="chrome" gives app-mode windowing (no URL bar, no tabs).
     # Falls through to default browser if Chrome/Edge aren't on PATH.
     try:
         eel.start(
             "index.html",
-            size=(1140, 900),
+            size=win_size,
             port=actual_port,
             mode=(mode if mode is not None else "chrome"),
             block=True,
@@ -112,7 +151,7 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
         try:
             eel.start(
                 "index.html",
-                size=(1140, 900),
+                size=win_size,
                 port=actual_port,
                 mode="default",
                 block=True,

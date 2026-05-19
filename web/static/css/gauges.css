@@ -11,7 +11,9 @@
 
 .gauge {
   display: block;
-  filter: drop-shadow(0 0 6px rgba(0, 245, 255, 0.18));
+  filter:
+    drop-shadow(0 0 10px rgba(0, 255, 255, 0.35))
+    drop-shadow(0 0 20px rgba(0, 255, 255, 0.18));
 }
 
 .gauge--large  { width: 240px; height: 240px; }

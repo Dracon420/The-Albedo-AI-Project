@@ -6,20 +6,28 @@
    ============================================================ */
 
 :root {
-  /* Palette — Halo / mission-control inspired cyan + tactical orange */
+  /* Palette — bright neon, alpha lowered so background image punches through */
   --c-bg:           #050a0e;
-  --c-bg-panel:     rgba(8, 16, 22, 0.62);
-  --c-bg-panel-2:   rgba(10, 22, 30, 0.78);
-  --c-border:       rgba(0, 245, 255, 0.18);
-  --c-border-bright:rgba(0, 245, 255, 0.55);
-  --c-text:         #c7f5ff;
-  --c-text-dim:     #6c93a3;
-  --c-cyan:         #00f5ff;
-  --c-cyan-dim:     #0099ad;
-  --c-green:        #2eff7a;
-  --c-orange:       #ff9a1f;
-  --c-red:          #ff4868;
-  --c-purple:       #b16bff;
+  /* Panels: was 0.62 / 0.78 — now far more see-through */
+  --c-bg-panel:     rgba(6, 14, 22, 0.30);
+  --c-bg-panel-2:   rgba(8, 18, 28, 0.42);
+  --c-border:       rgba(0, 245, 255, 0.30);
+  --c-border-bright:rgba(0, 245, 255, 0.7);
+  /* Text: pure neon white-cyan for primary, brighter cyan-grey for dim */
+  --c-text:         #e6ffff;
+  --c-text-dim:     #9be6ff;
+  /* Accents punched to true-neon */
+  --c-cyan:         #00ffff;
+  --c-cyan-dim:     #00b8c4;
+  --c-green:        #39ff14;
+  --c-orange:       #ffae00;
+  --c-red:          #ff2a6d;
+  --c-purple:       #c97bff;
+  /* Standard glow filters — reused on text-shadow + box-shadow */
+  --glow-cyan:      0 0 6px var(--c-cyan), 0 0 14px rgba(0, 255, 255, 0.45);
+  --glow-green:     0 0 6px var(--c-green), 0 0 14px rgba(57, 255, 20, 0.45);
+  --glow-orange:    0 0 6px var(--c-orange), 0 0 14px rgba(255, 174, 0, 0.45);
+  --glow-red:       0 0 6px var(--c-red), 0 0 14px rgba(255, 42, 109, 0.5);
 
   /* Sizing — main column is full-width vertical stack */
   --topbar-h:       54px;
@@ -55,11 +63,12 @@ body[data-background="bg2"] { background-image: url("../backgrounds/albedo-missi
 body[data-background="bg3"] { background-image: url("../backgrounds/albedo-mission-control-background-3.png"); }
 body[data-background="bg4"] { background-image: url("../backgrounds/albedo-mission-control-background-4.png"); }
 
-/* Dark scrim over the background image so panels read clearly */
+/* Thin scrim over the background image — kept subtle so the artwork
+   reads through, panels carry their own backdrop blur for legibility. */
 body::before {
   content: "";
   position: fixed; inset: 0;
-  background: linear-gradient(180deg, rgba(2, 8, 12, 0.55), rgba(2, 8, 12, 0.72));
+  background: linear-gradient(180deg, rgba(2, 8, 12, 0.25), rgba(2, 8, 12, 0.40));
   pointer-events: none;
   z-index: 0;
 }
@@ -82,9 +91,9 @@ body::before {
   border-bottom: 1px solid var(--c-border);
 }
 .topbar__title { display: flex; align-items: center; gap: 12px; }
-.topbar__brand { font-size: 26px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; }
+.topbar__brand { font-size: 26px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; text-shadow: var(--glow-cyan); }
 .topbar__sep   { font-size: 20px; color: var(--c-text-dim); }
-.topbar__sub   { font-size: 20px; color: var(--c-text); letter-spacing: 0.18em; }
+.topbar__sub   { font-size: 20px; color: var(--c-text); letter-spacing: 0.18em; text-shadow: 0 0 6px rgba(0, 255, 255, 0.35); }
 
 .drawer__toggle {
   background: var(--c-bg-panel);
@@ -120,6 +129,7 @@ body::before {
   font-weight: 700;
   letter-spacing: 0.14em;
   color: var(--c-text-dim);
+  text-shadow: 0 0 6px rgba(155, 230, 255, 0.4);
 }
 .swarm__dot {
   width: 12px; height: 12px;
@@ -220,12 +230,17 @@ body::before {
   font-weight: 700;
   letter-spacing: 0.22em;
   color: var(--c-cyan);
-  text-shadow: 0 0 8px rgba(0, 245, 255, 0.45);
+  text-shadow:
+    0 0 6px var(--c-cyan),
+    0 0 16px rgba(0, 255, 255, 0.55);
 }
 .dial__caption--top {
-  font-size: 18px;             /* apex labels slightly smaller */
+  font-size: 18px;
   letter-spacing: 0.26em;
   color: var(--c-cyan);
+  text-shadow:
+    0 0 6px var(--c-cyan),
+    0 0 14px rgba(0, 255, 255, 0.55);
 }
 
 /* HUD centre — Albedo orb + state badge stacked vertically.
@@ -315,7 +330,8 @@ body::before {
   border: 1px solid var(--c-cyan-dim);
   border-radius: 16px;
   color: var(--c-cyan);
-  background: rgba(0, 245, 255, 0.06);
+  background: rgba(0, 255, 255, 0.08);
+  text-shadow: var(--glow-cyan);
 }
 .hero__state[data-state="STANDBY"]  { color: var(--c-orange); border-color: var(--c-orange); background: rgba(255, 154, 31, 0.07); }
 .hero__state[data-state="ACTIVE"]   { color: var(--c-cyan);   border-color: var(--c-cyan);   background: rgba(0, 245, 255, 0.1);  animation: statePulse 1.4s ease-in-out infinite; }
@@ -349,8 +365,8 @@ body::before {
   font-size: 17px;
   letter-spacing: 0.18em;
 }
-.links__title  { color: var(--c-cyan); font-weight: 700; }
-.links__status { color: var(--c-green); font-weight: 700; }
+.links__title  { color: var(--c-cyan);  font-weight: 700; text-shadow: var(--glow-cyan);  }
+.links__status { color: var(--c-green); font-weight: 700; text-shadow: var(--glow-green); }
 
 .links__strip {
   display: flex;
@@ -393,13 +409,15 @@ body::before {
 .link__name  {
   color: var(--c-text-dim);
   font-weight: 700;
+  text-shadow: 0 0 5px rgba(155, 230, 255, 0.4);
 }
 .link__label {
-  color: var(--c-text);
+  color: var(--c-cyan);
   text-align: right;
   font-family: "Courier New", monospace;
   font-size: 16px;
   letter-spacing: 0.06em;
+  text-shadow: var(--glow-cyan);
 }
 .chat {
   flex: 1;
@@ -411,16 +429,17 @@ body::before {
   color: var(--c-text);
 }
 .chat__line { margin-bottom: 8px; }
-.chat__line--user   { color: var(--c-green); }
-.chat__line--albedo { color: var(--c-cyan); }
-.chat__line--system { color: var(--c-orange); }
-.chat__line--error  { color: var(--c-red);  }
+.chat__line--user   { color: var(--c-green);  text-shadow: var(--glow-green); }
+.chat__line--albedo { color: var(--c-cyan);   text-shadow: var(--glow-cyan);  }
+.chat__line--system { color: var(--c-orange); text-shadow: var(--glow-orange);}
+.chat__line--error  { color: var(--c-red);    text-shadow: var(--glow-red);   }
 .chat__line code    {
-  background: var(--c-bg-panel);
+  background: rgba(0, 255, 255, 0.08);
   padding: 1px 5px;
   border-radius: 3px;
   font-size: 0.9em;
   color: var(--c-cyan);
+  text-shadow: var(--glow-cyan);
 }
 
 .chat::-webkit-scrollbar { width: 6px; }
@@ -435,8 +454,8 @@ body::before {
   letter-spacing: 0.14em;
   padding: 0 2px;
 }
-.cmd-header__left  { color: var(--c-cyan); font-weight: 700; }
-.cmd-header__right { color: var(--c-green); font-weight: 700; }
+.cmd-header__left  { color: var(--c-cyan);  font-weight: 700; text-shadow: var(--glow-cyan);  }
+.cmd-header__right { color: var(--c-green); font-weight: 700; text-shadow: var(--glow-green); }
 
 /* Input row */
 .cmd-row {
