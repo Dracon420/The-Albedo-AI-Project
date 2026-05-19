@@ -9,6 +9,7 @@
     Chat.init();
     Telemetry.start();
     Swarm.start();
+    Neural.init();
 
     // Friendly banner once we know Eel is alive.
     eel.get_version()().then((r) => {

@@ -71,8 +71,40 @@
       </div>
     </aside>
 
-    <!-- CENTRE  —  chat feed + input -->
+    <!-- CENTRE  —  hero (logo + state), neural links HUD, chat, input -->
     <section class="centre">
+      <!-- Hero: Albedo logo + brand + state indicator -->
+      <div class="hero">
+        <div class="hero__orb">
+          <img src="static/backgrounds/albedo_logo.png" alt="Albedo" class="hero__logo" />
+          <div class="hero__ring hero__ring--outer"></div>
+          <div class="hero__ring hero__ring--inner"></div>
+        </div>
+        <div class="hero__brand">
+          <span class="hero__brand-name">ALBEDO</span>
+          <span class="hero__brand-sep">//</span>
+          <span class="hero__brand-sub">MISSION CONTROL</span>
+        </div>
+        <div class="hero__state" id="appState" data-state="STANDBY">STANDBY</div>
+      </div>
+
+      <!-- Neural-links status grid (polled from eel.get_neural_links) -->
+      <div class="links">
+        <div class="links__header">
+          <span class="links__title">[ NEURAL LINKS ]</span>
+          <span class="links__status" id="linksStatus">// SYNCED</span>
+        </div>
+        <div class="links__grid" id="linksGrid">
+          <!-- Cells injected by neural.js. Each cell:
+               <div class="link" data-link="GEMINI">
+                 <span class="link__dot" data-status="ready"></span>
+                 <span class="link__name">GEMINI</span>
+                 <span class="link__label">READY</span>
+               </div>
+          -->
+        </div>
+      </div>
+
       <div class="chat" id="chat">
         <div class="chat__line chat__line--system">[SYS] Albedo Mission Control online.</div>
         <div class="chat__line chat__line--system">[SYS] Type a query and press SEND. Prefix with <code>web:</code> to force a live web search.</div>
@@ -165,6 +197,7 @@
   <script src="static/js/gauges.js"></script>
   <script src="static/js/telemetry.js"></script>
   <script src="static/js/swarm.js"></script>
+  <script src="static/js/neural.js"></script>
   <script src="static/js/drawer.js"></script>
   <script src="static/js/chat.js"></script>
   <script src="static/js/app.js"></script>

@@ -189,20 +189,168 @@ body::before {
 }
 
 /* ============================================================
-   Centre column: chat + input
+   Centre column: hero (logo + state) + neural links + chat + input
    ============================================================ */
 .centre {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
   background: var(--c-bg-panel-2);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--c-border);
   border-radius: 10px;
   box-shadow: var(--shadow-glow);
-  padding: 16px;
+  padding: 18px;
   min-height: 0;
+}
+
+/* ─── Hero block ─────────────────────────────────────────────── */
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0 2px;
+}
+
+/* Albedo logo with two concentric pulsing rings around it */
+.hero__orb {
+  position: relative;
+  width: 132px;
+  height: 132px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.hero__logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  filter:
+    drop-shadow(0 0 18px rgba(0, 245, 255, 0.55))
+    drop-shadow(0 0 36px rgba(0, 245, 255, 0.25));
+  z-index: 2;
+}
+.hero__ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid var(--c-cyan);
+  opacity: 0.55;
+  pointer-events: none;
+}
+.hero__ring--outer {
+  inset: 0;
+  border-width: 1px;
+  animation: orbSpin 22s linear infinite;
+  border-color: var(--c-cyan-dim);
+  border-top-color: var(--c-cyan);
+}
+.hero__ring--inner {
+  inset: 14px;
+  border-style: dashed;
+  border-color: rgba(0, 245, 255, 0.4);
+  animation: orbSpin 14s linear infinite reverse;
+}
+@keyframes orbSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.hero__brand {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  font-size: 14px;
+}
+.hero__brand-name { color: var(--c-cyan); }
+.hero__brand-sep  { color: var(--c-text-dim); }
+.hero__brand-sub  { color: var(--c-text); }
+
+.hero__state {
+  margin-top: 2px;
+  padding: 3px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  border: 1px solid var(--c-cyan-dim);
+  border-radius: 12px;
+  color: var(--c-cyan);
+  background: rgba(0, 245, 255, 0.06);
+}
+.hero__state[data-state="STANDBY"]  { color: var(--c-orange); border-color: var(--c-orange); background: rgba(255, 154, 31, 0.07); }
+.hero__state[data-state="ACTIVE"]   { color: var(--c-cyan);   border-color: var(--c-cyan);   background: rgba(0, 245, 255, 0.1);  animation: statePulse 1.4s ease-in-out infinite; }
+.hero__state[data-state="LISTENING"]{ color: var(--c-green);  border-color: var(--c-green);  background: rgba(46, 255, 122, 0.1); animation: statePulse 1.0s ease-in-out infinite; }
+.hero__state[data-state="ERROR"]    { color: var(--c-red);    border-color: var(--c-red);    background: rgba(255, 72, 104, 0.1); animation: statePulse 0.7s ease-in-out infinite; }
+@keyframes statePulse {
+  0%,100% { box-shadow: 0 0 0 0 transparent; }
+  50%     { box-shadow: 0 0 14px currentColor; }
+}
+
+/* ─── Neural-links grid ──────────────────────────────────────── */
+.links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px 10px;
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+}
+.links__header {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+}
+.links__title  { color: var(--c-cyan); font-weight: 700; }
+.links__status { color: var(--c-green); font-weight: 700; }
+
+.links__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 12px;
+}
+.link {
+  display: grid;
+  grid-template-columns: 12px 80px 1fr;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  border-radius: 3px;
+}
+.link__dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--c-text-dim);
+  box-shadow: 0 0 4px transparent;
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.link__dot[data-status="ready"]   { background: var(--c-cyan);   box-shadow: 0 0 8px var(--c-cyan);   }
+.link__dot[data-status="active"]  { background: var(--c-green);  box-shadow: 0 0 10px var(--c-green); animation: dotPulse 1.0s ease-in-out infinite; }
+.link__dot[data-status="standby"] { background: var(--c-orange); box-shadow: 0 0 8px var(--c-orange); }
+.link__dot[data-status="off"]     { background: #2a3a44;         box-shadow: none; }
+.link__dot[data-status="error"]   { background: var(--c-red);    box-shadow: 0 0 10px var(--c-red); animation: dotPulse 0.6s ease-in-out infinite; }
+@keyframes dotPulse {
+  0%,100% { opacity: 1;   }
+  50%     { opacity: 0.45;}
+}
+.link__name  {
+  color: var(--c-text-dim);
+  font-weight: 700;
+}
+.link__label {
+  color: var(--c-text);
+  text-align: right;
+  font-family: "Courier New", monospace;
+  font-size: 10px;
+  letter-spacing: 0.06em;
 }
 .chat {
   flex: 1;

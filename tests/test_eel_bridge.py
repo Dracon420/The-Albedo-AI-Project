@@ -11,6 +11,7 @@ Run:
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -219,6 +220,99 @@ def test_pop_webhook_updates_returns_drained_list():
         r = bridge.pop_webhook_updates()
     assert r["ok"] is True
     assert r["updates"] == fake_updates
+
+
+# ---------------------------------------------------------------------------
+# Neural links + app state
+# ---------------------------------------------------------------------------
+
+def test_get_neural_links_returns_all_required_subsystems():
+    r = bridge.get_neural_links()
+    assert r["ok"] is True
+    for name in ("GEMINI", "GROQ", "TOGETHER", "OLLAMA",
+                 "VEC_DB", "STT", "TTS", "WAKE", "WEBHOOK"):
+        assert name in r["data"], f"missing neural link: {name}"
+        entry = r["data"][name]
+        assert "status" in entry and "label" in entry
+        assert entry["status"] in ("ready", "active", "standby", "off", "error")
+
+
+def test_neural_links_reflect_env_configuration():
+    """GEMINI/GROQ/TOGETHER report 'ready' when their API key is set, 'off' otherwise."""
+    saved = {k: os.environ.get(k) for k in ("GEMINI_API_KEY", "GROQ_API_KEY", "TOGETHER_API_KEY")}
+    try:
+        os.environ["GEMINI_API_KEY"]   = "fake-key"
+        os.environ.pop("GROQ_API_KEY",     None)
+        os.environ.pop("TOGETHER_API_KEY", None)
+        r = bridge.get_neural_links()
+        assert r["data"]["GEMINI"]["status"]   == "ready"
+        assert r["data"]["GROQ"]["status"]     == "off"
+        assert r["data"]["TOGETHER"]["status"] == "off"
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def test_neural_links_stt_reflects_audio_stt_env_var():
+    """AUDIO_STT=whisper reports WHISPER label; AUDIO_STT=vosk reports VOSK; etc."""
+    saved = os.environ.get("AUDIO_STT")
+    try:
+        os.environ["AUDIO_STT"] = "whisper"
+        r = bridge.get_neural_links()
+        assert r["data"]["STT"]["label"] == "WHISPER"
+
+        os.environ["AUDIO_STT"] = "vosk"
+        r = bridge.get_neural_links()
+        assert r["data"]["STT"]["label"] == "VOSK"
+    finally:
+        if saved is None: os.environ.pop("AUDIO_STT", None)
+        else:             os.environ["AUDIO_STT"] = saved
+
+
+def test_update_neural_link_overrides_static_state():
+    """Backend code can push live state — must override the env-detected status."""
+    saved = os.environ.get("GEMINI_API_KEY")
+    try:
+        os.environ["GEMINI_API_KEY"] = "fake-key"
+        # Before override: ready (config-derived)
+        assert bridge.get_neural_links()["data"]["GEMINI"]["status"] == "ready"
+        # Push live override
+        bridge.update_neural_link("GEMINI", "active")
+        assert bridge.get_neural_links()["data"]["GEMINI"]["status"] == "active"
+        # Clear with empty status
+        bridge.update_neural_link("GEMINI", "")
+        assert bridge.get_neural_links()["data"]["GEMINI"]["status"] == "ready"
+    finally:
+        if saved is None: os.environ.pop("GEMINI_API_KEY", None)
+        else:             os.environ["GEMINI_API_KEY"] = saved
+        bridge._live_states.clear()
+
+
+def test_update_neural_link_clamps_invalid_status():
+    bridge.update_neural_link("OLLAMA", "florp")   # not a valid state
+    r = bridge.get_neural_links()
+    # Should have been clamped to "standby" by update_neural_link
+    assert r["data"]["OLLAMA"]["status"] == "standby"
+    bridge._live_states.clear()
+
+
+def test_get_app_state_reflects_swarm_aggregate():
+    _reset_swarm()
+    # All standby -> STANDBY
+    r = bridge.get_app_state()
+    assert r["state"] == "STANDBY"
+    # Any active -> ACTIVE
+    bridge.set_swarm_state("ALBEDO_CORE", "active")
+    r = bridge.get_app_state()
+    assert r["state"] == "ACTIVE"
+    # Any error -> ERROR (takes priority over active)
+    bridge.set_swarm_state("WEB_SCRAPER", "error")
+    r = bridge.get_app_state()
+    assert r["state"] == "ERROR"
+    _reset_swarm()
 
 
 # ---------------------------------------------------------------------------

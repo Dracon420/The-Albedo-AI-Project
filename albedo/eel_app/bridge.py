@@ -21,6 +21,7 @@ websocket server.
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from typing import Any
@@ -125,6 +126,173 @@ def get_swarm_status() -> dict:
     """Snapshot of the three swarm-agent LEDs."""
     with _swarm_lock:
         return {"ok": True, "data": dict(_swarm_state)}
+
+
+# ---------------------------------------------------------------------------
+# Neural links — status grid in the centre HUD
+#
+# A "neural link" is any backend subsystem the operator might want at-a-glance
+# visibility into: the three swarm LLM clients (Gemini/Groq/Together), the
+# local Ollama runtime, the ChromaDB vector store, the active STT engine
+# (Vosk or Deepgram or whisper), the active TTS engine (Piper or Kokoro),
+# the wake-word arm state, and the loopback webhook.
+#
+# Each link reports {status, label, detail}. status drives the LED colour
+# in the CSS grid via [data-status]:
+#   "ready"   cyan      configured and available
+#   "active"  bright    currently in use (set via update_neural_link)
+#   "standby" orange    configured but idle / waiting
+#   "off"     dim       not configured (no key / not installed)
+#   "error"   red       configured but failing health check
+# ---------------------------------------------------------------------------
+
+# Live override map — backend code calls update_neural_link("GEMINI", "active")
+# to flip a dot from its static state to a live state. The values here OVERRIDE
+# whatever get_neural_links() would compute from configuration.
+_live_states: dict[str, str] = {}
+_live_lock = threading.Lock()
+
+
+def update_neural_link(name: str, status: str) -> None:
+    """
+    Push a live status change for one neural-link. Called from pipeline /
+    swarm / STT / TTS code when a subsystem starts or finishes work.
+
+    Pass status=None or "" to clear the override and fall back to the
+    config-detected state.
+    """
+    if status not in (None, "", "ready", "active", "standby", "off", "error"):
+        status = "standby"
+    with _live_lock:
+        if not status:
+            _live_states.pop(name, None)
+        else:
+            _live_states[name] = status
+
+
+def _is_configured_env(*keys: str) -> bool:
+    """True if at least one of the given env keys is set to a non-empty value."""
+    for k in keys:
+        v = os.environ.get(k, "").strip() if "os" in dir() else ""
+        if v:
+            return True
+    return False
+
+
+def _detect_neural_links() -> dict:
+    """
+    Snapshot the configuration of every tracked neural-link. Pure read —
+    no network calls, no model loads, runs in <5 ms.
+    """
+    import os
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent.parent
+    links: dict[str, dict] = {}
+
+    def link(name: str, status: str, label: str, detail: str = "") -> None:
+        links[name] = {"status": status, "label": label, "detail": detail}
+
+    # --- Swarm LLM clients ---
+    for key, name in (("GEMINI_API_KEY", "GEMINI"),
+                      ("GROQ_API_KEY",   "GROQ"),
+                      ("TOGETHER_API_KEY","TOGETHER")):
+        if os.environ.get(key, "").strip():
+            link(name, "ready", "READY", "API key configured")
+        else:
+            link(name, "off", "OFF", "no API key")
+
+    # --- Ollama (local LLM runtime) ---
+    base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    model = os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
+    link("OLLAMA", "ready", "READY", f"{model} @ {base}")
+
+    # --- Vector store (ChromaDB) ---
+    if (root / "chroma_db").exists() or (root / "albedo_memory_db").exists():
+        link("VEC_DB", "ready", "ONLINE", "Chroma index present")
+    else:
+        link("VEC_DB", "standby", "EMPTY", "no index built yet")
+
+    # --- STT engine (dispatched by AUDIO_STT) ---
+    stt_engine = (os.environ.get("AUDIO_STT", "vosk") or "vosk").strip().lower()
+    if stt_engine == "deepgram":
+        if os.environ.get("DEEPGRAM_API_KEY", "").strip():
+            link("STT", "ready", "DEEPGRAM", "cloud + whisper fallback")
+        else:
+            link("STT", "error", "DEEPGRAM", "no DEEPGRAM_API_KEY")
+    elif stt_engine == "whisper":
+        link("STT", "ready", "WHISPER", "offline, lazy-loaded")
+    else:
+        # Vosk default
+        vosk_path = os.environ.get("VOSK_MODEL_PATH", "")
+        if vosk_path and Path(vosk_path).exists():
+            link("STT", "ready", "VOSK", "offline, 40 MB")
+        else:
+            link("STT", "standby", "VOSK", "model not cached yet")
+
+    # --- TTS engine (dispatched by AUDIO_TTS) ---
+    tts_engine = (os.environ.get("AUDIO_TTS", "piper") or "piper").strip().lower()
+    if tts_engine == "kokoro":
+        kokoro_model = Path(os.environ.get("KOKORO_MODEL_PATH",
+                                           str(root / "voices" / "kokoro-v1.0.onnx")))
+        if kokoro_model.exists():
+            link("TTS", "ready", "KOKORO", "offline ONNX")
+        else:
+            link("TTS", "standby", "KOKORO", "model missing — using Piper")
+    else:
+        link("TTS", "ready", "PIPER", "offline + Edge-TTS primary")
+
+    # --- Wake-word listener (Phase 4 N+3) ---
+    try:
+        from albedo.audio.comm_mode import get_wake_state, WakeState
+        if get_wake_state() == WakeState.ARMED:
+            link("WAKE", "active", "ARMED", "listening for wake word")
+        else:
+            link("WAKE", "standby", "OFF", "press WAKE to arm")
+    except Exception:
+        link("WAKE", "off", "OFF", "module unavailable")
+
+    # --- Phase 5 webhook ---
+    try:
+        from albedo import webhook
+        if webhook.is_running():
+            link("WEBHOOK", "ready", "LISTENING", "127.0.0.1:5000")
+        else:
+            link("WEBHOOK", "off", "OFF", "not started")
+    except Exception:
+        link("WEBHOOK", "off", "OFF", "module unavailable")
+
+    # Apply any live overrides pushed via update_neural_link()
+    with _live_lock:
+        for name, status in _live_states.items():
+            if name in links:
+                links[name]["status"] = status
+
+    return links
+
+
+@_expose
+def get_neural_links() -> dict:
+    """Snapshot of every tracked subsystem for the centre HUD status grid."""
+    try:
+        return {"ok": True, "data": _detect_neural_links()}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def get_app_state() -> dict:
+    """
+    Coarse single-word state for the big STANDBY / LISTENING / SPEAKING
+    indicator under the logo. Right now this just reflects whether any
+    swarm agent is "active" — a richer state machine can wire here later.
+    """
+    with _swarm_lock:
+        any_active = any(s == "active" for s in _swarm_state.values())
+        any_error  = any(s == "error"  for s in _swarm_state.values())
+    if any_error:  return {"ok": True, "state": "ERROR"}
+    if any_active: return {"ok": True, "state": "ACTIVE"}
+    return {"ok": True, "state": "STANDBY"}
 
 
 # ---------------------------------------------------------------------------
