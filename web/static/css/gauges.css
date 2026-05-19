@@ -15,8 +15,8 @@
 }
 
 .gauge--large  { width: 200px; height: 200px; }
-.gauge--medium { width: 130px; height: 130px; }   /* base of the winged triangle */
-.gauge--small  { width: 100px; height: 100px; }   /* apex above the pair */
+.gauge--medium { width: 170px; height: 170px; }   /* base of the winged triangle */
+.gauge--small  { width: 130px; height: 130px; }   /* apex above the pair */
 
 /* Background track (unfilled portion of the ring) */
 .gauge__bg {
@@ -53,35 +53,41 @@
 .gauge__fill.is-active { stroke: var(--c-cyan);   }
 
 /* Centre text */
-/* Centre numeric readout — keep it readable but not dominant.
-   Sizes are tuned so the value, unit, and sub-readout all sit
-   comfortably inside the ring without overlapping or crowding. */
+/* Centre numeric readout — gauge layout untouched, only the
+   small supporting text got larger. The main value (e.g. "14"
+   for CPU%) stays at its original size because it was already
+   legible. The sub-readouts and unit labels were the ones too
+   small to read at a glance, so those are the ones that grew. */
 .gauge__value {
   font-family: "Courier New", monospace;
   font-weight: 700;
-  font-size: 26px;
+  font-size: 38px;
   fill: var(--c-text);
 }
-.gauge--medium .gauge__value { font-size: 24px; }
-.gauge--small  .gauge__value { font-size: 18px; }
+.gauge--medium .gauge__value { font-size: 34px; }
+.gauge--small  .gauge__value { font-size: 26px; }
 
 .gauge__unit {
-  font-size: 9px;
+  font-size: 14px;             /* was 11 — now legible */
   letter-spacing: 0.14em;
   fill: var(--c-text-dim);
   text-transform: uppercase;
+  font-weight: 700;
 }
-.gauge--small .gauge__unit { font-size: 7px; }
+.gauge--medium .gauge__unit { font-size: 13px; }   /* was 11 */
+.gauge--small  .gauge__unit { font-size: 11px; }   /* was 9 */
 
 .gauge__sub {
-  font-size: 8px;
+  font-size: 12px;             /* was 10 — bumped for readability */
   fill: var(--c-cyan-dim);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
+  font-weight: 700;
 }
+.gauge--medium .gauge__sub { font-size: 11px; }
 
 .gauge__label {
-  font-size: 9px;
+  font-size: 13px;             /* was 10 — bigger so NETWORK / DISK I/O pop */
   letter-spacing: 0.18em;
   fill: var(--c-cyan);
   font-weight: 700;
