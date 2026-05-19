@@ -30,19 +30,21 @@
 }
 .drawer__head h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 22px;
   color: var(--c-cyan);
   letter-spacing: 0.2em;
   font-weight: 700;
+  text-shadow: var(--glow-cyan);
 }
 .drawer__close {
   background: transparent;
-  color: var(--c-text);
-  border: 1px solid var(--c-border);
-  width: 36px; height: 36px;
+  color: var(--c-cyan);
+  border: 1px solid var(--c-cyan-dim);
+  width: 42px; height: 42px;
   border-radius: 4px;
-  font-size: 22px;
+  font-size: 26px;
   cursor: pointer;
+  text-shadow: var(--glow-cyan);
 }
 .drawer__close:hover { background: var(--c-cyan); color: #000; }
 
@@ -52,25 +54,27 @@
 }
 .drawer__section h3 {
   margin: 0 0 12px;
-  font-size: 15px;
+  font-size: 19px;
   letter-spacing: 0.2em;
-  color: var(--c-cyan-dim);
+  color: var(--c-cyan);
   font-weight: 700;
+  text-shadow: var(--glow-cyan);
 }
 
 .drawer__readout {
   margin: 0;
-  font-size: 15px;
-  line-height: 1.4;
-  color: var(--c-text);
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--c-cyan);
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--c-cyan-dim);
   border-radius: 4px;
-  padding: 10px;
-  max-height: 320px;
+  padding: 12px;
+  max-height: 360px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+  text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
 }
 
 /* ============================================================
@@ -89,22 +93,25 @@
 .drawer__tab {
   flex: 1;
   background: transparent;
-  color: var(--c-text-dim);
-  border: 1px solid var(--c-border);
+  color: var(--c-cyan);
+  border: 1px solid var(--c-cyan-dim);
   border-radius: 4px;
   font-family: inherit;
-  font-size: 14px;
+  font-size: 18px;
   letter-spacing: 0.18em;
   font-weight: 700;
-  padding: 8px 6px;
+  padding: 10px 6px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
+  text-shadow: var(--glow-cyan);
 }
-.drawer__tab:hover    { color: var(--c-cyan); border-color: var(--c-cyan-dim); }
+.drawer__tab:hover    { color: var(--c-cyan); border-color: var(--c-cyan); box-shadow: 0 0 10px rgba(0,255,255,0.4); }
 .drawer__tab.is-active {
   background: var(--c-cyan);
   color: #000;
   border-color: var(--c-cyan);
+  text-shadow: none;
+  box-shadow: 0 0 12px rgba(0,255,255,0.5);
 }
 
 .drawer__pane                 { display: none; }
@@ -122,19 +129,21 @@
 .setting:last-child { margin-bottom: 0; }
 
 .setting__label {
-  font-size: 14px;
+  font-size: 18px;
   letter-spacing: 0.14em;
-  color: var(--c-text-dim);
+  color: var(--c-cyan);
   text-transform: uppercase;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  text-shadow: var(--glow-cyan);
 }
 .setting__value {
   color: var(--c-cyan);
   font-family: "Courier New", monospace;
-  font-size: 16px;
+  font-size: 20px;
   letter-spacing: 0.06em;
+  text-shadow: var(--glow-cyan);
 }
 
 .setting__select,
@@ -142,14 +151,68 @@
   appearance: none;
   -webkit-appearance: none;
   font-family: inherit;
-  font-size: 16px;
-  color: var(--c-text);
-  background: var(--c-bg);
-  border: 1px solid var(--c-border);
+  font-size: 20px;
+  color: var(--c-cyan);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--c-cyan-dim);
   border-radius: 4px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   outline: none;
   transition: border-color 0.15s;
+  text-shadow: var(--glow-cyan);
+}
+
+/* Action buttons inside the drawer (Index Vault, Dream Cycle, etc.) */
+.drawer__action {
+  width: 100%;
+  background: rgba(0, 60, 80, 0.35);
+  color: var(--c-cyan);
+  border: 1px solid var(--c-cyan-dim);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  text-shadow: var(--glow-cyan);
+}
+.drawer__action:hover {
+  background: var(--c-cyan);
+  color: #000;
+  text-shadow: none;
+  box-shadow: 0 0 14px rgba(0, 255, 255, 0.55);
+}
+.drawer__action--accent {
+  border-color: var(--c-purple);
+  color: var(--c-purple);
+  text-shadow:
+    0 0 6px var(--c-purple),
+    0 0 14px rgba(201, 123, 255, 0.55);
+}
+.drawer__action--accent:hover {
+  background: var(--c-purple);
+  color: #000;
+  text-shadow: none;
+  box-shadow: 0 0 14px rgba(201, 123, 255, 0.6);
+}
+.drawer__action[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.setting__hint {
+  font-size: 14px;
+  color: var(--c-text-dim);
+  text-shadow: 0 0 5px rgba(94, 227, 255, 0.45);
+  letter-spacing: 0.04em;
+  margin-top: 2px;
+}
+
+.drawer__readout--small {
+  font-size: 15px;
+  max-height: 120px;
 }
 .setting__select:focus,
 .setting__input:focus { border-color: var(--c-cyan); }

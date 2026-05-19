@@ -109,6 +109,38 @@ const Settings = (() => {
     }
   }
 
+  // ── Memory subsystem: Obsidian index + REM dream cycle ────────────
+  async function _runMemoryAction(label, eelFn, btnEl, statusEl) {
+    if (!btnEl) return;
+    const originalText = btnEl.textContent;
+    btnEl.disabled = true;
+    btnEl.textContent = label + " ...";
+    if (statusEl) statusEl.textContent = "// " + label.toLowerCase() + " in progress";
+    try {
+      const r = await eelFn();
+      if (r && r.ok) {
+        if (statusEl) statusEl.textContent = "// " + (r.status || (label + " complete"));
+        if (window.Chat && Chat.appendLine) {
+          Chat.appendLine("system", "[MEMORY] " + (r.status || label + " complete"));
+        }
+      } else {
+        const err = (r && r.error) || "unknown error";
+        if (statusEl) statusEl.textContent = "// FAIL: " + err;
+        if (window.Chat && Chat.appendLine) {
+          Chat.appendLine("error", "[MEMORY] " + label + " failed: " + err);
+        }
+      }
+    } catch (err) {
+      if (statusEl) statusEl.textContent = "// FAIL: " + err;
+      if (window.Chat && Chat.appendLine) {
+        Chat.appendLine("error", "[MEMORY] " + label + " error: " + err);
+      }
+    } finally {
+      btnEl.disabled = false;
+      btnEl.textContent = originalText;
+    }
+  }
+
   function init() {
     _personaSel    = document.getElementById("personaSelect");
     _audioInSel    = document.getElementById("audioInSelect");
@@ -116,6 +148,15 @@ const Settings = (() => {
     _visionRange   = document.getElementById("visionTempRange");
     _visionVal     = document.getElementById("visionTempVal");
     _autoUpdateSel = document.getElementById("autoUpdateSelect");
+    const indexBtn  = document.getElementById("indexVaultBtn");
+    const dreamBtn  = document.getElementById("dreamCycleBtn");
+    const memStatus = document.getElementById("memoryStatus");
+
+    if (indexBtn) indexBtn.addEventListener("click",
+      () => _runMemoryAction("REBUILD INDEX",  () => eel.index_obsidian_vault()(),  indexBtn, memStatus));
+    if (dreamBtn) dreamBtn.addEventListener("click",
+      () => _runMemoryAction("REM CYCLE",      () => eel.initiate_dream_cycle()(),  dreamBtn, memStatus));
+
     if (!_personaSel) return;        // drawer missing — skip silently
 
     // Change handlers

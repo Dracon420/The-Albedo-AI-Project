@@ -13,9 +13,11 @@
   --c-bg-panel-2:   rgba(8, 18, 28, 0.42);
   --c-border:       rgba(0, 245, 255, 0.30);
   --c-border-bright:rgba(0, 245, 255, 0.7);
-  /* Text: pure neon white-cyan for primary, brighter cyan-grey for dim */
-  --c-text:         #e6ffff;
-  --c-text-dim:     #9be6ff;
+  /* Text: pure neon. Primary is near-white with cyan cast, "dim" is
+     now a punchy neon cyan-grey (used to read as muted; user wants
+     EVERY text element to glow). */
+  --c-text:         #f0ffff;
+  --c-text-dim:     #5ee3ff;
   /* Accents punched to true-neon */
   --c-cyan:         #00ffff;
   --c-cyan-dim:     #00b8c4;
@@ -50,6 +52,8 @@ html, body {
   font-family: "Consolas", "Courier New", "Menlo", monospace;
   font-size: 20px;             /* base — every UI font is +4 from prior pass */
   letter-spacing: 0.03em;
+  /* Default neon glow on every text node so nothing reads as flat grey. */
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.35);
 }
 
 body {
@@ -128,8 +132,8 @@ body::before {
   font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.14em;
-  color: var(--c-text-dim);
-  text-shadow: 0 0 6px rgba(155, 230, 255, 0.4);
+  color: var(--c-text);
+  text-shadow: 0 0 7px rgba(0, 255, 255, 0.55);
 }
 .swarm__dot {
   width: 12px; height: 12px;
@@ -171,8 +175,8 @@ body::before {
   display: grid;
   grid-template-columns: 1fr auto 1fr;   /* wings stretch, centre auto-sized */
   align-items: center;
-  gap: 18px;                              /* wings pull in closer to the orb */
-  padding: 150px 28px 40px;               /* top room for apex caption + apex dial */
+  gap: 8px;                               /* wings hug the centre orb tighter */
+  padding: 150px 20px 40px;               /* top room for apex caption + apex dial */
   background: var(--c-bg-panel-2);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -252,9 +256,9 @@ body::before {
   align-items: center;
   justify-content: center;
   gap: 14px;
-  padding: 0 24px;
+  padding: 0 14px;
   align-self: start;            /* top-align inside the grid row */
-  margin-top: -12px;            /* lift slightly into the apex zone */
+  margin-top: -36px;            /* lift further so orb top lines up with apex */
 }
 
 /* ============================================================
@@ -407,9 +411,9 @@ body::before {
   50%     { opacity: 0.45;}
 }
 .link__name  {
-  color: var(--c-text-dim);
+  color: var(--c-text);
   font-weight: 700;
-  text-shadow: 0 0 5px rgba(155, 230, 255, 0.4);
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.55);
 }
 .link__label {
   color: var(--c-cyan);
@@ -475,19 +479,20 @@ body::before {
   padding: 0 16px;
   font-family: inherit;
   font-size: 20px;
-  color: var(--c-text);
-  background: var(--c-bg);
+  color: var(--c-cyan);
+  background: rgba(0, 0, 0, 0.45);
   border: 1px solid var(--c-cyan-dim);
   border-radius: 6px;
   outline: none;
   transition: border-color 0.15s;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.55);
 }
-.cmd-row #queryInput:focus { border-color: var(--c-cyan); }
-.cmd-row #queryInput::placeholder { color: var(--c-text-dim); }
+.cmd-row #queryInput:focus { border-color: var(--c-cyan); box-shadow: 0 0 12px rgba(0, 255, 255, 0.3); }
+.cmd-row #queryInput::placeholder { color: var(--c-cyan-dim); text-shadow: 0 0 4px rgba(0, 255, 255, 0.35); }
 
 .cmd-btn {
-  background: var(--c-border);
-  color: var(--c-text);
+  background: rgba(0, 60, 80, 0.35);
+  color: var(--c-cyan);
   border: 1px solid var(--c-cyan-dim);
   font-family: inherit;
   font-size: 18px;
@@ -497,7 +502,8 @@ body::before {
   padding: 0 18px;
   border-radius: 6px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  text-shadow: var(--glow-cyan);
 }
 .cmd-btn:hover           { background: var(--c-cyan); color: #000; }
 .cmd-btn:active          { transform: translateY(1px); }

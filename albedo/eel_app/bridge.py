@@ -511,6 +511,45 @@ def get_audio_devices() -> dict:
 # Backgrounds
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Obsidian vault + REM dream cycle (background memory consolidation)
+# ---------------------------------------------------------------------------
+
+@_expose
+def index_obsidian_vault() -> dict:
+    """
+    Trigger memory.index_obsidian_vault() — re-scans the configured
+    OBSIDIAN_VAULT_PATH and rebuilds the ChromaDB index used by the RAG
+    pipeline. Returns the human-readable status string from the indexer
+    (e.g. "Indexed 42 documents across 7 folders.").
+    """
+    try:
+        from memory import index_obsidian_vault as _idx
+        status = _idx()
+        return {"ok": True, "status": str(status)}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def initiate_dream_cycle() -> dict:
+    """
+    Trigger operative_dream.initiate_rem_cycle() — the background
+    memory-consolidation agent. Reads the daily interaction traces,
+    runs them through the local LLM for reflection, and appends the
+    generated markdown insight report to the Obsidian vault.
+
+    Returns the dream-cycle's status string so the UI can show a
+    "Dream complete: 12 traces consolidated" toast.
+    """
+    try:
+        from operative_dream import initiate_rem_cycle
+        status = initiate_rem_cycle()
+        return {"ok": True, "status": str(status) if status else "Dream cycle complete."}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 @_expose
 def get_backgrounds() -> dict:
     """

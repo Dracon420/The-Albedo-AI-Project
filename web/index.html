@@ -231,6 +231,29 @@
           <select id="autoUpdateSelect" class="setting__select"></select>
         </div>
       </section>
+
+      <!-- MEMORY: Obsidian vault index + REM dream consolidation -->
+      <section class="drawer__section">
+        <h3>MEMORY / DREAM</h3>
+        <div class="setting">
+          <button class="drawer__action" id="indexVaultBtn">
+            REBUILD OBSIDIAN INDEX
+          </button>
+          <div class="setting__hint">
+            Re-scans OBSIDIAN_VAULT_PATH and rebuilds the ChromaDB RAG index.
+          </div>
+        </div>
+        <div class="setting">
+          <button class="drawer__action drawer__action--accent" id="dreamCycleBtn">
+            INITIATE REM CYCLE
+          </button>
+          <div class="setting__hint">
+            Consolidates today's interaction traces and appends a dream-insight
+            note to the Obsidian vault. Takes 30–90 seconds.
+          </div>
+        </div>
+        <pre class="drawer__readout drawer__readout--small" id="memoryStatus">// memory subsystem idle</pre>
+      </section>
     </div>
 
     <!-- ── Hardware tab: live hardware profile + resource policy ── -->
