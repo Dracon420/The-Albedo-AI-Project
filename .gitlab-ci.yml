@@ -1,0 +1,48 @@
+stages:
+  - build
+  - release
+
+variables:
+  INNO_SETUP_URL: "https://jrsoftware.org/download.php/is.exe"
+  OUTPUT_DIR: "installer_output"
+
+build-installer:
+  stage: build
+  tags:
+    - windows
+  script:
+    - echo "Downloading Inno Setup..."
+    - Invoke-WebRequest -Uri $env:INNO_SETUP_URL -OutFile is_setup.exe
+    - Start-Process -FilePath is_setup.exe -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART' -Wait
+    - echo "Compiling albedo.iss..."
+    - New-Item -ItemType Directory -Force -Path $env:OUTPUT_DIR
+    - $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+    - '& $iscc /O"$env:OUTPUT_DIR" albedo.iss'
+    - echo "Build complete!"
+  artifacts:
+    paths:
+      - $OUTPUT_DIR/*.exe
+    expire_in: 7 days
+  rules:
+    - if: '$CI_COMMIT_TAG'
+
+create-release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  tags:
+    - linux
+  needs:
+    - job: build-installer
+      artifacts: true
+  script:
+    - echo "Creating release for tag $CI_COMMIT_TAG"
+  release:
+    tag_name: '$CI_COMMIT_TAG'
+    name: 'Albedo AI $CI_COMMIT_TAG'
+    description: 'Albedo AI installer release $CI_COMMIT_TAG'
+    assets:
+      links:
+        - name: 'Albedo-AI-Setup.exe'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/$OUTPUT_DIR/Albedo-AI-Setup.exe?job=build-installer'
+  rules:
+    - if: '$CI_COMMIT_TAG'
