@@ -156,8 +156,8 @@ body::before {
   display: grid;
   grid-template-columns: 1fr auto 1fr;   /* wings stretch, centre auto-sized */
   align-items: center;
-  gap: 24px;
-  padding: 78px 24px 18px;               /* top room for the apex dials */
+  gap: 18px;
+  padding: 56px 18px 14px;               /* tighter — gauges are smaller now */
   background: var(--c-bg-panel-2);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -180,7 +180,7 @@ body::before {
 
 .wing__apex {
   position: absolute;
-  top: -60px;
+  top: -48px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
@@ -225,20 +225,20 @@ body::before {
    ============================================================ */
 .hero__orb {
   position: relative;
-  width: 124px;
-  height: 124px;
+  width: 100px;
+  height: 100px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .hero__logo {
-  width: 92px;
-  height: 92px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
   object-fit: cover;
   filter:
-    drop-shadow(0 0 18px rgba(0, 245, 255, 0.55))
-    drop-shadow(0 0 36px rgba(0, 245, 255, 0.25));
+    drop-shadow(0 0 14px rgba(0, 245, 255, 0.55))
+    drop-shadow(0 0 28px rgba(0, 245, 255, 0.25));
   z-index: 2;
 }
 .hero__ring {
@@ -267,13 +267,13 @@ body::before {
 }
 
 .hero__state {
-  margin-top: 2px;
-  padding: 3px 14px;
-  font-size: 11px;
+  margin-top: 0;
+  padding: 2px 10px;
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.26em;
+  letter-spacing: 0.22em;
   border: 1px solid var(--c-cyan-dim);
-  border-radius: 12px;
+  border-radius: 10px;
   color: var(--c-cyan);
   background: rgba(0, 245, 255, 0.06);
 }

@@ -316,6 +316,108 @@ def test_get_app_state_reflects_swarm_aggregate():
 
 
 # ---------------------------------------------------------------------------
+# Settings — read + write
+# ---------------------------------------------------------------------------
+
+def test_get_settings_returns_settings_and_choices(tmp_path=None):
+    """Drawer settings panel needs both the current values + the choice enums."""
+    import tempfile, json
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        f.write(b'{"active_persona": "jarvis", "vision_temperature": 0.42}')
+        sf = Path(f.name)
+    try:
+        with patch.object(bridge, "_SETTINGS_FILE", sf):
+            r = bridge.get_settings()
+        assert r["ok"] is True
+        assert r["settings"]["active_persona"]     == "jarvis"
+        assert r["settings"]["vision_temperature"] == 0.42
+        # Defaults must be filled for missing keys
+        assert "audio_input_device"  in r["settings"]
+        assert "audio_output_device" in r["settings"]
+        # Choices include personas + auto-update + vision range
+        assert "cortana" in r["choices"]["active_persona"]
+        assert "jarvis"  in r["choices"]["active_persona"]
+        assert isinstance(r["choices"]["auto_update"], list)
+        assert r["choices"]["vision_temperature"]["min"] == 0.0
+        assert r["choices"]["vision_temperature"]["max"] == 1.0
+    finally:
+        sf.unlink(missing_ok=True)
+
+
+def test_get_settings_with_missing_file_returns_defaults():
+    """A fresh install has no settings.json — should not error."""
+    with patch.object(bridge, "_SETTINGS_FILE", Path("/does/not/exist.json")):
+        r = bridge.get_settings()
+    assert r["ok"] is True
+    assert r["settings"]["active_persona"] == "cortana"
+
+
+def test_set_setting_persists_to_disk():
+    import tempfile, json
+    with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
+        f.write(b'{"existing_key": "existing_value"}')
+        sf = Path(f.name)
+    try:
+        with patch.object(bridge, "_SETTINGS_FILE", sf):
+            r = bridge.set_setting("active_persona", "jarvis")
+            assert r["ok"] is True
+            assert r["key"]   == "active_persona"
+            assert r["value"] == "jarvis"
+        # Verify on disk
+        data = json.loads(sf.read_text(encoding="utf-8"))
+        assert data["active_persona"] == "jarvis"
+        # AND existing keys preserved
+        assert data["existing_key"]   == "existing_value"
+    finally:
+        sf.unlink(missing_ok=True)
+
+
+def test_set_setting_rejects_empty_key():
+    r = bridge.set_setting("", "x")
+    assert r["ok"] is False
+    assert "missing key" in r["error"]
+
+
+def test_get_audio_devices_returns_inputs_and_outputs():
+    """Stub sounddevice so the test doesn't depend on real audio hardware."""
+    import types
+    fake_sd = types.SimpleNamespace(
+        query_devices=lambda: [
+            {"name": "Mic A", "max_input_channels": 1, "max_output_channels": 0},
+            {"name": "Spk B", "max_input_channels": 0, "max_output_channels": 2},
+            {"name": "Both",  "max_input_channels": 2, "max_output_channels": 2},
+        ],
+        default=types.SimpleNamespace(device=(0, 1)),
+    )
+    with patch.dict(sys.modules, {"sounddevice": fake_sd}):
+        r = bridge.get_audio_devices()
+    assert r["ok"] is True
+    assert len(r["inputs"])  == 2   # Mic A + Both
+    assert len(r["outputs"]) == 2   # Spk B + Both
+    assert r["inputs"][0]["default"] is True   # index 0 = Mic A
+    assert r["outputs"][0]["default"] is True  # index 1 = Spk B
+
+
+def test_get_audio_devices_handles_missing_sounddevice():
+    """No sounddevice installed → error dict, not exception."""
+    with patch.dict(sys.modules, {"sounddevice": None}):
+        # Need to force re-import attempt inside the function
+        with patch.object(bridge, "get_audio_devices", side_effect=lambda: bridge.get_audio_devices.__wrapped__()) if hasattr(bridge.get_audio_devices, "__wrapped__") else patch.object(bridge, "_settings_lock", bridge._settings_lock):
+            pass
+    # Simpler: just assert that calling with a broken import returns an error dict
+    import builtins
+    real_import = builtins.__import__
+    def fail_sd(name, *a, **kw):
+        if name == "sounddevice":
+            raise ImportError("no sounddevice")
+        return real_import(name, *a, **kw)
+    with patch("builtins.__import__", side_effect=fail_sd):
+        r = bridge.get_audio_devices()
+    assert r["ok"] is False
+    assert "ImportError" in r["error"] or "sounddevice" in r["error"]
+
+
+# ---------------------------------------------------------------------------
 # Background list
 # ---------------------------------------------------------------------------
 

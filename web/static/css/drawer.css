@@ -67,10 +67,124 @@
   border: 1px solid var(--c-border);
   border-radius: 4px;
   padding: 10px;
-  max-height: 220px;
+  max-height: 320px;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ============================================================
+   Drawer tab strip + panes (Settings / Hardware / Software)
+   ============================================================ */
+.drawer__tabs {
+  position: sticky;
+  top: 65px;       /* sits below the sticky head */
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+  padding: 6px 18px 10px;
+  background: var(--c-bg-panel-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.drawer__tab {
+  flex: 1;
+  background: transparent;
+  color: var(--c-text-dim);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  font-weight: 700;
+  padding: 6px 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.drawer__tab:hover    { color: var(--c-cyan); border-color: var(--c-cyan-dim); }
+.drawer__tab.is-active {
+  background: var(--c-cyan);
+  color: #000;
+  border-color: var(--c-cyan);
+}
+
+.drawer__pane                 { display: none; }
+.drawer__pane.is-active       { display: block; }
+
+/* ============================================================
+   Interactive setting controls
+   ============================================================ */
+.setting {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.setting:last-child { margin-bottom: 0; }
+
+.setting__label {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  color: var(--c-text-dim);
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.setting__value {
+  color: var(--c-cyan);
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+.setting__select,
+.setting__input {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  font-size: 12px;
+  color: var(--c-text);
+  background: var(--c-bg);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  padding: 6px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.setting__select:focus,
+.setting__input:focus { border-color: var(--c-cyan); }
+
+/* Range slider — cyan thumb on dark track */
+.setting__range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  background: linear-gradient(
+    to right,
+    var(--c-cyan-dim) 0%,
+    var(--c-cyan)     var(--pct, 20%),
+    var(--c-border)   var(--pct, 20%),
+    var(--c-border)   100%);
+  border-radius: 2px;
+  outline: none;
+}
+.setting__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--c-cyan);
+  border: 2px solid var(--c-bg);
+  box-shadow: 0 0 8px var(--c-cyan);
+  cursor: pointer;
+}
+.setting__range::-moz-range-thumb {
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--c-cyan);
+  border: 2px solid var(--c-bg);
+  box-shadow: 0 0 8px var(--c-cyan);
+  cursor: pointer;
 }
 
 /* Background thumbnails */

@@ -83,6 +83,13 @@ const Drawer = (() => {
     try { localStorage.setItem("albedo-bg", bgKey); } catch { /* ignore */ }
   }
 
+  function _switchTab(name) {
+    document.querySelectorAll(".drawer__tab").forEach((t) =>
+      t.classList.toggle("is-active", t.dataset.tab === name));
+    document.querySelectorAll(".drawer__pane").forEach((p) =>
+      p.classList.toggle("is-active", p.dataset.pane === name));
+  }
+
   function init() {
     _drawer    = document.getElementById("drawer");
     _scrim     = document.getElementById("drawerScrim");
@@ -92,6 +99,11 @@ const Drawer = (() => {
     _toggleBtn.addEventListener("click", toggle);
     _closeBtn .addEventListener("click", close);
     _scrim    .addEventListener("click", close);
+
+    // Tab switcher
+    document.querySelectorAll(".drawer__tab").forEach((t) => {
+      t.addEventListener("click", () => _switchTab(t.dataset.tab));
+    });
 
     // Background thumbnails
     document.querySelectorAll(".drawer__bg-thumb").forEach((t) => {

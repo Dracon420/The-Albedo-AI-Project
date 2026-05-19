@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import threading
 import time
+from pathlib import Path
 from typing import Any
 
 # Soft import: if eel is missing, define a no-op decorator so the module
@@ -386,6 +387,122 @@ def pop_webhook_updates() -> dict:
     try:
         from albedo import webhook
         return {"ok": True, "updates": webhook.pop_pending_updates()}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+# ---------------------------------------------------------------------------
+# Settings — read + write the install-root settings.json shared with Tk gui
+# ---------------------------------------------------------------------------
+
+_SETTINGS_FILE = Path(__file__).resolve().parent.parent.parent / "settings.json"
+_settings_lock = threading.Lock()
+
+_PERSONAS = ["cortana", "jarvis"]
+
+_AUTO_UPDATE_OPTIONS = [
+    "Never", "Every 6 hours", "Every 12 hours",
+    "Every 24 hours", "Every 7 days",
+]
+
+
+def _read_settings_dict() -> dict:
+    try:
+        import json
+        return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _write_settings_dict(data: dict) -> bool:
+    import json
+    try:
+        with _settings_lock:
+            _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        return True
+    except OSError:
+        return False
+
+
+@_expose
+def get_settings() -> dict:
+    """
+    Snapshot of the install-root settings.json plus the enumerated choices
+    each setting accepts. Drawer Settings panel uses this to render
+    dropdowns and sliders on first open.
+    """
+    try:
+        current = _read_settings_dict()
+        # Sensible defaults for fields that may be missing on a fresh install
+        current.setdefault("active_persona",      "cortana")
+        current.setdefault("vision_temperature",  0.2)
+        current.setdefault("auto_update",         "Every 24 hours")
+        current.setdefault("background",          "Albedo 2")
+        current.setdefault("audio_input_device",  None)
+        current.setdefault("audio_output_device", None)
+        return {
+            "ok":       True,
+            "settings": current,
+            "choices":  {
+                "active_persona":      list(_PERSONAS),
+                "auto_update":         list(_AUTO_UPDATE_OPTIONS),
+                "background":          ["bg1", "bg2", "bg3", "bg4"],
+                "vision_temperature":  {"min": 0.0, "max": 1.0, "step": 0.05},
+            },
+        }
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def set_setting(key: str, value: Any) -> dict:
+    """
+    Update one settings.json field. Read-merge-write so we don't clobber
+    other keys (incl. those Tk gui or comm_mode may have set).
+    """
+    if not key:
+        return {"ok": False, "error": "missing key"}
+    try:
+        data = _read_settings_dict()
+        data[key] = value
+        ok = _write_settings_dict(data)
+        if not ok:
+            return {"ok": False, "error": "settings file not writable"}
+        return {"ok": True, "key": key, "value": value}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def get_audio_devices() -> dict:
+    """
+    Enumerate sounddevice input/output devices for the Settings drop-downs.
+    Returns:
+        {ok, inputs:  [{index, name, channels, default}],
+             outputs: [{index, name, channels, default}]}
+    """
+    try:
+        import sounddevice as sd
+        devices = sd.query_devices()
+        try:
+            default_in, default_out = sd.default.device
+        except Exception:
+            default_in = default_out = None
+        inputs, outputs = [], []
+        for i, d in enumerate(devices):
+            entry = {
+                "index":    i,
+                "name":     d.get("name", f"device {i}"),
+                "channels": int(d.get("max_input_channels", 0)
+                                if d.get("max_input_channels", 0) > 0
+                                else d.get("max_output_channels", 0)),
+            }
+            if d.get("max_input_channels", 0) > 0:
+                inputs.append({**entry, "default": i == default_in})
+            if d.get("max_output_channels", 0) > 0:
+                outputs.append({**entry, "default": i == default_out})
+        return {"ok": True, "inputs": inputs, "outputs": outputs}
     except Exception as exc:                                        # noqa: BLE001
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 

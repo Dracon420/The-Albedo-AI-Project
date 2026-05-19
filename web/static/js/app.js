@@ -6,6 +6,7 @@
 (function () {
   function start() {
     Drawer.init();
+    Settings.init();
     Chat.init();
     Telemetry.start();
     Swarm.start();

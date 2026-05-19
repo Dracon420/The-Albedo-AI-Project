@@ -155,30 +155,85 @@
       <button class="drawer__close" id="drawerClose" aria-label="Close drawer">×</button>
     </header>
 
-    <section class="drawer__section">
-      <h3>BACKGROUND</h3>
-      <div class="drawer__bg-grid">
-        <button class="drawer__bg-thumb" data-bg="bg1" title="Background 1"></button>
-        <button class="drawer__bg-thumb" data-bg="bg2" title="Background 2"></button>
-        <button class="drawer__bg-thumb" data-bg="bg3" title="Background 3"></button>
-        <button class="drawer__bg-thumb" data-bg="bg4" title="Background 4"></button>
-      </div>
-    </section>
+    <!-- Tabs across the top of the drawer -->
+    <nav class="drawer__tabs">
+      <button class="drawer__tab is-active" data-tab="settings">SETTINGS</button>
+      <button class="drawer__tab"           data-tab="hardware">HARDWARE</button>
+      <button class="drawer__tab"           data-tab="software">SOFTWARE</button>
+    </nav>
 
-    <section class="drawer__section">
-      <h3>HARDWARE</h3>
-      <pre class="drawer__readout" id="hwReadout">loading...</pre>
-    </section>
+    <!-- ── Settings tab: interactive controls ───────────────────── -->
+    <div class="drawer__pane is-active" data-pane="settings">
+      <section class="drawer__section">
+        <h3>BACKGROUND</h3>
+        <div class="drawer__bg-grid">
+          <button class="drawer__bg-thumb" data-bg="bg1" title="Background 1"></button>
+          <button class="drawer__bg-thumb" data-bg="bg2" title="Background 2"></button>
+          <button class="drawer__bg-thumb" data-bg="bg3" title="Background 3"></button>
+          <button class="drawer__bg-thumb" data-bg="bg4" title="Background 4"></button>
+        </div>
+      </section>
 
-    <section class="drawer__section">
-      <h3>SOFTWARE</h3>
-      <pre class="drawer__readout" id="versionReadout">loading...</pre>
-    </section>
+      <section class="drawer__section">
+        <h3>PERSONA</h3>
+        <div class="setting">
+          <label class="setting__label" for="personaSelect">Active voice + wake word</label>
+          <select id="personaSelect" class="setting__select"></select>
+        </div>
+      </section>
 
-    <section class="drawer__section">
-      <h3>RESOURCE POLICY</h3>
-      <pre class="drawer__readout" id="resourceReadout">loading...</pre>
-    </section>
+      <section class="drawer__section">
+        <h3>AUDIO</h3>
+        <div class="setting">
+          <label class="setting__label" for="audioInSelect">MIC input device</label>
+          <select id="audioInSelect" class="setting__select"></select>
+        </div>
+        <div class="setting">
+          <label class="setting__label" for="audioOutSelect">Output device</label>
+          <select id="audioOutSelect" class="setting__select"></select>
+        </div>
+      </section>
+
+      <section class="drawer__section">
+        <h3>VISION</h3>
+        <div class="setting">
+          <label class="setting__label" for="visionTempRange">
+            Temperature
+            <span class="setting__value" id="visionTempVal">0.20</span>
+          </label>
+          <input id="visionTempRange" class="setting__range"
+                 type="range" min="0" max="1" step="0.05" value="0.2" />
+        </div>
+      </section>
+
+      <section class="drawer__section">
+        <h3>UPDATES</h3>
+        <div class="setting">
+          <label class="setting__label" for="autoUpdateSelect">Auto-check interval</label>
+          <select id="autoUpdateSelect" class="setting__select"></select>
+        </div>
+      </section>
+    </div>
+
+    <!-- ── Hardware tab: live hardware profile + resource policy ── -->
+    <div class="drawer__pane" data-pane="hardware">
+      <section class="drawer__section">
+        <h3>HARDWARE PROFILE</h3>
+        <pre class="drawer__readout" id="hwReadout">loading...</pre>
+      </section>
+      <section class="drawer__section">
+        <h3>RESOURCE POLICY</h3>
+        <pre class="drawer__readout" id="resourceReadout">loading...</pre>
+      </section>
+    </div>
+
+    <!-- ── Software tab: version + uptime ──────────────────────── -->
+    <div class="drawer__pane" data-pane="software">
+      <section class="drawer__section">
+        <h3>SOFTWARE</h3>
+        <pre class="drawer__readout" id="versionReadout">loading...</pre>
+      </section>
+    </div>
   </aside>
 
   <!-- Drawer scrim for click-to-close -->
@@ -190,6 +245,7 @@
   <script src="static/js/swarm.js"></script>
   <script src="static/js/neural.js"></script>
   <script src="static/js/drawer.js"></script>
+  <script src="static/js/settings.js"></script>
   <script src="static/js/chat.js"></script>
   <script src="static/js/app.js"></script>
 </body>

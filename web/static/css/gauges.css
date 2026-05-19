@@ -15,8 +15,8 @@
 }
 
 .gauge--large  { width: 200px; height: 200px; }
-.gauge--medium { width: 170px; height: 170px; }   /* base of the winged triangle */
-.gauge--small  { width: 130px; height: 130px; }   /* apex above the pair */
+.gauge--medium { width: 130px; height: 130px; }   /* base of the winged triangle */
+.gauge--small  { width: 100px; height: 100px; }   /* apex above the pair */
 
 /* Background track (unfilled portion of the ring) */
 .gauge__bg {
@@ -53,32 +53,35 @@
 .gauge__fill.is-active { stroke: var(--c-cyan);   }
 
 /* Centre text */
+/* Centre numeric readout — keep it readable but not dominant.
+   Sizes are tuned so the value, unit, and sub-readout all sit
+   comfortably inside the ring without overlapping or crowding. */
 .gauge__value {
   font-family: "Courier New", monospace;
   font-weight: 700;
-  font-size: 38px;
+  font-size: 26px;
   fill: var(--c-text);
 }
-.gauge--medium .gauge__value { font-size: 34px; }
-.gauge--small  .gauge__value { font-size: 26px; }
+.gauge--medium .gauge__value { font-size: 24px; }
+.gauge--small  .gauge__value { font-size: 18px; }
 
 .gauge__unit {
-  font-size: 11px;
-  letter-spacing: 0.16em;
+  font-size: 9px;
+  letter-spacing: 0.14em;
   fill: var(--c-text-dim);
   text-transform: uppercase;
 }
-.gauge--small .gauge__unit { font-size: 9px; }
+.gauge--small .gauge__unit { font-size: 7px; }
 
 .gauge__sub {
-  font-size: 10px;
+  font-size: 8px;
   fill: var(--c-cyan-dim);
-  letter-spacing: 0.12em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .gauge__label {
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 0.18em;
   fill: var(--c-cyan);
   font-weight: 700;
