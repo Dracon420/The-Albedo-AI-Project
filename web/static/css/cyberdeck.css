@@ -21,9 +21,7 @@
   --c-red:          #ff4868;
   --c-purple:       #b16bff;
 
-  /* Sizing — wings are wide enough for two 170px medium gauges
-     side-by-side plus padding. Centre takes whatever is left. */
-  --grid-cols:      380px 1fr 380px;
+  /* Sizing — main column is full-width vertical stack */
   --topbar-h:       54px;
   --drawer-w:       380px;
 
@@ -134,98 +132,108 @@ body::before {
 .swarm__dot[data-state="error"]   { background: var(--c-red);    box-shadow: 0 0 12px var(--c-red);    }
 
 /* ============================================================
-   Three-column grid: left wing | centre | right wing
+   Main column — full-width vertical stack:
+     1) HUD strip (gauges + orb + state)
+     2) Neural links horizontal status bar
+     3) Chat panel (takes remaining height)
    ============================================================ */
-.grid {
+.main {
   position: relative;
   z-index: 1;
   height: calc(100% - var(--topbar-h));
   display: grid;
-  grid-template-columns: var(--grid-cols);
-  gap: 14px;
-  padding: 14px;
-}
-
-/* ============================================================
-   Wing layout — triangular gauge cluster
-
-   Each wing is a relatively-positioned container. The apex gauge
-   (Network / Disk I/O) is absolutely positioned at the top centre
-   so it floats OFFSET ABOVE the pair of base gauges below it,
-   forming an inverted-V "winged triangle" silhouette.
-   ============================================================ */
-.wing {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 92px 14px 24px;      /* extra top padding leaves room for the apex */
-  background: var(--c-bg-panel);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
-  box-shadow: var(--shadow-glow);
-}
-
-/* Apex dial floats up out of the wing's top edge so it sits
-   physically ABOVE the pair of base gauges — that's the "offset"
-   the directive calls for. */
-.wing__apex {
-  position: absolute;
-  top: -22px;                     /* protrudes above the wing's top edge */
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 3;
-}
-
-/* The base row: two medium gauges side-by-side. */
-.wing__base {
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
-  justify-content: center;
-  width: 100%;
-}
-
-/* ============================================================
-   Centre column: hero (logo + state) + neural links + chat + input
-   ============================================================ */
-.centre {
-  display: flex;
-  flex-direction: column;
+  grid-template-rows: auto auto 1fr;     /* HUD + links auto, chat fills */
   gap: 12px;
+  padding: 14px;
+  min-height: 0;
+}
+
+/* ============================================================
+   HUD strip — single panel spanning the full width:
+     [LEFT TRIANGLE]   [CENTRE ORB + STATE]   [RIGHT TRIANGLE]
+   ============================================================ */
+.hud {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;   /* wings stretch, centre auto-sized */
+  align-items: center;
+  gap: 24px;
+  padding: 78px 24px 18px;               /* top room for the apex dials */
   background: var(--c-bg-panel-2);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--c-border);
   border-radius: 10px;
   box-shadow: var(--shadow-glow);
-  padding: 18px;
   min-height: 0;
 }
 
-/* ─── Hero block ─────────────────────────────────────────────── */
-.hero {
+/* Each wing is a relative box; the small apex dial floats above
+   its pair of medium base dials to form an inverted-V silhouette. */
+.hud__wing {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 4px 0 2px;
+}
+.hud__wing--left  { justify-self: end;   }  /* hug the centre orb */
+.hud__wing--right { justify-self: start; }
+
+.wing__apex {
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+.wing__base {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  justify-content: center;
 }
 
-/* Albedo logo with two concentric pulsing rings around it */
+/* HUD centre — Albedo orb + state badge stacked vertically. */
+.hud__centre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 12px;
+}
+
+/* ============================================================
+   Chat panel — full-width box at the bottom of the main column.
+   Holds the scrolling chat feed + the CMD input row.
+   ============================================================ */
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--c-bg-panel-2);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow-glow);
+  padding: 16px;
+  min-height: 0;
+}
+
+/* ============================================================
+   Albedo orb — centred in the HUD strip
+   ============================================================ */
 .hero__orb {
   position: relative;
-  width: 132px;
-  height: 132px;
+  width: 124px;
+  height: 124px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .hero__logo {
-  width: 96px;
-  height: 96px;
+  width: 92px;
+  height: 92px;
   border-radius: 50%;
   object-fit: cover;
   filter:
@@ -258,18 +266,6 @@ body::before {
   to   { transform: rotate(360deg); }
 }
 
-.hero__brand {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  letter-spacing: 0.22em;
-  font-weight: 700;
-  font-size: 14px;
-}
-.hero__brand-name { color: var(--c-cyan); }
-.hero__brand-sep  { color: var(--c-text-dim); }
-.hero__brand-sub  { color: var(--c-text); }
-
 .hero__state {
   margin-top: 2px;
   padding: 3px 14px;
@@ -290,15 +286,22 @@ body::before {
   50%     { box-shadow: 0 0 14px currentColor; }
 }
 
-/* ─── Neural-links grid ──────────────────────────────────────── */
+/* ============================================================
+   Neural-links horizontal status bar
+   Full-width panel between the HUD and the chat.
+   Cells flow left-to-right, wrap to a second row on narrow windows.
+   ============================================================ */
 .links {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px 10px;
-  background: var(--c-bg);
+  gap: 8px;
+  padding: 10px 14px 12px;
+  background: var(--c-bg-panel);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--c-border);
   border-radius: 8px;
+  box-shadow: var(--shadow-glow);
 }
 .links__header {
   display: flex;
@@ -309,21 +312,26 @@ body::before {
 .links__title  { color: var(--c-cyan); font-weight: 700; }
 .links__status { color: var(--c-green); font-weight: 700; }
 
-.links__grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 12px;
+.links__strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 6px 20px;
 }
 .link {
-  display: grid;
-  grid-template-columns: 12px 80px 1fr;
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 6px;
+  padding: 4px 10px;
   font-size: 11px;
   letter-spacing: 0.1em;
   border-radius: 3px;
+  background: rgba(0, 245, 255, 0.04);
+  border: 1px solid transparent;
+  white-space: nowrap;
 }
+.link:hover { border-color: var(--c-border); }
 .link__dot {
   width: 9px;
   height: 9px;

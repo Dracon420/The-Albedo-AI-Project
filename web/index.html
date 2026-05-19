@@ -40,83 +40,101 @@
     <button class="drawer__toggle" id="drawerToggle" aria-label="Open tactical drawer">≡</button>
   </header>
 
-  <!-- ── Main grid: left wing, chat, right wing ──────────────────────── -->
-  <main class="grid">
-    <!-- LEFT WING  —  triangular cluster: small NET offset above CPU + RAM pair -->
-    <aside class="wing wing--left">
-      <!-- Apex: small Network dial floats above the centre line of the pair -->
-      <svg class="gauge gauge--small wing__apex" viewBox="0 0 120 120" data-gauge="net">
-        <circle class="gauge__bg"    cx="60" cy="60" r="48" />
-        <circle class="gauge__fill"  cx="60" cy="60" r="48" />
-        <text class="gauge__value" x="60" y="56" text-anchor="middle" data-value="net">0</text>
-        <text class="gauge__unit"  x="60" y="74" text-anchor="middle">Mbps</text>
-        <text class="gauge__label" x="60" y="108" text-anchor="middle">NETWORK</text>
-      </svg>
-      <!-- Base: two large dials side-by-side -->
-      <div class="wing__base">
-        <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="cpu">
-          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
-          <circle class="gauge__fill" cx="100" cy="100" r="82" />
-          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="cpu">0</text>
-          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  CPU</text>
-          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="cpu_freq">-- GHz</text>
+  <!-- ── Main: full-width vertical stack ───────────────────────────── -->
+  <!--   1) HUD strip (gauges + central orb)                          -->
+  <!--   2) Neural-links horizontal status bar                        -->
+  <!--   3) Chat panel (full width)                                   -->
+  <main class="main">
+    <!-- ── HUD strip: left triangle + central orb + right triangle ─── -->
+    <section class="hud">
+      <!-- LEFT triangle: small NET above CPU+RAM pair -->
+      <div class="hud__wing hud__wing--left">
+        <svg class="gauge gauge--small wing__apex" viewBox="0 0 120 120" data-gauge="net">
+          <circle class="gauge__bg"    cx="60" cy="60" r="48" />
+          <circle class="gauge__fill"  cx="60" cy="60" r="48" />
+          <text class="gauge__value" x="60" y="56" text-anchor="middle" data-value="net">0</text>
+          <text class="gauge__unit"  x="60" y="74" text-anchor="middle">Mbps</text>
+          <text class="gauge__label" x="60" y="108" text-anchor="middle">NETWORK</text>
         </svg>
-        <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="ram">
-          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
-          <circle class="gauge__fill" cx="100" cy="100" r="82" />
-          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="ram">0</text>
-          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  RAM</text>
-          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="ram_gb">-- / -- GB</text>
-        </svg>
+        <div class="wing__base">
+          <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="cpu">
+            <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+            <circle class="gauge__fill" cx="100" cy="100" r="82" />
+            <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="cpu">0</text>
+            <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  CPU</text>
+            <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="cpu_freq">-- GHz</text>
+          </svg>
+          <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="ram">
+            <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+            <circle class="gauge__fill" cx="100" cy="100" r="82" />
+            <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="ram">0</text>
+            <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  RAM</text>
+            <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="ram_gb">-- / -- GB</text>
+          </svg>
+        </div>
       </div>
-    </aside>
 
-    <!-- CENTRE  —  hero (logo + state), neural links HUD, chat, input -->
-    <section class="centre">
-      <!-- Hero: Albedo logo + brand + state indicator -->
-      <div class="hero">
+      <!-- CENTRE: Albedo orb + state badge -->
+      <div class="hud__centre">
         <div class="hero__orb">
           <img src="static/backgrounds/albedo_logo.png" alt="Albedo" class="hero__logo" />
           <div class="hero__ring hero__ring--outer"></div>
           <div class="hero__ring hero__ring--inner"></div>
         </div>
-        <div class="hero__brand">
-          <span class="hero__brand-name">ALBEDO</span>
-          <span class="hero__brand-sep">//</span>
-          <span class="hero__brand-sub">MISSION CONTROL</span>
-        </div>
         <div class="hero__state" id="appState" data-state="STANDBY">STANDBY</div>
       </div>
 
-      <!-- Neural-links status grid (polled from eel.get_neural_links) -->
-      <div class="links">
-        <div class="links__header">
-          <span class="links__title">[ NEURAL LINKS ]</span>
-          <span class="links__status" id="linksStatus">// SYNCED</span>
-        </div>
-        <div class="links__grid" id="linksGrid">
-          <!-- Cells injected by neural.js. Each cell:
-               <div class="link" data-link="GEMINI">
-                 <span class="link__dot" data-status="ready"></span>
-                 <span class="link__name">GEMINI</span>
-                 <span class="link__label">READY</span>
-               </div>
-          -->
+      <!-- RIGHT triangle: small DISK I/O above GPU+SSD pair -->
+      <div class="hud__wing hud__wing--right">
+        <svg class="gauge gauge--small wing__apex" viewBox="0 0 120 120" data-gauge="disk_io">
+          <circle class="gauge__bg"   cx="60" cy="60" r="48" />
+          <circle class="gauge__fill" cx="60" cy="60" r="48" />
+          <text class="gauge__value" x="60" y="56" text-anchor="middle" data-value="disk_io">0</text>
+          <text class="gauge__unit"  x="60" y="74" text-anchor="middle">MB/s</text>
+          <text class="gauge__label" x="60" y="108" text-anchor="middle">DISK I/O</text>
+        </svg>
+        <div class="wing__base">
+          <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="gpu">
+            <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+            <circle class="gauge__fill" cx="100" cy="100" r="82" />
+            <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="gpu">0</text>
+            <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  GPU</text>
+            <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="gpu_temp">-- °C</text>
+          </svg>
+          <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="ssd">
+            <circle class="gauge__bg"   cx="100" cy="100" r="82" />
+            <circle class="gauge__fill" cx="100" cy="100" r="82" />
+            <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="ssd">0</text>
+            <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  SSD C:</text>
+            <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="vram">VRAM --</text>
+          </svg>
         </div>
       </div>
+    </section>
 
+    <!-- ── Neural-links horizontal status bar ─────────────────────── -->
+    <section class="links">
+      <div class="links__header">
+        <span class="links__title">[ NEURAL LINKS ]</span>
+        <span class="links__status" id="linksStatus">// SYNCED</span>
+      </div>
+      <div class="links__strip" id="linksGrid">
+        <!-- Cells injected by neural.js — one strip, wraps to 2 rows on narrow windows -->
+      </div>
+    </section>
+
+    <!-- ── Chat panel (full width) ────────────────────────────────── -->
+    <section class="chat-panel">
       <div class="chat" id="chat">
         <div class="chat__line chat__line--system">[SYS] Albedo Mission Control online.</div>
         <div class="chat__line chat__line--system">[SYS] Type a query and press SEND. Prefix with <code>web:</code> to force a live web search.</div>
       </div>
 
-      <!-- CMD_INPUT header strip -->
       <div class="cmd-header">
         <span class="cmd-header__left">[ CMD_INPUT ]</span>
         <span class="cmd-header__right" id="inputStatus">// INPUT_READY</span>
       </div>
 
-      <!-- Input row -->
       <div class="cmd-row">
         <button id="micBtn"  class="cmd-btn cmd-btn--accent" title="MIC (Push-to-Talk in PTT mode)">MIC</button>
         <button id="scanBtn" class="cmd-btn">SCAN</button>
@@ -128,33 +146,6 @@
         <button id="wakeBtn"   class="cmd-btn">WAKE: OFF</button>
       </div>
     </section>
-
-    <!-- RIGHT WING  —  triangular cluster: small DISK I/O above GPU + SSD pair -->
-    <aside class="wing wing--right">
-      <svg class="gauge gauge--small wing__apex" viewBox="0 0 120 120" data-gauge="disk_io">
-        <circle class="gauge__bg"   cx="60" cy="60" r="48" />
-        <circle class="gauge__fill" cx="60" cy="60" r="48" />
-        <text class="gauge__value" x="60" y="56" text-anchor="middle" data-value="disk_io">0</text>
-        <text class="gauge__unit"  x="60" y="74" text-anchor="middle">MB/s</text>
-        <text class="gauge__label" x="60" y="108" text-anchor="middle">DISK I/O</text>
-      </svg>
-      <div class="wing__base">
-        <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="gpu">
-          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
-          <circle class="gauge__fill" cx="100" cy="100" r="82" />
-          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="gpu">0</text>
-          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  GPU</text>
-          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="gpu_temp">-- °C</text>
-        </svg>
-        <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="ssd">
-          <circle class="gauge__bg"   cx="100" cy="100" r="82" />
-          <circle class="gauge__fill" cx="100" cy="100" r="82" />
-          <text class="gauge__value" x="100" y="94"  text-anchor="middle" data-value="ssd">0</text>
-          <text class="gauge__unit"  x="100" y="116" text-anchor="middle">%  SSD C:</text>
-          <text class="gauge__sub"   x="100" y="138" text-anchor="middle" data-sub="vram">VRAM --</text>
-        </svg>
-      </div>
-    </aside>
   </main>
 
   <!-- ── Tactical drawer (off-canvas) ───────────────────────────────── -->
