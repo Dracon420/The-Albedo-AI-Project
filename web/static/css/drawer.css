@@ -30,7 +30,7 @@
 }
 .drawer__head h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 18px;
   color: var(--c-cyan);
   letter-spacing: 0.2em;
   font-weight: 700;
@@ -39,9 +39,9 @@
   background: transparent;
   color: var(--c-text);
   border: 1px solid var(--c-border);
-  width: 32px; height: 32px;
+  width: 36px; height: 36px;
   border-radius: 4px;
-  font-size: 18px;
+  font-size: 22px;
   cursor: pointer;
 }
 .drawer__close:hover { background: var(--c-cyan); color: #000; }
@@ -52,7 +52,7 @@
 }
 .drawer__section h3 {
   margin: 0 0 12px;
-  font-size: 11px;
+  font-size: 15px;
   letter-spacing: 0.2em;
   color: var(--c-cyan-dim);
   font-weight: 700;
@@ -60,7 +60,7 @@
 
 .drawer__readout {
   margin: 0;
-  font-size: 11px;
+  font-size: 15px;
   line-height: 1.4;
   color: var(--c-text);
   background: var(--c-bg);
@@ -93,10 +93,10 @@
   border: 1px solid var(--c-border);
   border-radius: 4px;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 14px;
   letter-spacing: 0.18em;
   font-weight: 700;
-  padding: 6px 4px;
+  padding: 8px 6px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
@@ -122,7 +122,7 @@
 .setting:last-child { margin-bottom: 0; }
 
 .setting__label {
-  font-size: 10px;
+  font-size: 14px;
   letter-spacing: 0.14em;
   color: var(--c-text-dim);
   text-transform: uppercase;
@@ -133,7 +133,7 @@
 .setting__value {
   color: var(--c-cyan);
   font-family: "Courier New", monospace;
-  font-size: 12px;
+  font-size: 16px;
   letter-spacing: 0.06em;
 }
 
@@ -142,7 +142,7 @@
   appearance: none;
   -webkit-appearance: none;
   font-family: inherit;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--c-text);
   background: var(--c-bg);
   border: 1px solid var(--c-border);

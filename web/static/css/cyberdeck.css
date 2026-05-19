@@ -40,7 +40,7 @@ html, body {
   overflow: hidden;
   color: var(--c-text);
   font-family: "Consolas", "Courier New", "Menlo", monospace;
-  font-size: 16px;             /* base bumped 14 -> 16 for readability */
+  font-size: 20px;             /* base — every UI font is +4 from prior pass */
   letter-spacing: 0.03em;
 }
 
@@ -81,10 +81,10 @@ body::before {
   -webkit-backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--c-border);
 }
-.topbar__title { display: flex; align-items: center; gap: 10px; }
-.topbar__brand { font-size: 22px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; }
-.topbar__sep   { font-size: 16px; color: var(--c-text-dim); }
-.topbar__sub   { font-size: 16px; color: var(--c-text); letter-spacing: 0.18em; }
+.topbar__title { display: flex; align-items: center; gap: 12px; }
+.topbar__brand { font-size: 26px; font-weight: 700; color: var(--c-cyan); letter-spacing: 0.18em; }
+.topbar__sep   { font-size: 20px; color: var(--c-text-dim); }
+.topbar__sub   { font-size: 20px; color: var(--c-text); letter-spacing: 0.18em; }
 
 .drawer__toggle {
   background: var(--c-bg-panel);
@@ -116,7 +116,7 @@ body::before {
   background: var(--c-bg-panel);
   border: 1px solid var(--c-border);
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 700;
   letter-spacing: 0.14em;
   color: var(--c-text-dim);
@@ -216,14 +216,14 @@ body::before {
    their apex dials, CPU / RAM / GPU / SSD sit BELOW their base dials. */
 .dial__caption {
   font-family: "Courier New", monospace;
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: 0.22em;
   color: var(--c-cyan);
   text-shadow: 0 0 8px rgba(0, 245, 255, 0.45);
 }
 .dial__caption--top {
-  font-size: 14px;             /* apex labels slightly smaller */
+  font-size: 18px;             /* apex labels slightly smaller */
   letter-spacing: 0.26em;
   color: var(--c-cyan);
 }
@@ -308,12 +308,12 @@ body::before {
 
 .hero__state {
   margin-top: 4px;
-  padding: 5px 20px;
-  font-size: 15px;
+  padding: 6px 24px;
+  font-size: 19px;
   font-weight: 700;
   letter-spacing: 0.28em;
   border: 1px solid var(--c-cyan-dim);
-  border-radius: 14px;
+  border-radius: 16px;
   color: var(--c-cyan);
   background: rgba(0, 245, 255, 0.06);
 }
@@ -346,7 +346,7 @@ body::before {
 .links__header {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: 17px;
   letter-spacing: 0.18em;
 }
 .links__title  { color: var(--c-cyan); font-weight: 700; }
@@ -364,7 +364,7 @@ body::before {
   align-items: center;
   gap: 10px;
   padding: 6px 14px;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.1em;
   border-radius: 4px;
@@ -398,7 +398,7 @@ body::before {
   color: var(--c-text);
   text-align: right;
   font-family: "Courier New", monospace;
-  font-size: 12px;
+  font-size: 16px;
   letter-spacing: 0.06em;
 }
 .chat {
@@ -406,8 +406,8 @@ body::before {
   overflow-y: auto;
   overflow-x: hidden;
   padding: 8px 4px;
-  font-size: 16px;
-  line-height: 1.55;
+  font-size: 20px;
+  line-height: 1.5;
   color: var(--c-text);
 }
 .chat__line { margin-bottom: 8px; }
@@ -431,7 +431,7 @@ body::before {
 .cmd-header {
   display: flex;
   justify-content: space-between;
-  font-size: 13px;
+  font-size: 17px;
   letter-spacing: 0.14em;
   padding: 0 2px;
 }
@@ -452,10 +452,10 @@ body::before {
 .cmd-row #queryInput {
   flex: 1;
   min-width: 200px;
-  height: 46px;
-  padding: 0 14px;
+  height: 52px;
+  padding: 0 16px;
   font-family: inherit;
-  font-size: 16px;
+  font-size: 20px;
   color: var(--c-text);
   background: var(--c-bg);
   border: 1px solid var(--c-cyan-dim);
@@ -471,11 +471,11 @@ body::before {
   color: var(--c-text);
   border: 1px solid var(--c-cyan-dim);
   font-family: inherit;
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 700;
   letter-spacing: 0.12em;
-  height: 46px;
-  padding: 0 16px;
+  height: 52px;
+  padding: 0 18px;
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;

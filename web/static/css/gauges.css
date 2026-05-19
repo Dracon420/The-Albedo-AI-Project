@@ -61,33 +61,33 @@
 .gauge__value {
   font-family: "Courier New", monospace;
   font-weight: 700;
-  font-size: 42px;
+  font-size: 46px;
   fill: var(--c-text);
 }
-.gauge--medium .gauge__value { font-size: 40px; }
-.gauge--small  .gauge__value { font-size: 30px; }
+.gauge--medium .gauge__value { font-size: 44px; }
+.gauge--small  .gauge__value { font-size: 34px; }
 
 .gauge__unit {
-  font-size: 18px;
+  font-size: 22px;
   letter-spacing: 0.14em;
   fill: var(--c-text-dim);
   text-transform: uppercase;
   font-weight: 700;
 }
-.gauge--medium .gauge__unit { font-size: 17px; }
-.gauge--small  .gauge__unit { font-size: 14px; }
+.gauge--medium .gauge__unit { font-size: 21px; }
+.gauge--small  .gauge__unit { font-size: 18px; }
 
 .gauge__sub {
-  font-size: 16px;
+  font-size: 20px;
   fill: var(--c-cyan-dim);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   font-weight: 700;
 }
-.gauge--medium .gauge__sub { font-size: 15px; }
+.gauge--medium .gauge__sub { font-size: 19px; }
 
 .gauge__label {
-  font-size: 18px;
+  font-size: 22px;
   letter-spacing: 0.18em;
   fill: var(--c-cyan);
   font-weight: 700;
