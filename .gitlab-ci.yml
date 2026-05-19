@@ -4,14 +4,21 @@ stages:
 
 variables:
   OUTPUT_DIR: "installer_output"
+  INNO_SETUP_INSTALLER: "https://files.jrsoftware.org/is/6/innosetup-6.2.2.exe"
 
 build-installer:
   stage: build
-  image: tobix/innosetup:latest
+  image: scottyhardy/docker-wine:latest
   script:
     - mkdir -p $OUTPUT_DIR
-    - wine /opt/innosetup/ISCC.exe /O$OUTPUT_DIR albedo.iss
-    - echo "Build complete! Files in $OUTPUT_DIR:"
+    - echo "Downloading Inno Setup..."
+    - curl -L -o /tmp/innosetup.exe "$INNO_SETUP_INSTALLER"
+    - echo "Installing Inno Setup silently..."
+    - wine /tmp/innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+    - sleep 10
+    - echo "Compiling albedo.iss..."
+    - wine "$HOME/.wine/drive_c/Program Files (x86)/Inno Setup 6/ISCC.exe" /O$OUTPUT_DIR albedo.iss
+    - echo "Build complete!"
     - ls -la $OUTPUT_DIR/
   artifacts:
     paths:
