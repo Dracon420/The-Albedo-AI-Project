@@ -7,6 +7,7 @@ variables:
   WINEDEBUG: "-all"
   DEBIAN_FRONTEND: "noninteractive"
   WINEPREFIX: "/root/.wine"
+  DISPLAY: ":99"
 
 build-installer:
   stage: build
@@ -14,14 +15,16 @@ build-installer:
   before_script:
     - dpkg --add-architecture i386
     - apt-get update -y
-    - apt-get install -y wine wine32 wine64 wget ca-certificates
+    - apt-get install -y wine wine32 wine64 wget ca-certificates xvfb
+    - Xvfb :99 -screen 0 1024x768x24 &
+    - sleep 2
     - wineboot --init
     - sleep 5
-    # Download Inno Setup from a reliable mirror
     - wget -q -O /tmp/innosetup.exe "https://github.com/jrsoftware/issrc/releases/download/is-6_2_2/innosetup-6.2.2.exe"
     - ls -lh /tmp/innosetup.exe
     - wine /tmp/innosetup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
     - sleep 15
+    - ls "$WINEPREFIX/drive_c/Program Files (x86)/Inno Setup 6/"
   script:
     - mkdir -p $OUTPUT_DIR
     - wine "$WINEPREFIX/drive_c/Program Files (x86)/Inno Setup 6/ISCC.exe" /O$OUTPUT_DIR albedo.iss
