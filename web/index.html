@@ -53,11 +53,11 @@
         <div class="dial dial--apex wing__apex">
           <div class="dial__caption dial__caption--top">NETWORK</div>
           <svg class="gauge gauge--small" viewBox="0 0 120 120" data-gauge="net">
-            <circle class="gauge__bg"    cx="60" cy="60" r="48" />
-            <circle class="gauge__fill"  cx="60" cy="60" r="48" />
-            <text class="gauge__value" x="60" y="64" text-anchor="middle" data-value="net">0</text>
-            <text class="gauge__unit"  x="60" y="84" text-anchor="middle">Mbps</text>
+            <circle class="gauge__bg"   cx="60" cy="60" r="48" />
+            <circle class="gauge__fill" cx="60" cy="60" r="48" />
+            <text class="gauge__value" x="60" y="70" text-anchor="middle" dominant-baseline="middle" data-value="net">0</text>
           </svg>
+          <div class="dial__sub" data-sub="net_breakdown">↓-- ↑-- Mbps</div>
         </div>
         <!-- Base pair with captions BELOW each dial -->
         <div class="wing__base">
@@ -65,21 +65,19 @@
             <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="cpu">
               <circle class="gauge__bg"   cx="100" cy="100" r="82" />
               <circle class="gauge__fill" cx="100" cy="100" r="82" />
-              <text class="gauge__value" x="100" y="100" text-anchor="middle" data-value="cpu">0</text>
-              <text class="gauge__unit"  x="100" y="122" text-anchor="middle">%</text>
-              <text class="gauge__sub"   x="100" y="148" text-anchor="middle" data-sub="cpu_freq">-- GHz</text>
+              <text class="gauge__value" x="100" y="110" text-anchor="middle" dominant-baseline="middle" data-value="cpu">0%</text>
             </svg>
             <div class="dial__caption">CPU</div>
+            <div class="dial__sub" data-sub="cpu_freq">-- GHz</div>
           </div>
           <div class="dial">
             <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="ram">
               <circle class="gauge__bg"   cx="100" cy="100" r="82" />
               <circle class="gauge__fill" cx="100" cy="100" r="82" />
-              <text class="gauge__value" x="100" y="100" text-anchor="middle" data-value="ram">0</text>
-              <text class="gauge__unit"  x="100" y="122" text-anchor="middle">%</text>
-              <text class="gauge__sub"   x="100" y="148" text-anchor="middle" data-sub="ram_gb">-- / -- GB</text>
+              <text class="gauge__value" x="100" y="110" text-anchor="middle" dominant-baseline="middle" data-value="ram">0%</text>
             </svg>
             <div class="dial__caption">RAM</div>
+            <div class="dial__sub" data-sub="ram_gb">-- / -- GB</div>
           </div>
         </div>
       </div>
@@ -101,30 +99,28 @@
           <svg class="gauge gauge--small" viewBox="0 0 120 120" data-gauge="disk_io">
             <circle class="gauge__bg"   cx="60" cy="60" r="48" />
             <circle class="gauge__fill" cx="60" cy="60" r="48" />
-            <text class="gauge__value" x="60" y="64" text-anchor="middle" data-value="disk_io">0</text>
-            <text class="gauge__unit"  x="60" y="84" text-anchor="middle">MB/s</text>
+            <text class="gauge__value" x="60" y="70" text-anchor="middle" dominant-baseline="middle" data-value="disk_io">0</text>
           </svg>
+          <div class="dial__sub" data-sub="disk_breakdown">R -- / W -- MB/s</div>
         </div>
         <div class="wing__base">
           <div class="dial">
             <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="gpu">
               <circle class="gauge__bg"   cx="100" cy="100" r="82" />
               <circle class="gauge__fill" cx="100" cy="100" r="82" />
-              <text class="gauge__value" x="100" y="100" text-anchor="middle" data-value="gpu">0</text>
-              <text class="gauge__unit"  x="100" y="122" text-anchor="middle">%</text>
-              <text class="gauge__sub"   x="100" y="148" text-anchor="middle" data-sub="gpu_temp">-- °C</text>
+              <text class="gauge__value" x="100" y="110" text-anchor="middle" dominant-baseline="middle" data-value="gpu">0%</text>
             </svg>
             <div class="dial__caption">GPU</div>
+            <div class="dial__sub" data-sub="gpu_temp">-- °C</div>
           </div>
           <div class="dial">
             <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="ssd">
               <circle class="gauge__bg"   cx="100" cy="100" r="82" />
               <circle class="gauge__fill" cx="100" cy="100" r="82" />
-              <text class="gauge__value" x="100" y="100" text-anchor="middle" data-value="ssd">0</text>
-              <text class="gauge__unit"  x="100" y="122" text-anchor="middle">%</text>
-              <text class="gauge__sub"   x="100" y="148" text-anchor="middle" data-sub="vram">VRAM --</text>
+              <text class="gauge__value" x="100" y="110" text-anchor="middle" dominant-baseline="middle" data-value="ssd">0%</text>
             </svg>
             <div class="dial__caption">SSD</div>
+            <div class="dial__sub" data-sub="vram">VRAM -- / -- MB</div>
           </div>
         </div>
       </div>
@@ -232,9 +228,9 @@
         </div>
       </section>
 
-      <!-- MEMORY: Obsidian vault index + REM dream consolidation -->
+      <!-- MEMORY: Obsidian vault index + autonomous dream cycle -->
       <section class="drawer__section">
-        <h3>MEMORY / DREAM</h3>
+        <h3>MEMORY</h3>
         <div class="setting">
           <button class="drawer__action" id="indexVaultBtn">
             REBUILD OBSIDIAN INDEX
@@ -243,16 +239,24 @@
             Re-scans OBSIDIAN_VAULT_PATH and rebuilds the ChromaDB RAG index.
           </div>
         </div>
-        <div class="setting">
-          <button class="drawer__action drawer__action--accent" id="dreamCycleBtn">
-            INITIATE REM CYCLE
-          </button>
-          <div class="setting__hint">
-            Consolidates today's interaction traces and appends a dream-insight
-            note to the Obsidian vault. Takes 30–90 seconds.
-          </div>
-        </div>
         <pre class="drawer__readout drawer__readout--small" id="memoryStatus">// memory subsystem idle</pre>
+      </section>
+
+      <section class="drawer__section">
+        <h3>DREAM CYCLE</h3>
+        <div class="setting__hint" style="margin-bottom:10px">
+          Albedo automatically enters her dream cycle after
+          <strong id="idleThresholdLabel">20</strong> minutes of inactivity —
+          organizing files, cataloging your system, and consolidating memory.
+          Activity detection is automatic; no action required.
+        </div>
+        <pre class="drawer__readout drawer__readout--small" id="dreamStatus">// dream: watching for idle</pre>
+        <div class="setting" style="margin-top:10px">
+          <button class="drawer__action drawer__action--accent" id="dreamForceBtn">
+            FORCE DREAM NOW
+          </button>
+          <div class="setting__hint">Manually trigger a dream cycle for testing.</div>
+        </div>
       </section>
     </div>
 

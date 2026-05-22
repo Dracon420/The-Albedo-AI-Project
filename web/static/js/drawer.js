@@ -38,6 +38,31 @@ const Drawer = (() => {
     return rows.join("\n") || "(empty)";
   }
 
+  // ── Dream status helpers ──────────────────────────────────────────────────
+  let _dreamEl = null;
+
+  function _setDreamText(text) {
+    if (!_dreamEl) _dreamEl = document.getElementById("dreamStatus");
+    if (_dreamEl) _dreamEl.textContent = text;
+  }
+
+  // Eel push from Python (called by _dream_status_push in bridge.py)
+  window._albedo_dream_push = function (label) {
+    _setDreamText(label);
+  };
+
+  async function _refreshDreamState() {
+    try {
+      const r = await eel.get_dream_state()();
+      if (!r || !r.ok) return;
+      let text = `// dream: ${(r.state || "idle").toLowerCase()}`;
+      if (r.report && r.report.summary) {
+        text += `\n// last: ${r.report.summary}`;
+      }
+      _setDreamText(text);
+    } catch { /* ignore */ }
+  }
+
   async function _populate() {
     if (_populated) return;
     _populated = true;
@@ -56,6 +81,19 @@ const Drawer = (() => {
       document.getElementById("resourceReadout").textContent =
         rm.ok ? _renderResources(rm.data) : "(error)";
     } catch { /* ignore */ }
+    // Populate dream state on first open
+    _refreshDreamState();
+
+    // Populate idle threshold label from backend config
+    try {
+      const cfg = await eel.get_config_values(["IDLE_THRESHOLD_MINUTES"])();
+      if (cfg && cfg.ok && cfg.data) {
+        const el = document.getElementById("idleThresholdLabel");
+        if (el && cfg.data["IDLE_THRESHOLD_MINUTES"] != null) {
+          el.textContent = cfg.data["IDLE_THRESHOLD_MINUTES"];
+        }
+      }
+    } catch { /* ignore — defaults to 20 shown in HTML */ }
   }
 
   function open() {
@@ -115,6 +153,43 @@ const Drawer = (() => {
     try { stored = localStorage.getItem("albedo-bg"); } catch { /* ignore */ }
     if (stored) _setBackground(stored);
     else        _setBackground(document.body.getAttribute("data-background") || "bg2");
+
+    // ── Dream cycle force button ──────────────────────────────────────────
+    const dreamForceBtn = document.getElementById("dreamForceBtn");
+    if (dreamForceBtn) {
+      dreamForceBtn.addEventListener("click", async () => {
+        dreamForceBtn.disabled = true;
+        dreamForceBtn.textContent = "INITIATING…";
+        _setDreamText("// dream: initiating...");
+        try {
+          const r = await eel.force_dream_cycle()();
+          if (r && r.ok) {
+            _setDreamText("// dream: dreaming — phase 1/3 (organizing files)");
+          } else {
+            _setDreamText(`// dream: ${r ? r.error : "bridge error"}`);
+            dreamForceBtn.disabled = false;
+            dreamForceBtn.textContent = "FORCE DREAM NOW";
+          }
+        } catch (e) {
+          _setDreamText(`// dream: error — ${e}`);
+          dreamForceBtn.disabled = false;
+          dreamForceBtn.textContent = "FORCE DREAM NOW";
+        }
+      });
+
+      // Re-enable the button whenever the dream cycle returns to IDLE/COOLDOWN
+      const _watchDream = setInterval(async () => {
+        if (!dreamForceBtn.disabled) return;
+        try {
+          const r = await eel.get_dream_state()();
+          if (r && r.ok && r.state !== "DREAMING") {
+            dreamForceBtn.disabled = false;
+            dreamForceBtn.textContent = "FORCE DREAM NOW";
+            clearInterval(_watchDream);
+          }
+        } catch { /* ignore */ }
+      }, 5000);
+    }
 
     // Keyboard: Escape closes the drawer
     document.addEventListener("keydown", (ev) => {

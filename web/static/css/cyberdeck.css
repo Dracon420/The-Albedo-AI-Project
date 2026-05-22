@@ -8,11 +8,11 @@
 :root {
   /* Palette — bright neon, alpha lowered so background image punches through */
   --c-bg:           #050a0e;
-  /* Panels: was 0.62 / 0.78 — now far more see-through */
-  --c-bg-panel:     rgba(6, 14, 22, 0.30);
-  --c-bg-panel-2:   rgba(8, 18, 28, 0.42);
-  --c-border:       rgba(208, 0, 255, 0.30);
-  --c-border-bright:rgba(208, 0, 255, 0.7);
+  /* Panels: enough opacity that text always reads cleanly over the background */
+  --c-bg-panel:     rgba(6, 14, 22, 0.55);
+  --c-bg-panel-2:   rgba(8, 18, 28, 0.68);
+  --c-border:       rgba(208, 0, 255, 0.50);
+  --c-border-bright:rgba(208, 0, 255, 0.85);
   /* Text: bright neon. Primary is near-white with magenta cast; "dim"
      is now a punchy neon magenta-grey so every text element glows. */
   --c-text:         #f8e8ff;
@@ -22,7 +22,7 @@
      variable is still named --c-cyan throughout the codebase to avoid
      a hundred-edit rename; its value is purple. */
   --c-cyan:         #d000ff;       /* primary accent (vivid neon purple) */
-  --c-cyan-dim:     #7d00b5;       /* dim variant of the primary purple */
+  --c-cyan-dim:     #b800f0;       /* dim variant — kept bright so labels stay readable */
   --c-green:        #39ff14;
   --c-orange:       #ffae00;
   --c-red:          #ff2a6d;
@@ -235,21 +235,23 @@ body::before {
    their apex dials, CPU / RAM / GPU / SSD sit BELOW their base dials. */
 .dial__caption {
   font-family: "Courier New", monospace;
-  font-size: 20px;
+  font-size: 26px;
   font-weight: 700;
   letter-spacing: 0.22em;
-  color: var(--c-cyan);
+  color: #ffffff;
   text-shadow:
-    0 0 6px var(--c-cyan),
-    0 0 16px rgba(208, 0, 255, 0.55);
+    0 0 8px var(--c-cyan),
+    0 0 20px rgba(208, 0, 255, 0.75),
+    0 0 40px rgba(208, 0, 255, 0.35);
 }
 .dial__caption--top {
-  font-size: 18px;
+  font-size: 22px;
   letter-spacing: 0.26em;
-  color: var(--c-cyan);
+  color: #ffffff;
   text-shadow:
-    0 0 6px var(--c-cyan),
-    0 0 14px rgba(208, 0, 255, 0.55);
+    0 0 8px var(--c-cyan),
+    0 0 18px rgba(208, 0, 255, 0.75),
+    0 0 36px rgba(208, 0, 255, 0.35);
 }
 
 /* HUD centre — Albedo orb + state badge stacked vertically.

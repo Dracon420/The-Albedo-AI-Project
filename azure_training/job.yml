@@ -1,0 +1,39 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+
+type: command
+display_name: albedo-lora-finetune
+experiment_name: albedo-training
+
+# GPU compute cluster created by setup.ps1
+compute: azureml:albedo-gpu
+
+# Training script
+command: >-
+  python train.py
+  --data_file ${{inputs.dataset}}
+
+inputs:
+  dataset:
+    type: uri_file
+    path: azureml:albedo-dataset@latest
+
+outputs:
+  trained_model:
+    type: uri_folder
+    path: azureml://datastores/workspaceblobstore/paths/albedo-outputs/
+
+environment:
+  conda_file: environment.yml
+  image: mcr.microsoft.com/azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04
+
+environment_variables:
+  BASE_MODEL: "unsloth/llama-3.2-3b-instruct-bnb-4bit"
+  EPOCHS: "3"
+  BATCH_SIZE: "2"
+  GRAD_ACCUM: "4"
+  LR: "2e-4"
+  MAX_SEQ_LEN: "2048"
+
+resources:
+  instance_type: Standard_NC4as_T4_v3   # T4 16GB — cheapest GPU option, spot ~$0.17/hr
+  instance_count: 1

@@ -453,6 +453,9 @@ def speak_streamed(text: str, device: int | None = None,
         item = audio_q.get()
         if item is None or _stop_event.is_set():
             break
+        if not isinstance(item, tuple) or len(item) != 2:
+            # synthesis failed for this sentence — skip silently
+            continue
         audio, sr = item
         if not _stop_event.is_set():
             sd.play(_resampled(audio, sr), samplerate=AUDIO_SAMPLE_RATE,

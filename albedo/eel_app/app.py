@@ -27,15 +27,10 @@ _ROOT    = Path(__file__).resolve().parent.parent.parent
 _WEB_DIR = _ROOT / "web"
 
 
-def _half_screen_size() -> tuple[int, int]:
+def _full_screen_size() -> tuple[int, int]:
     """
-    Return (w, h) sized to occupy roughly the left or right half of the
-    primary display. Width is exactly half the screen; height is ~92%
-    of the screen so the window comfortably fits between taskbar and
-    title bar without going full-height edge-to-edge.
-
-    Falls back to a reasonable default (1140 x 900) if screen detection
-    fails for any reason.
+    Return (w, h) matching the primary display so the Eel window opens
+    maximized. Falls back to 1920 x 1080 if screen detection fails.
     """
     # Try tkinter first — stdlib, cross-platform, no extra deps.
     try:
@@ -45,7 +40,7 @@ def _half_screen_size() -> tuple[int, int]:
         sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
         root.destroy()
         if sw > 0 and sh > 0:
-            return (max(900, sw // 2), max(700, int(sh * 0.92)))
+            return (sw, sh)
     except Exception:
         pass
 
@@ -56,11 +51,11 @@ def _half_screen_size() -> tuple[int, int]:
         u.SetProcessDPIAware()
         sw, sh = u.GetSystemMetrics(0), u.GetSystemMetrics(1)
         if sw > 0 and sh > 0:
-            return (max(900, sw // 2), max(700, int(sh * 0.92)))
+            return (sw, sh)
     except Exception:
         pass
 
-    return (1140, 900)
+    return (1920, 1080)
 
 
 def is_eel_available() -> bool:
@@ -124,10 +119,27 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     eel.init(str(_WEB_DIR))
     from albedo.eel_app import bridge       # noqa: F401  — registers @eel.expose
 
+    # Start the idle monitor — fires the dream cycle after IDLE_THRESHOLD_MINUTES
+    # of no keyboard/mouse activity.
+    try:
+        from albedo import idle_monitor
+        from albedo.dream import orchestrator as _dream
+
+        def _on_idle() -> None:
+            _dream.start_dream(status_cb=bridge._dream_status_push)
+
+        def _on_return() -> None:
+            _dream.interrupt_dream()
+
+        idle_monitor.start(on_idle_callback=_on_idle, on_return_callback=_on_return)
+        print("[eel_app] Idle monitor armed.")
+    except Exception as exc:
+        print(f"[eel_app] Idle monitor failed to start: {exc}")
+
     actual_port = _free_port(port)
-    win_size = _half_screen_size()
+    win_size = _full_screen_size()
     print(f"[eel_app] Window size: {win_size[0]} x {win_size[1]} "
-          f"(half-screen auto-sized)")
+          f"(full-screen auto-sized)")
 
     # mode="chrome" gives app-mode windowing (no URL bar, no tabs).
     # Falls through to default browser if Chrome/Edge aren't on PATH.
@@ -139,6 +151,7 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
             mode=(mode if mode is not None else "chrome"),
             block=True,
             shutdown_delay=0.5,
+            cmdline_args=["--start-maximized"],
         )
     except (SystemExit, KeyboardInterrupt):
         # eel raises SystemExit when the window closes — treat as clean exit.

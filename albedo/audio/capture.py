@@ -30,6 +30,7 @@ All downstream consumers (Vosk wake word + Vosk STT) always receive
 from __future__ import annotations
 
 import threading
+from collections import deque
 import numpy as np
 import sounddevice as sd
 from albedo.config import (
@@ -133,7 +134,7 @@ class AudioStream:
     """Continuous microphone capture shared between wake word and recording modes."""
 
     def __init__(self, device: int | None = None) -> None:
-        self._queue: list[np.ndarray] = []
+        self._queue: deque[np.ndarray] = deque()
         self._lock = threading.Lock()
         self._stream: sd.InputStream | None = None
         self._device = device
@@ -273,7 +274,7 @@ class AudioStream:
 
     def read_chunk(self) -> np.ndarray | None:
         with self._lock:
-            return self._queue.pop(0) if self._queue else None
+            return self._queue.popleft() if self._queue else None
 
     def drain(self) -> None:
         with self._lock:

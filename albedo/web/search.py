@@ -3,8 +3,16 @@ from albedo.config import WEB_SEARCH_MAX_RESULTS
 
 
 def web_search(query: str, max_results: int = WEB_SEARCH_MAX_RESULTS) -> list[dict]:
-    """Return DuckDuckGo results as [{title, url, snippet}]."""
-    raw = DDGS().text(query, max_results=max_results)
+    """Return DuckDuckGo results as [{title, url, snippet}].
+
+    Returns an empty list on rate-limit, network error, or any other
+    DuckDuckGo failure rather than propagating an exception.
+    """
+    try:
+        raw = DDGS().text(query, max_results=max_results)
+    except Exception as exc:
+        print(f"[web_search] DDG error (returning empty results): {exc}")
+        return []
     return [
         {"title": r.get("title", ""), "url": r.get("href", ""), "snippet": r.get("body", "")}
         for r in (raw or [])

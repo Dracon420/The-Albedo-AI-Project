@@ -45,6 +45,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 _recognizer:   "KaldiRecognizer | None" = None
 _active_words: str = WAKE_WORDS
+_recognizer_lock = threading.Lock()
 
 
 def set_active_model(words: str) -> None:
@@ -53,11 +54,24 @@ def set_active_model(words: str) -> None:
     e.g. "cortana,jarvis" or just "cortana".  Resets the cached
     recognizer so the next wait_for_wakeword() call rebuilds it
     with the new grammar.
+
+    Normalise to bare words only (strip "hey " prefix) so the grammar
+    stays tight. The detection loop accepts any substring match, so
+    saying "hey cortana" will still fire when the grammar contains
+    "cortana".
     """
     global _recognizer, _active_words
-    if words and words != _active_words:
-        _active_words = words
-        _recognizer = None
+    # Strip optional "hey " / "ok " preamble — keep bare names in the grammar
+    def _bare(w: str) -> str:
+        for prefix in ("hey ", "ok "):
+            if w.lower().startswith(prefix):
+                return w[len(prefix):]
+        return w
+    normalised = ",".join(_bare(w.strip()) for w in words.split(",") if w.strip())
+    with _recognizer_lock:
+        if normalised and normalised != _active_words:
+            _active_words = normalised
+            _recognizer = None
 
 
 def _word_set() -> set[str]:
@@ -65,13 +79,34 @@ def _word_set() -> set[str]:
 
 
 def _get_recognizer() -> "KaldiRecognizer":
+    """
+    Build a grammar-restricted Vosk recognizer so only the configured wake
+    words are ever output. Restricted grammar mode is MUCH more sensitive
+    than full-vocabulary transcription — Vosk doesn't waste probability mass
+    on thousands of irrelevant tokens.
+
+    Each multi-word phrase (e.g. "hey cortana") is split so every individual
+    word is in the grammar, giving the recognizer flexibility to recognise
+    partial matches while the substring check in wait_for_wakeword() still
+    requires the full phrase to appear.
+    """
     global _recognizer
-    if _recognizer is None:
-        words = sorted(_word_set())
-        model = _get_model()
-        _recognizer = KaldiRecognizer(model, AUDIO_SAMPLE_RATE)
-        print(f"[wakeword] Vosk recognizer armed for: {words}")
-    return _recognizer
+    with _recognizer_lock:
+        if _recognizer is None:
+            import json as _json
+            words = sorted(_word_set())
+            # Flatten multi-word phrases into individual tokens + keep whole phrases
+            # so both "cortana" and "hey cortana" can match.
+            token_set: set[str] = set()
+            for phrase in words:
+                token_set.add(phrase)
+                token_set.update(phrase.split())
+            grammar_words = sorted(token_set) + ["[unk]"]
+            model = _get_model()
+            _recognizer = KaldiRecognizer(
+                model, AUDIO_SAMPLE_RATE, _json.dumps(grammar_words))
+            print(f"[wakeword] Vosk grammar-restricted recognizer armed for: {words}")
+        return _recognizer
 
 
 # ---------------------------------------------------------------------------

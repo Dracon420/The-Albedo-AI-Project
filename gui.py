@@ -1765,16 +1765,40 @@ class AlbedoGUI(ctk.CTk):
                 self._audio_stream = AudioStream(device=in_dev)
                 self._audio_stream.start()
             except Exception as exc:
+                msg = f"[WAKE] Microphone init failed: {exc}"
                 print(f"[gui] wake listener — audio stream init failed: {exc}")
+                self.after(0, lambda m=msg: self._log_append("error", m))
+                # Revert the arm state so the button shows WAKE: OFF again
+                self.after(0, self._revert_wake_to_disarmed)
                 return
 
         try:
             from albedo.audio import wakeword
             self._wake_stop_event = wakeword.start_background_listener(
                 self._audio_stream, callback=self._on_wake_triggered)
+            self._log_append("system",
+                "[WAKE] Background listener armed — say the wake word to activate.")
         except Exception as exc:
+            msg = (f"[WAKE] Failed to arm: {exc}  "
+                   "Ensure vosk and sounddevice are installed and a mic is connected.")
             print(f"[gui] wake listener start failed: {exc}")
+            self.after(0, lambda m=msg: self._log_append("error", m))
             self._wake_stop_event = None
+            # Revert the arm state so the button shows WAKE: OFF again
+            self.after(0, self._revert_wake_to_disarmed)
+
+    def _revert_wake_to_disarmed(self) -> None:
+        """Force WAKE button back to OFF when the listener failed to start."""
+        try:
+            from albedo.audio.comm_mode import set_wake_state, WakeState
+            set_wake_state(WakeState.DISARMED)
+        except Exception:
+            # Fallback: just repaint the button directly
+            if self._wake_btn is not None:
+                try:
+                    self._wake_btn.configure(text="WAKE: OFF", fg_color=C_BORDER)
+                except Exception:
+                    pass
 
     def _stop_wake_listener(self) -> None:
         """Tear down the background wake-word listener."""
@@ -2133,7 +2157,10 @@ class AlbedoGUI(ctk.CTk):
         except Exception as exc:
             msg = str(exc)
             self._ui(lambda: self._log_append(
-                "system", f"[SYS] Vosk pre-warm failed: {msg}"))
+                "error",
+                f"[SYS] Vosk failed to load: {msg}  "
+                "MIC and WAKE will not function. Check your internet connection "
+                "or run the Setup Wizard to re-download the model."))
 
     # ── Visual scan ────────────────────────────────────────────────────────
 

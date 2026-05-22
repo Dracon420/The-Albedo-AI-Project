@@ -62,6 +62,17 @@ def get_version() -> dict:
 
 
 @_expose
+def get_config_values(keys: list) -> dict:
+    """Return a subset of config values by key name for the UI."""
+    try:
+        from albedo import config
+        data = {k: getattr(config, k, None) for k in keys}
+        return {"ok": True, "data": data}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
 def get_hardware_profile() -> dict:
     """Cached CPU/GPU/RAM info from Phase 1 hardware_profile.json."""
     try:
@@ -174,8 +185,7 @@ def update_neural_link(name: str, status: str) -> None:
 def _is_configured_env(*keys: str) -> bool:
     """True if at least one of the given env keys is set to a non-empty value."""
     for k in keys:
-        v = os.environ.get(k, "").strip() if "os" in dir() else ""
-        if v:
+        if os.environ.get(k, "").strip():
             return True
     return False
 
@@ -252,6 +262,20 @@ def _detect_neural_links() -> dict:
             link("WAKE", "standby", "OFF", "press WAKE to arm")
     except Exception:
         link("WAKE", "off", "OFF", "module unavailable")
+
+    # --- Dream cycle ---
+    try:
+        from albedo.dream import orchestrator as _dream
+        state = _dream.get_state()
+        if state == "DREAMING":
+            link("DREAM", "active", "DREAMING", "autonomous cycle running")
+        elif state in ("COOLDOWN", "INTERRUPTED"):
+            link("DREAM", "standby", state, "")
+        else:
+            from albedo.config import IDLE_THRESHOLD_MINUTES
+            link("DREAM", "ready", "WATCHING", f"idle → {IDLE_THRESHOLD_MINUTES}m")
+    except Exception:
+        link("DREAM", "off", "OFF", "module unavailable")
 
     # --- Phase 5 webhook ---
     try:
@@ -347,10 +371,9 @@ def send_query(text: str, use_web: bool = False) -> dict:
     """
     Submit a chat query through the LLM pipeline and return the response.
 
-    This is intentionally synchronous (blocks until the LLM finishes) —
-    the JS side calls it inside an async wrapper and shows a spinner.
-    For streaming responses, the next session can swap this for a
-    coroutine that pushes chunks via eel.append_chat_chunk(...).
+    The pipeline runs on a dedicated background thread so Eel's websocket
+    thread is never blocked. The JS side calls this inside an async wrapper
+    and shows a spinner; the reply is returned when the thread finishes.
     """
     if not text or not text.strip():
         return {"ok": False, "error": "empty query"}
@@ -365,16 +388,31 @@ def send_query(text: str, use_web: bool = False) -> dict:
     if use_web:
         set_swarm_state("WEB_SCRAPER", "active")
 
-    try:
-        from albedo.pipeline import run as pipeline_run
-        reply = pipeline_run(text, use_web=use_web)
-        set_swarm_state("ALBEDO_CORE", "standby")
-        if use_web:
-            set_swarm_state("WEB_SCRAPER", "standby")
-        return {"ok": True, "reply": reply, "used_web": use_web}
-    except Exception as exc:                                        # noqa: BLE001
+    result: dict = {}
+
+    def _run() -> None:
+        try:
+            from albedo.pipeline import run as pipeline_run
+            result["reply"] = pipeline_run(text, use_web=use_web)
+            result["ok"] = True
+            set_swarm_state("ALBEDO_CORE", "standby")
+            if use_web:
+                set_swarm_state("WEB_SCRAPER", "standby")
+        except Exception as exc:                                    # noqa: BLE001
+            result["ok"] = False
+            result["error"] = f"{type(exc).__name__}: {exc}"
+            set_swarm_state("ALBEDO_CORE", "error")
+
+    t = threading.Thread(target=_run, daemon=True)
+    t.start()
+    t.join(timeout=120)
+
+    if t.is_alive():
         set_swarm_state("ALBEDO_CORE", "error")
-        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+        return {"ok": False, "error": "pipeline timeout (120 s)"}
+
+    result["used_web"] = use_web
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -458,17 +496,24 @@ def get_settings() -> dict:
 @_expose
 def set_setting(key: str, value: Any) -> dict:
     """
-    Update one settings.json field. Read-merge-write so we don't clobber
-    other keys (incl. those Tk gui or comm_mode may have set).
+    Update one settings.json field. Read-merge-write under the settings lock
+    so concurrent calls from the Eel JS layer don't corrupt each other.
     """
     if not key:
         return {"ok": False, "error": "missing key"}
     try:
-        data = _read_settings_dict()
-        data[key] = value
-        ok = _write_settings_dict(data)
-        if not ok:
-            return {"ok": False, "error": "settings file not writable"}
+        import json
+        with _settings_lock:
+            try:
+                data = json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                data = {}
+            data[key] = value
+            try:
+                _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            except OSError:
+                return {"ok": False, "error": "settings file not writable"}
         return {"ok": True, "key": key, "value": value}
     except Exception as exc:                                        # noqa: BLE001
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -515,6 +560,67 @@ def get_audio_devices() -> dict:
 # Obsidian vault + REM dream cycle (background memory consolidation)
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Dream cycle — autonomous idle-triggered, no manual button
+# ---------------------------------------------------------------------------
+
+def _dream_status_push(state: str, detail: str) -> None:
+    """
+    Called by the dream orchestrator when phase/state changes.
+    Pushes the new state to the DREAM neural link AND the #dreamStatus readout.
+    """
+    status_map = {
+        "DREAMING":     "active",
+        "COOLDOWN":     "standby",
+        "INTERRUPTED":  "standby",
+        "IDLE":         "ready",
+    }
+    update_neural_link("DREAM", status_map.get(state, "standby"))
+    # Push text to the drawer readout element
+    try:
+        label = f"// dream: {state.lower()}"
+        if detail:
+            label += f"\n// {detail}"
+        eel._albedo_dream_push(label)()  # noqa: SLF001
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@_expose
+def get_dream_state() -> dict:
+    """Current dream cycle state + last report summary."""
+    try:
+        from albedo.dream import orchestrator as _dream
+        return {
+            "ok":     True,
+            "state":  _dream.get_state(),
+            "report": _dream.get_last_report(),
+        }
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def force_dream_cycle() -> dict:
+    """
+    Manually trigger a dream cycle from the UI (debug / on-demand use).
+    Respects the interrupt flag — returns immediately if already dreaming.
+    """
+    try:
+        from albedo.dream import orchestrator as _dream
+        if _dream.get_state() == "DREAMING":
+            return {"ok": False, "error": "Dream cycle already active."}
+        threading.Thread(
+            target=_dream.start_dream,
+            kwargs={"status_cb": _dream_status_push},
+            daemon=True,
+            name="dream-manual",
+        ).start()
+        return {"ok": True, "status": "Dream cycle initiated."}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 @_expose
 def index_obsidian_vault() -> dict:
     """
@@ -524,8 +630,12 @@ def index_obsidian_vault() -> dict:
     (e.g. "Indexed 42 documents across 7 folders.").
     """
     try:
-        from memory import index_obsidian_vault as _idx
-        status = _idx()
+        import sys, importlib
+        _root = str(Path(__file__).resolve().parent.parent.parent)
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        _mem = importlib.import_module("memory")
+        status = _mem.index_obsidian_vault()
         return {"ok": True, "status": str(status)}
     except Exception as exc:                                        # noqa: BLE001
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
@@ -543,8 +653,12 @@ def initiate_dream_cycle() -> dict:
     "Dream complete: 12 traces consolidated" toast.
     """
     try:
-        from operative_dream import initiate_rem_cycle
-        status = initiate_rem_cycle()
+        import sys, importlib
+        _root = str(Path(__file__).resolve().parent.parent.parent)
+        if _root not in sys.path:
+            sys.path.insert(0, _root)
+        _dream = importlib.import_module("operative_dream")
+        status = _dream.initiate_rem_cycle()
         return {"ok": True, "status": str(status) if status else "Dream cycle complete."}
     except Exception as exc:                                        # noqa: BLE001
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}

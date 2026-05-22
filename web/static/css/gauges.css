@@ -69,24 +69,27 @@
 .gauge--medium .gauge__value { font-size: 44px; }
 .gauge--small  .gauge__value { font-size: 34px; }
 
-.gauge__unit {
-  font-size: 22px;
-  letter-spacing: 0.14em;
-  fill: var(--c-text-dim);
-  text-transform: uppercase;
+/* Secondary readout — HTML element sitting below the SVG ring, not inside it.
+   This avoids crowding text inside the circle and allows natural line-wrap. */
+.dial__sub {
+  font-family: "Courier New", monospace;
+  font-size: 15px;
   font-weight: 700;
+  color: #e8b4ff;
+  letter-spacing: 0.10em;
+  text-shadow:
+    0 0 6px rgba(208, 0, 255, 0.90),
+    0 0 16px rgba(208, 0, 255, 0.55);
+  text-align: center;
+  margin-top: 4px;
+  white-space: nowrap;
 }
-.gauge--medium .gauge__unit { font-size: 21px; }
-.gauge--small  .gauge__unit { font-size: 18px; }
 
-.gauge__sub {
-  font-size: 20px;
-  fill: var(--c-cyan-dim);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  font-weight: 700;
+/* Apex dials sit above a pair of base dials with no vertical gap — hide
+   sub-text there to avoid it being crushed between the stacked rings. */
+.dial--apex .dial__sub {
+  display: none;
 }
-.gauge--medium .gauge__sub { font-size: 19px; }
 
 .gauge__label {
   font-size: 22px;

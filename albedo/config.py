@@ -41,6 +41,11 @@ WAKE_WORDS = os.getenv("WAKE_WORDS", "cortana,jarvis")
 AUDIO_SAMPLE_RATE = 16000   # Hz — required by Vosk
 AUDIO_CHUNK_MS    = 80      # ms per audio inference frame (1280 samples)
 
+# --- Idle / Dream cycle ---
+IDLE_THRESHOLD_MINUTES = int(os.getenv("IDLE_THRESHOLD_MINUTES", "20"))
+IDLE_POLL_INTERVAL_S   = int(os.getenv("IDLE_POLL_INTERVAL_S",   "30"))
+IDLE_COOLDOWN_MINUTES  = int(os.getenv("IDLE_COOLDOWN_MINUTES",  "120"))
+
 VAD_SILENCE_THRESHOLD  = float(os.getenv("VAD_SILENCE_THRESHOLD",  "0.01"))
 VAD_SILENCE_DURATION   = float(os.getenv("VAD_SILENCE_DURATION",   "1.2"))
 VAD_MAX_RECORD_SECONDS = int(os.getenv("VAD_MAX_RECORD_SECONDS",   "30"))

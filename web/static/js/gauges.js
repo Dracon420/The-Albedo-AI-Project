@@ -5,7 +5,10 @@
 //   - one .gauge__bg          background track
 //   - one .gauge__fill        the ring whose stroke-dashoffset we animate
 //   - one text[data-value]    the numeric reading at the centre
-//   - optionally text[data-sub]  small secondary readout below the value
+//
+// Secondary readouts (sub-text) live in a sibling HTML element outside the
+// SVG: <div class="dial__sub" data-sub="key"> — this keeps SVG uncluttered
+// and allows standard CSS text wrapping + legibility.
 //
 // The ring circumference is hard-coded per size class:
 //   large (r=82): 2 * π * 82 ≈ 515.22
@@ -58,7 +61,9 @@ const Gauges = (() => {
         : Math.round(pct);
     }
 
-    const subEl = svg.querySelector("text[data-sub]");
+    // Sub-text lives in an HTML sibling element outside the SVG
+    const dial = svg.closest(".dial");
+    const subEl = dial ? dial.querySelector("[data-sub]") : null;
     if (subEl && (subText !== undefined && subText !== null)) {
       subEl.textContent = subText;
     }
@@ -69,9 +74,11 @@ const Gauges = (() => {
     const svg = document.querySelector(`svg.gauge[data-gauge="${key}"]`);
     if (!svg) return;
     const v = svg.querySelector("text[data-value]");
-    const s = svg.querySelector("text[data-sub]");
     if (v && valueText !== undefined) v.textContent = valueText;
-    if (s && subText   !== undefined) s.textContent = subText;
+    // Sub-text lives in an HTML sibling element outside the SVG
+    const dial = svg.closest(".dial");
+    const s = dial ? dial.querySelector("[data-sub]") : null;
+    if (s && subText !== undefined) s.textContent = subText;
   }
 
   return { update, setText };

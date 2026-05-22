@@ -1,0 +1,22 @@
+name: albedo-train
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pytorch>=2.1
+  - pytorch-cuda=12.1
+  - pip
+  - pip:
+    - unsloth[colab-new]
+    - trl>=0.8
+    - transformers>=4.40
+    - datasets>=2.18
+    - accelerate>=0.28
+    - bitsandbytes>=0.43
+    - peft>=0.10
+    - sentencepiece
+    - protobuf
+    - huggingface_hub

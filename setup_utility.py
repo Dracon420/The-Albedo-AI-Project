@@ -1100,6 +1100,148 @@ class SetupWizard(tk.Tk):
 # Entry point
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Upgrade mode — triggered by installer when .env already exists
+# ---------------------------------------------------------------------------
+
+class UpgradeWindow(tk.Tk):
+    """Minimal window shown during an in-place upgrade.
+    Just refreshes pip deps and exits — no wizard, no API-key prompts."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.title("ALBEDO  //  UPGRADING TO v3.1.0")
+        self.geometry("600x420")
+        self.resizable(False, False)
+        self.configure(bg=C_BG)
+        self._q: queue.Queue = queue.Queue()
+        self._build()
+        self.after(200, self._start)
+
+    def _build(self) -> None:
+        hdr = tk.Frame(self, bg=C_PANEL, height=52)
+        hdr.pack(fill="x")
+        hdr.pack_propagate(False)
+        tk.Label(hdr, text="ALBEDO  //  UPGRADE IN PROGRESS",
+                 fg=C_CYAN, bg=C_PANEL, font=FONT_HEADER).pack(
+                 side="left", padx=20, pady=10)
+
+        _lbl(self,
+             "Refreshing Python dependencies. Your data is untouched.",
+             color=C_MUTED).pack(pady=(16, 4))
+
+        self._status = _lbl(self, "Initialising...", color=C_TEXT)
+        self._status.pack(pady=(0, 6))
+
+        self._bar = ttk.Progressbar(self,
+                                    style="Albedo.Horizontal.TProgressbar",
+                                    mode="indeterminate")
+        self._bar.pack(fill="x", padx=24, pady=(0, 8))
+        self._bar.start(12)
+
+        log_frame = tk.Frame(self, bg=C_PANEL)
+        log_frame.pack(fill="both", expand=True, padx=24, pady=(0, 12))
+        self._log = scrolledtext.ScrolledText(
+            log_frame, bg=C_PANEL, fg=C_TEXT,
+            font=FONT_SMALL, relief="flat", state="disabled",
+            wrap="word", height=10)
+        self._log.pack(fill="both", expand=True, padx=4, pady=4)
+        self._log.tag_config("ok",  foreground=C_GREEN)
+        self._log.tag_config("err", foreground=C_DANGER)
+
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("Albedo.Horizontal.TProgressbar",
+                        troughcolor=C_BORDER, background=C_CYAN,
+                        thickness=14, borderwidth=0)
+
+    def _push(self, msg: str, tag: str = "info") -> None:
+        self._q.put((msg, tag))
+
+    def _poll(self) -> None:
+        try:
+            while True:
+                msg, tag = self._q.get_nowait()
+                self._log.configure(state="normal")
+                self._log.insert("end", msg.rstrip() + "\n", tag)
+                self._log.configure(state="disabled")
+                self._log.see("end")
+                self._status.configure(text=msg[:70] if msg.strip() else self._status["text"])
+        except queue.Empty:
+            pass
+        self.after(50, self._poll)
+
+    def _start(self) -> None:
+        self.after(0, self._poll)
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self) -> None:
+        try:
+            self._push("Locating Python 3.12...")
+            py = _find_python312()
+            if py is None:
+                self._push("Python 3.12 not found — cannot upgrade deps.", "err")
+                self.after(3000, self.destroy)
+                return
+            self._push(f"  Found: {py}", "ok")
+
+            venv_py = VENV / "Scripts" / "python.exe"
+            if not venv_py.exists():
+                self._push("  .venv missing — recreating...", "info")
+                r = subprocess.run([py, "-m", "venv", str(VENV), "--clear"],
+                                   capture_output=True, text=True,
+                                   creationflags=subprocess.CREATE_NO_WINDOW)
+                if r.returncode != 0:
+                    self._push(f"  venv creation failed:\n{r.stderr}", "err")
+                    self.after(4000, self.destroy)
+                    return
+            else:
+                self._push("  Existing .venv found.", "ok")
+
+            self._push("Upgrading pip / wheel / setuptools...")
+            subprocess.run(
+                [str(venv_py), "-m", "pip", "install", "--upgrade",
+                 "pip", "wheel", "setuptools", "--no-cache-dir", "--quiet"],
+                capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
+            self._push("  Build tools up to date.", "ok")
+
+            self._push("Installing / upgrading Python dependencies...")
+            req = ROOT / "requirements.txt"
+            proc = subprocess.Popen(
+                [str(venv_py), "-m", "pip", "install",
+                 "-r", str(req), "--prefer-binary", "--no-cache-dir"],
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+                creationflags=subprocess.CREATE_NO_WINDOW)
+            for line in proc.stdout:
+                stripped = line.strip()
+                if stripped:
+                    self._push(f"  {stripped}")
+            proc.wait()
+
+            if proc.returncode == 0:
+                self._push("Dependencies up to date.", "ok")
+                self._push("Upgrade complete — Albedo v3.1.0 is ready.", "ok")
+                self.after(0, lambda: self._bar.stop())
+                self.after(0, lambda: self._bar.configure(mode="determinate",
+                                                          value=100, maximum=100))
+                self.after(2500, self.destroy)
+            else:
+                self._push("pip exited with errors — check internet connection.", "err")
+                self.after(4000, self.destroy)
+        except Exception as exc:
+            self._push(f"Upgrade error: {exc}", "err")
+            self.after(4000, self.destroy)
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
-    app = SetupWizard()
-    app.mainloop()
+    if "--upgrade" in sys.argv:
+        win = UpgradeWindow()
+        win.mainloop()
+    else:
+        app = SetupWizard()
+        app.mainloop()

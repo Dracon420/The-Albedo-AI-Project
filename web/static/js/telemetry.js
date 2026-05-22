@@ -39,7 +39,7 @@ const Telemetry = (() => {
     if (t.cpu) {
       Gauges.update("cpu",
         t.cpu.percent,
-        Math.round(t.cpu.percent),
+        Math.round(t.cpu.percent) + "%",
         (t.cpu.freq_ghz ? t.cpu.freq_ghz.toFixed(2) : "--") + " GHz");
     }
 
@@ -47,55 +47,44 @@ const Telemetry = (() => {
     if (t.ram) {
       const sub = (t.ram.used_gb || 0).toFixed(1) + " / " +
                   (t.ram.total_gb || 0).toFixed(1) + " GB";
-      Gauges.update("ram", t.ram.percent, Math.round(t.ram.percent), sub);
+      Gauges.update("ram", t.ram.percent, Math.round(t.ram.percent) + "%", sub);
     }
 
-    // GPU + VRAM (the SSD sub uses VRAM info since they share that wing apex)
+    // GPU — sub shows temperature
     if (t.gpu) {
       const gpuPct = t.gpu.available ? t.gpu.load_percent : 0;
-      const gpuSub = t.gpu.available
-        ? `${t.gpu.temp_c}°C  ${t.gpu.vram_percent}% VRAM`
-        : "no GPU";
-      Gauges.update("gpu", gpuPct, Math.round(gpuPct), gpuSub);
+      const gpuVal = t.gpu.available ? Math.round(gpuPct) + "%" : "N/A";
+      const gpuSub = t.gpu.available ? `${t.gpu.temp_c} °C` : "no GPU";
+      Gauges.update("gpu", gpuPct, gpuVal, gpuSub);
     }
 
-    // SSD (C: drive usage). Sub shows VRAM in MB so the right wing
-    // pairs the GPU dial with its memory readout.
+    // SSD (C: drive usage) — sub shows VRAM used/total
     if (t.disk) {
       const vramSub = (t.gpu && t.gpu.available)
-        ? `VRAM ${t.gpu.vram_used_mb}/${t.gpu.vram_total_mb} MB`
-        : "VRAM --";
+        ? `VRAM ${t.gpu.vram_used_mb} / ${t.gpu.vram_total_mb} MB`
+        : "VRAM -- / -- MB";
       Gauges.update("ssd", t.disk.percent_used_c,
-                    Math.round(t.disk.percent_used_c), vramSub);
+                    Math.round(t.disk.percent_used_c) + "%", vramSub);
     }
 
-    // Network apex — combine up + down, scale to cap
+    // Network apex — combined total in ring, breakdown in sub HTML div
     if (t.network) {
-      const total = (t.network.down_mbps || 0) + (t.network.up_mbps || 0);
-      const pct = Math.min(100, (total / NET_CAP_MBPS) * 100);
-      const display = `↓${_fmtMbps(t.network.down_mbps)} ↑${_fmtMbps(t.network.up_mbps)}`;
-      // Big number = combined total, sub = breakdown
-      Gauges.update("net", pct, _fmtMbps(total));
-      Gauges.setText("net", _fmtMbps(total), undefined);
-      // Override the unit text in the small dial to show the breakdown
-      const svg = document.querySelector('svg.gauge[data-gauge="net"]');
-      if (svg) {
-        const unit = svg.querySelector(".gauge__unit");
-        if (unit) unit.textContent = display;
-      }
+      const down  = t.network.down_mbps || 0;
+      const up    = t.network.up_mbps   || 0;
+      const total = down + up;
+      const pct   = Math.min(100, (total / NET_CAP_MBPS) * 100);
+      const breakdown = `↓${_fmtMbps(down)} ↑${_fmtMbps(up)} Mbps`;
+      Gauges.update("net", pct, _fmtMbps(total), breakdown);
     }
 
-    // Disk I/O apex
+    // Disk I/O apex — total throughput in ring, R/W split in sub HTML div
     if (t.disk) {
-      const total = (t.disk.read_mb_s || 0) + (t.disk.write_mb_s || 0);
-      const pct = Math.min(100, (total / DISK_CAP_MBS) * 100);
-      Gauges.update("disk_io", pct, _fmtMBs(total));
-      const svg = document.querySelector('svg.gauge[data-gauge="disk_io"]');
-      if (svg) {
-        const unit = svg.querySelector(".gauge__unit");
-        if (unit) unit.textContent =
-          `R ${_fmtMBs(t.disk.read_mb_s)} / W ${_fmtMBs(t.disk.write_mb_s)}`;
-      }
+      const r     = t.disk.read_mb_s  || 0;
+      const w     = t.disk.write_mb_s || 0;
+      const total = r + w;
+      const pct   = Math.min(100, (total / DISK_CAP_MBS) * 100);
+      const breakdown = `R ${_fmtMBs(r)} / W ${_fmtMBs(w)} MB/s`;
+      Gauges.update("disk_io", pct, _fmtMBs(total), breakdown);
     }
   }
 

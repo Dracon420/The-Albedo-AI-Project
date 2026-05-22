@@ -346,7 +346,10 @@ def _handle_launch(query: str) -> str | None:
         if exe.endswith(".msc"):
             subprocess.Popen(["mmc", exe], shell=False)
         else:
-            subprocess.Popen(exe, shell=True)
+            # Use the Windows shell only to resolve bare app names (e.g. "notepad").
+            # Pass as a list where possible to avoid injection; shell=True is
+            # required here only because exe may be a display name with no path.
+            subprocess.Popen(["cmd", "/c", "start", "", exe], shell=False)
         return f"Launching {target}, Chief."
     except Exception as exc:
         return f"Could not launch {target}: {exc}"

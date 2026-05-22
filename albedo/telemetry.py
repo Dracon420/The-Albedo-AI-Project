@@ -96,27 +96,52 @@ def reset() -> None:
 
 
 # ---------------------------------------------------------------------------
-# nvidia-smi multi-field query (shared with system_stats.py — duplicated
-# here so this module has no internal dependencies beyond psutil)
+# nvidia-smi multi-field query — cached and polled in background every 2 s
+# so the hot telemetry path (1 Hz) never spawns a subprocess.
 # ---------------------------------------------------------------------------
 
+_GPU_CACHE: Optional[list[str]] = None
+_GPU_CACHE_LOCK = threading.Lock()
+_GPU_FIELDS = "utilization.gpu,memory.used,memory.total,temperature.gpu"
+_GPU_THREAD_STARTED = False
+
+
+def _gpu_background_poller() -> None:
+    """Poll nvidia-smi every 2 s and update the module-level cache."""
+    global _GPU_CACHE
+    while True:
+        try:
+            r = subprocess.run(
+                ["nvidia-smi",
+                 f"--query-gpu={_GPU_FIELDS}",
+                 "--format=csv,noheader,nounits"],
+                capture_output=True, text=True, timeout=3,
+                creationflags=_NO_WINDOW,
+            )
+            if r.returncode == 0 and r.stdout.strip():
+                first = r.stdout.strip().splitlines()[0]
+                vals = [v.strip() for v in first.split(",")]
+                with _GPU_CACHE_LOCK:
+                    _GPU_CACHE = vals
+        except Exception:
+            pass
+        time.sleep(2)
+
+
+def _ensure_gpu_poller() -> None:
+    global _GPU_THREAD_STARTED
+    if not _GPU_THREAD_STARTED:
+        _GPU_THREAD_STARTED = True
+        t = threading.Thread(target=_gpu_background_poller, daemon=True,
+                             name="gpu-telemetry-poller")
+        t.start()
+
+
 def _nvml_multi(fields: str) -> Optional[list[str]]:
-    """Single nvidia-smi call requesting multiple comma-separated fields."""
-    try:
-        r = subprocess.run(
-            ["nvidia-smi",
-             f"--query-gpu={fields}",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=3,
-            creationflags=_NO_WINDOW,
-        )
-        if r.returncode == 0 and r.stdout.strip():
-            # Take only the first GPU row to keep schema flat.
-            first = r.stdout.strip().splitlines()[0]
-            return [v.strip() for v in first.split(",")]
-    except Exception:
-        pass
-    return None
+    """Return the most recent cached nvidia-smi result (updated every 2 s)."""
+    _ensure_gpu_poller()
+    with _GPU_CACHE_LOCK:
+        return list(_GPU_CACHE) if _GPU_CACHE else None
 
 
 # ---------------------------------------------------------------------------
