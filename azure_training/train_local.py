@@ -30,15 +30,15 @@ import datasets as _datasets_preload  # noqa: F401 — side-effect import
 ROOT        = Path(__file__).resolve().parent.parent
 DATA_FILE   = ROOT / "training_data" / "albedo_dataset.jsonl"
 OUTPUT_DIR  = ROOT / "outputs"
-ADAPTER_DIR = OUTPUT_DIR / "lora_adapter"
+ADAPTER_DIR = OUTPUT_DIR / "lora_adapter_v2"   # v2 — keep v1 for rollback
 
 BASE_MODEL  = os.environ.get("BASE_MODEL", "Qwen/Qwen2.5-3B-Instruct")
 MAX_SEQ_LEN = int(os.environ.get("MAX_SEQ_LEN", "512"))
-EPOCHS      = int(os.environ.get("EPOCHS",      "3"))
+EPOCHS      = int(os.environ.get("EPOCHS",      "5"))    # ↑ 3→5
 BATCH_SIZE  = int(os.environ.get("BATCH_SIZE",  "1"))
 GRAD_ACCUM  = int(os.environ.get("GRAD_ACCUM",  "8"))
-LR          = float(os.environ.get("LR",        "2e-4"))
-LORA_RANK   = int(os.environ.get("LORA_RANK",   "8"))
+LR          = float(os.environ.get("LR",        "1e-4"))  # ↓ 2e-4→1e-4 for rank-16
+LORA_RANK   = int(os.environ.get("LORA_RANK",   "16"))   # ↑ 8→16
 HF_TOKEN    = os.environ.get("HF_TOKEN", "")
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # suppress tokenizer warnings
@@ -133,7 +133,7 @@ def main():
     lora_config = LoraConfig(
         task_type      = TaskType.CAUSAL_LM,
         r              = LORA_RANK,
-        lora_alpha     = LORA_RANK * 2,
+        lora_alpha     = LORA_RANK,     # alpha=rank is standard for rank-16
         target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
                           "gate_proj", "up_proj", "down_proj"],
         lora_dropout   = 0.05,
@@ -158,8 +158,8 @@ def main():
         weight_decay                = 0.01,
         fp16                        = False,
         bf16                        = False,
-        warmup_steps                = 5,
-        lr_scheduler_type           = "linear",
+        warmup_steps                = 10,           # ↑ 5→10 for longer run
+        lr_scheduler_type           = "cosine",     # cosine decay for rank-16
         logging_steps               = 5,
         save_strategy               = "epoch",
         report_to                   = "none",

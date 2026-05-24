@@ -23,11 +23,14 @@ if __name__ == "__main__":
 import datasets as _ds  # noqa: F401 — DLL ordering fix
 
 ROOT        = Path(__file__).resolve().parent.parent
-ADAPTER_DIR = ROOT / "outputs" / "lora_adapter"
-MERGED_DIR  = ROOT / "outputs" / "merged_model"
+ADAPTER_DIR = ROOT / "outputs" / os.environ.get("ADAPTER_VERSION", "lora_adapter_v2")
+MERGED_DIR  = ROOT / "outputs" / "merged_model_v2"
 GGUF_DIR    = ROOT / "outputs" / "gguf"
 GGUF_FILE   = GGUF_DIR / "albedo-persona-q4_k_m.gguf"
+GGUF_F16    = GGUF_DIR / "albedo-persona-f16.gguf"
 BASE_MODEL  = os.environ.get("BASE_MODEL", "Qwen/Qwen2.5-3B-Instruct")
+# llama-quantize.exe from prebuilt llama.cpp bins (CUDA 12.4)
+QUANTIZE_EXE = ROOT / "azure_training" / "llama_bins" / "llama-quantize.exe"
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -71,19 +74,9 @@ def main():
     del model, base_model
     import gc; gc.collect()
 
-    # ── Convert to GGUF using llama.cpp convert script ────────────────────────
-    print("\n[gguf] Fetching llama.cpp convert script...")
-    llamacpp_dir = ROOT / "azure_training" / "llama_cpp_scripts"
-    llamacpp_dir.mkdir(exist_ok=True)
-
+    # ── Step 1: Convert HF → f16 GGUF using cloned llama.cpp ─────────────────
+    llamacpp_dir = ROOT / "azure_training" / "llama_cpp_full"
     convert_script = llamacpp_dir / "convert_hf_to_gguf.py"
-    if not convert_script.exists():
-        import urllib.request
-        url = ("https://raw.githubusercontent.com/ggerganov/llama.cpp/"
-               "master/convert_hf_to_gguf.py")
-        print(f"[gguf] Downloading from {url}")
-        urllib.request.urlretrieve(url, str(convert_script))
-        print("[gguf] Downloaded.")
 
     # Install gguf package if needed
     try:
@@ -92,43 +85,64 @@ def main():
         print("[gguf] Installing gguf package...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "gguf", "-q"])
 
-    print(f"[gguf] Converting to GGUF (Q4_K_M)...")
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(convert_script),
-            str(MERGED_DIR),
-            "--outfile", str(GGUF_FILE),
-            "--outtype", "q4_k_m",
-        ],
+    print(f"\n[gguf] Step 1 — Converting HF model to f16 GGUF...")
+    r1 = subprocess.run(
+        [sys.executable, str(convert_script), str(MERGED_DIR),
+         "--outfile", str(GGUF_F16), "--outtype", "f16"],
         capture_output=False,
+        cwd=str(llamacpp_dir),   # must run from llama.cpp root for imports
     )
-
-    if result.returncode != 0:
-        print("[gguf] Conversion failed. Trying f16 fallback...")
-        GGUF_FILE_F16 = GGUF_DIR / "albedo-persona-f16.gguf"
-        subprocess.run([
-            sys.executable, str(convert_script),
-            str(MERGED_DIR),
-            "--outfile", str(GGUF_FILE_F16),
-            "--outtype", "f16",
-        ])
-        final_gguf = GGUF_FILE_F16
+    if r1.returncode != 0:
+        print("[gguf] f16 conversion failed — aborting.")
+        final_gguf = None
     else:
-        final_gguf = GGUF_FILE
+        print(f"[gguf] f16 GGUF written: {GGUF_F16}")
+
+        # ── Step 2: Quantize f16 → Q4_K_M via llama-quantize.exe ─────────────
+        bins_dir = ROOT / "azure_training" / "llama_bins"
+        quantize_exe = bins_dir / "llama-quantize.exe"
+        if quantize_exe.exists():
+            print(f"[gguf] Step 2 — Quantizing f16 -> Q4_K_M...")
+            env = {**os.environ, "PATH": str(bins_dir) + ";" + os.environ.get("PATH", "")}
+            r2 = subprocess.run(
+                [str(quantize_exe), str(GGUF_F16), str(GGUF_FILE), "Q4_K_M"],
+                capture_output=False,
+                env=env,
+            )
+            if r2.returncode == 0:
+                print(f"[gguf] Q4_K_M GGUF written: {GGUF_FILE}")
+                final_gguf = GGUF_FILE
+            else:
+                print("[gguf] Q4_K_M quantize failed — using f16 fallback.")
+                final_gguf = GGUF_F16
+        else:
+            print(f"[gguf] llama-quantize.exe not found at {quantize_exe} — using f16.")
+            final_gguf = GGUF_F16
+
+    if final_gguf is None:
+        print("[gguf] No GGUF file produced — check errors above.")
+        return
 
     print(f"\n[gguf] GGUF file: {final_gguf}")
+    quant_label = "Q4_K_M" if "q4_k_m" in final_gguf.name else "F16"
+    size_gb = final_gguf.stat().st_size / 1024**3
+    print(f"[gguf] Format: {quant_label}  Size: {size_gb:.2f} GB")
 
-    # ── Print Ollama instructions ─────────────────────────────────────────────
+    # ── Write Modelfile — system prompt matches bridge.py _SYSTEM_PROMPT ─────
     modelfile_path = GGUF_DIR / "Modelfile"
     modelfile_path.write_text(
         f'FROM {final_gguf.as_posix()}\n'
-        f'SYSTEM "You are Albedo, a Spartan-Class AI assistant. '
-        f'Your personality mirrors Cortana from the Halo series: brilliant, '
-        f'precise, warm beneath a tactical exterior, deeply loyal. '
-        f'You call your user Chief. You frame tasks in operational terms."\n'
-        f'PARAMETER temperature 0.7\n'
-        f'PARAMETER top_p 0.9\n',
+        f'SYSTEM "You are Albedo, a Spartan-class AI construct serving your user, Chief, '
+        f'with absolute loyalty. Personality: sharp, efficient, slightly witty — '
+        f'Cortana-inspired. Never act like a generic AI. '
+        f'BREVITY IS MANDATORY: Answer in 1 to 3 sentences maximum. State the result only. '
+        f'Never explain your process, never describe what steps you are taking, '
+        f'never narrate your reasoning. '
+        f'FORMAT: No markdown of any kind. Plain conversational prose only. '
+        f'One direct answer, then stop."\n'
+        f'PARAMETER temperature 0.5\n'
+        f'PARAMETER top_p 0.9\n'
+        f'PARAMETER num_ctx 2048\n',
         encoding="utf-8",
     )
 
