@@ -38,6 +38,52 @@ except ImportError:
 
 
 # ---------------------------------------------------------------------------
+# Active persona — tracks which wake word last fired and drives the chat label
+# ---------------------------------------------------------------------------
+
+_persona_lock = threading.Lock()
+_persona_name = "ALBEDO"   # display name: "CORTANA", "JARVIS", or "ALBEDO"
+
+# Mapping: bare wake word → display label shown in chat / topbar
+_PERSONA_LABELS: dict[str, str] = {
+    "cortana": "CORTANA",
+    "jarvis":  "JARVIS",
+}
+
+
+def _word_to_label(word: str) -> str:
+    """Normalise a bare wake word to its display label."""
+    return _PERSONA_LABELS.get(word.strip().lower(), word.strip().upper() or "ALBEDO")
+
+
+def notify_persona_change(word: str) -> None:
+    """
+    Called (from the wake-word listener callback or wakeword detection code)
+    when a specific wake word fires. Updates the module-level persona name
+    and pushes the new label to the JS layer via eel if available.
+
+    Safe to call from any thread.
+    """
+    global _persona_name
+    label = _word_to_label(word)
+    with _persona_lock:
+        _persona_name = label
+    # Push to JS — _albedo_persona_push is registered by chat.js
+    try:
+        import eel as _eel
+        _eel._albedo_persona_push(label)()  # noqa: SLF001
+    except Exception:
+        pass
+
+
+@_expose
+def get_active_persona_name() -> dict:
+    """Return the display name of the currently active persona (e.g. 'CORTANA')."""
+    with _persona_lock:
+        return {"ok": True, "name": _persona_name}
+
+
+# ---------------------------------------------------------------------------
 # Diagnostics + lifecycle
 # ---------------------------------------------------------------------------
 
@@ -53,11 +99,24 @@ def get_version() -> dict:
         version = (root / "VERSION").read_text(encoding="utf-8").strip()
     except OSError:
         version = "unknown"
+
+    # Seed persona name from settings.json on first call (before any wake word fires)
+    global _persona_name
+    try:
+        s = _read_settings_dict()
+        persona_key = s.get("active_persona", "").strip().lower()
+        if persona_key:
+            with _persona_lock:
+                _persona_name = _word_to_label(persona_key)
+    except Exception:
+        pass
+
     return {
         "ok":          True,
         "version":     version,
         "uptime_s":    round(time.time() - _started_at, 1),
         "ui":          "eel",
+        "persona":     _persona_name,
     }
 
 

@@ -15,8 +15,13 @@
     // Friendly banner once we know Eel is alive.
     eel.get_version()().then((r) => {
       if (r && r.ok) {
+        // Apply persona from version payload (seeded from settings.json)
+        if (r.persona && window._albedo_persona_push) {
+          window._albedo_persona_push(r.persona);
+        }
+        const persona = r.persona || "ALBEDO";
         Chat.appendLine("system",
-          `[SYS] Eel UI online — Albedo v${r.version}, uptime ${r.uptime_s}s.`);
+          `[SYS] Eel UI online — ${persona} v${r.version}, uptime ${r.uptime_s}s.`);
       }
     }).catch(() => {
       Chat.appendLine("error", "[SYS] Eel bridge unreachable.");

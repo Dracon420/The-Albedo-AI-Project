@@ -160,7 +160,13 @@ const Settings = (() => {
     if (!_personaSel) return;        // drawer missing — skip silently
 
     // Change handlers
-    _personaSel   .addEventListener("change", (e) => _persist("active_persona", e.target.value));
+    _personaSel.addEventListener("change", (e) => {
+      _persist("active_persona", e.target.value);
+      // Push the new persona name to the chat and topbar immediately
+      if (window._albedo_persona_select) {
+        window._albedo_persona_select(e.target.value);
+      }
+    });
     _audioInSel   .addEventListener("change", (e) => {
       const v = e.target.value === "" ? null : parseInt(e.target.value, 10);
       _persist("audio_input_device", v);

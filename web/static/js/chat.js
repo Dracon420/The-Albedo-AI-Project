@@ -6,9 +6,10 @@
 
 const Chat = (() => {
   let _feedEl, _inputEl, _sendBtn, _micBtn, _scanBtn, _audioBtn, _modeBtn, _wakeBtn;
-  let _audioMuted = false;
-  let _commMode   = "latch";   // matches CommMode.LATCH.value
-  let _wakeState  = "disarmed";
+  let _audioMuted  = false;
+  let _commMode    = "latch";   // matches CommMode.LATCH.value
+  let _wakeState   = "disarmed";
+  let _personaName = "ALBEDO";  // display label — updated by wake word or settings
 
   function _ts() {
     const d = new Date();
@@ -34,7 +35,7 @@ const Chat = (() => {
     try {
       const r = await eel.send_query(raw, false)();
       if (r && r.ok) {
-        appendLine("albedo", r.reply || "(no response)");
+        appendLine("albedo", _personaName + "  " + (r.reply || "(no response)"));
       } else {
         appendLine("error", "[SYS] " + (r && r.error ? r.error : "no response"));
       }
@@ -104,6 +105,20 @@ const Chat = (() => {
     } catch { /* ignore */ }
   }
 
+  // ── Persona name — driven by wake word detection or settings panel ──────
+  function _applyPersonaName(name) {
+    _personaName = (name || "ALBEDO").toUpperCase();
+    // Update the topbar brand so it matches the active persona
+    const brand = document.getElementById("personaBrand");
+    if (brand) brand.textContent = _personaName;
+  }
+
+  // Python pushes persona changes here when a wake word fires
+  window._albedo_persona_push = function (name) { _applyPersonaName(name); };
+
+  // Settings panel calls this when the user changes persona from the drawer
+  window._albedo_persona_select = function (name) { _applyPersonaName(name); };
+
   async function _initState() {
     try {
       const cm = await eel.get_comm_mode()();
@@ -112,6 +127,11 @@ const Chat = (() => {
     try {
       const ws = await eel.get_wake_state()();
       if (ws && ws.ok) { _wakeState = ws.state; _renderWake(); }
+    } catch { /* ignore */ }
+    // Load persona name from backend (seeded from settings.json active_persona)
+    try {
+      const pn = await eel.get_active_persona_name()();
+      if (pn && pn.ok && pn.name) _applyPersonaName(pn.name);
     } catch { /* ignore */ }
   }
 

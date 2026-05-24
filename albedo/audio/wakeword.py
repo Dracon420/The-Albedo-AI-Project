@@ -43,9 +43,35 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Module-level state
 # ---------------------------------------------------------------------------
-_recognizer:   "KaldiRecognizer | None" = None
-_active_words: str = WAKE_WORDS
-_recognizer_lock = threading.Lock()
+_recognizer:          "KaldiRecognizer | None" = None
+_active_words:        str = WAKE_WORDS
+_recognizer_lock      = threading.Lock()
+_last_detected_word:  str = ""          # bare word last matched (e.g. "cortana")
+_detected_lock        = threading.Lock()
+
+
+def get_last_detected_word() -> str:
+    """Return the bare wake word (e.g. 'cortana') that most recently fired."""
+    with _detected_lock:
+        return _last_detected_word
+
+
+def _record_detected(text: str) -> None:
+    """
+    Find and store which configured word appeared in ``text``.
+    Called internally whenever a wake match fires.
+    """
+    global _last_detected_word
+    q = text.lower()
+    with _detected_lock:
+        for w in _word_set():
+            if w in q:
+                _last_detected_word = w
+                return
+        # Fallback: take the first configured word
+        words = [w for w in _active_words.split(",") if w.strip()]
+        if words:
+            _last_detected_word = words[0].strip().lower()
 
 
 def set_active_model(words: str) -> None:
@@ -142,11 +168,13 @@ def wait_for_wakeword(
         if rec.AcceptWaveform(chunk.tobytes()):
             text = json.loads(rec.Result()).get("text", "").strip().lower()
             if any(w in text for w in targets):
+                _record_detected(text)
                 rec.Reset()
                 return True
         else:
             partial = json.loads(rec.PartialResult()).get("partial", "").strip().lower()
             if partial and any(w in partial for w in targets):
+                _record_detected(partial)
                 rec.Reset()
                 return True
 
@@ -180,6 +208,14 @@ def start_background_listener(
             try:
                 detected = wait_for_wakeword(stream, stop_event=stop_event)
                 if detected and not stop_event.is_set():
+                    # Notify the Eel bridge so the UI persona label updates
+                    word = get_last_detected_word()
+                    if word:
+                        try:
+                            from albedo.eel_app.bridge import notify_persona_change
+                            notify_persona_change(word)
+                        except Exception:
+                            pass
                     callback()
             except Exception as exc:
                 print(f"[wakeword] Listener error: {exc}")
