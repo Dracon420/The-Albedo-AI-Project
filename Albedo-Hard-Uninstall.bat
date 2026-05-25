@@ -1,9 +1,7 @@
 @echo off
-:: Albedo-Hard-Uninstall.bat — STANDALONE, no companion .ps1 needed
-:: Double-click and run as Administrator.
-:: Self-elevates if not already admin, then runs embedded PowerShell.
+:: Albedo-Hard-Uninstall.bat - STANDALONE self-contained uninstaller
+:: Double-click to run. Self-elevates automatically. No companion files needed.
 
-:: ── Self-elevation ────────────────────────────────────────────────────────
 net session >nul 2>&1
 if %errorLevel% NEQ 0 (
     echo Requesting administrator privileges...
@@ -11,155 +9,284 @@ if %errorLevel% NEQ 0 (
     exit /b
 )
 
-:: ── Extract and run embedded PowerShell ──────────────────────────────────
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-"$script = @'" & echo. & ^
-"# embedded" & echo. & ^
-"'@" & echo. & ^
-"Invoke-Expression $script"
+set B64=%TEMP%\ab64%RANDOM%.txt
+set PS1=%TEMP%\auns%RANDOM%.ps1
 
-:: The above approach is unreliable for large scripts.
-:: Instead write the script to a temp file and run it.
+(
+echo IyBBbGJlZG8tSGFyZC1Vbmluc3RhbGwucHMxDQojIOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgA0KIyBDT01QTEVURSByZW1vdmFsIG9mIEFs
+echo YmVkbyBNaXNzaW9uIENvbnRyb2wgZnJvbSB0aGlzIG1hY2hpbmUuDQojDQojIFVu
+echo bGlrZSB0aGUgbm9ybWFsIElubm8gU2V0dXAgdW5pbnN0YWxsZXIgKHdoaWNoIGxl
+echo YXZlcyAuZW52IGFuZCB1c2VyIGRhdGENCiMgYmVoaW5kKSB0aGlzIHRvb2wgbnVr
+echo ZXMgRVZFUllUSElORyBzbyB0aGUgbmV4dCBpbnN0YWxsZXIgc3RhcnRzIGZyb20g
+echo YQ0KIyB0cnVlIGJsYW5rIHNsYXRlIOKAlCBubyBzdGFsZSBBTEJFRE9fVUk9dGss
+echo IG5vIGxlZnRvdmVyIC52ZW52LCBub3RoaW5nLg0KIw0KIyBSdW4gZnJvbSBhbiBl
+echo bGV2YXRlZCAoQWRtaW4pIFBvd2VyU2hlbGw6DQojICAgICAuXEFsYmVkby1IYXJk
+echo LVVuaW5zdGFsbC5wczENCiMNCiMgT3IgZG91YmxlLWNsaWNrIEFsYmVkby1IYXJk
+echo LVVuaW5zdGFsbC5iYXQgKHdoaWNoIHNlbGYtZWxldmF0ZXMpLg0KIw0KIyBXaGF0
+echo IGdldHMgcmVtb3ZlZDoNCiMgICAtIEFsbCBmaWxlcyBhbmQgc3ViZGlycyBpbiBD
+echo OlxBbGJlZG8gIChpbmNsdWRpbmcgLmVudiwgY2hyb21hX2RiLCBldGMuKQ0KIyAg
+echo IC0gSW5ubyBTZXR1cCByZWdpc3RyeSBlbnRyeSArIHVuaW5zdGFsbGVyDQojICAg
+echo LSBTdGFydCBNZW51IHNob3J0Y3V0DQojICAgLSBEZXNrdG9wIHNob3J0Y3V0IChj
+echo b21tb24gKyB1c2VyKQ0KIyAgIC0gV2luZG93cyBEZWZlbmRlciBleGNsdXNpb24g
+echo Zm9yIEM6XEFsYmVkbw0KIyAgIC0gQW55IGxlZnRvdmVyIFB5dGhvbiBwcm9jZXNz
+echo ZXMgaG9sZGluZyBmaWxlIGxvY2tzDQojDQojIFdoYXQgaXMgTk9UIHRvdWNoZWQ6
+echo DQojICAgLSBPbGxhbWEgYW5kIGl0cyBtb2RlbHMgIChpbnN0YWxsZWQgc2VwYXJh
+echo dGVseSwgbGl2ZSBpbiAlTE9DQUxBUFBEQVRBJVxvbGxhbWEpDQojICAgLSBWb3Nr
+echo IC8gcGlwZXIgLyB3YWtld29yZCBtb2RlbHMgaWYgdGhleSBsaXZlIG91dHNpZGUg
+echo QzpcQWxiZWRvDQojICAgLSBBbnkgb3RoZXIgdXNlciBmaWxlcw0KIyDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCltDbWRsZXRCaW5kaW5n
+echo KFN1cHBvcnRzU2hvdWxkUHJvY2VzcyldDQpwYXJhbSgNCiAgICBbc3RyaW5nXSAk
+echo SW5zdGFsbERpciA9ICJDOlxBbGJlZG8iDQopDQoNCiRFcnJvckFjdGlvblByZWZl
+echo cmVuY2UgPSAiQ29udGludWUiICAgIyBEb24ndCBzdG9wIG9uIGluZGl2aWR1YWwg
+echo ZmFpbHVyZXMNCiRQcm9ncmVzc1ByZWZlcmVuY2UgICAgPSAiU2lsZW50bHlDb250
+echo aW51ZSINCg0KIyDilIDilIAgSGVscGVycyDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCmZ1bmN0aW9uIFdyaXRl
+echo LVN0ZXAgeyBwYXJhbSgkbXNnKSBXcml0ZS1Ib3N0ICJgbls+Pl0gJG1zZyIgLUZv
+echo cmVncm91bmRDb2xvciBDeWFuIH0NCmZ1bmN0aW9uIFdyaXRlLU9LICAgeyBwYXJh
+echo bSgkbXNnKSBXcml0ZS1Ib3N0ICIgIFtPS10gJG1zZyIgLUZvcmVncm91bmRDb2xv
+echo ciBHcmVlbiB9DQpmdW5jdGlvbiBXcml0ZS1Ta2lwIHsgcGFyYW0oJG1zZykgV3Jp
+echo dGUtSG9zdCAiICBbLS1dICRtc2ciIC1Gb3JlZ3JvdW5kQ29sb3IgRGFya0dyYXkg
+echo fQ0KZnVuY3Rpb24gV3JpdGUtV2FybiB7IHBhcmFtKCRtc2cpIFdyaXRlLUhvc3Qg
+echo IiAgWyEhXSAkbXNnIiAtRm9yZWdyb3VuZENvbG9yIFllbGxvdyB9DQpmdW5jdGlv
+echo biBXcml0ZS1GYWlsIHsgcGFyYW0oJG1zZykgV3JpdGUtSG9zdCAiICBbWFhdICRt
+echo c2ciIC1Gb3JlZ3JvdW5kQ29sb3IgUmVkIH0NCg0KZnVuY3Rpb24gUmVxdWlyZS1B
+echo ZG1pbiB7DQogICAgJG1lID0gW1NlY3VyaXR5LlByaW5jaXBhbC5XaW5kb3dzSWRl
+echo bnRpdHldOjpHZXRDdXJyZW50KCkNCiAgICAkcCAgPSBOZXctT2JqZWN0IFNlY3Vy
+echo aXR5LlByaW5jaXBhbC5XaW5kb3dzUHJpbmNpcGFsKCRtZSkNCiAgICBpZiAoLW5v
+echo dCAkcC5Jc0luUm9sZShbU2VjdXJpdHkuUHJpbmNpcGFsLldpbmRvd3NCdWlsdGlu
+echo Um9sZV06OkFkbWluaXN0cmF0b3IpKSB7DQogICAgICAgIFdyaXRlLUZhaWwgIlRo
+echo aXMgc2NyaXB0IG11c3QgYmUgcnVuIGFzIEFkbWluaXN0cmF0b3IuIg0KICAgICAg
+echo ICBXcml0ZS1Ib3N0ICIgIFJpZ2h0LWNsaWNrIFBvd2VyU2hlbGwg4oaSICdSdW4g
+echo YXMgYWRtaW5pc3RyYXRvciciIC1Gb3JlZ3JvdW5kQ29sb3IgWWVsbG93DQogICAg
+echo ICAgIGV4aXQgMQ0KICAgIH0NCn0NCg0KIyDilIDilIAgU3RlcCAwOiBBZG1pbiAr
+echo IGNvbmZpcm1hdGlvbiDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIANClJlcXVpcmUtQWRtaW4NCg0KV3JpdGUtSG9zdCAiIg0KV3JpdGUt
+echo SG9zdCAiICDilZTilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi
+echo lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi
+echo lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi
+echo lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZci
+echo IC1Gb3JlZ3JvdW5kQ29sb3IgUmVkDQpXcml0ZS1Ib3N0ICIgIOKVkSAgIEFMQkVE
+echo TyBIQVJEIFVOSU5TVEFMTEVSICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+echo ICAg4pWRIiAtRm9yZWdyb3VuZENvbG9yIFJlZA0KV3JpdGUtSG9zdCAiICDilZEg
+echo ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+echo ICAgICAgICAgIOKVkSIgLUZvcmVncm91bmRDb2xvciBSZWQNCldyaXRlLUhvc3Qg
+echo IiAg4pWRICAgVGhpcyB3aWxsIENPTVBMRVRFTFkgcmVtb3ZlIEFsYmVkbyBmcm9t
+echo IHRoaXMgbWFjaGluZS4gICDilZEiIC1Gb3JlZ3JvdW5kQ29sb3IgUmVkDQpXcml0
+echo ZS1Ib3N0ICIgIOKVkSAgIEFsbCBkYXRhIGluICRJbnN0YWxsRGlyIHdpbGwgYmUg
+echo ZGVsZXRlZC4gICAgICAg4pWRIiAtRm9yZWdyb3VuZENvbG9yIFJlZA0KV3JpdGUt
+echo SG9zdCAiICDilZEgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+echo ICAgICAgICAgICAgICAgICAgICAgIOKVkSIgLUZvcmVncm91bmRDb2xvciBSZWQN
+echo CldyaXRlLUhvc3QgIiAg4pWRICAgT2xsYW1hIGFuZCBpdHMgbW9kZWxzIGFyZSBO
+echo T1QgYWZmZWN0ZWQuICAgICAgICAgICAgICAgICDilZEiIC1Gb3JlZ3JvdW5kQ29s
+echo b3IgUmVkDQpXcml0ZS1Ib3N0ICIgIOKVmuKVkOKVkOKVkOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVnSIgLUZvcmVncm91bmRDb2xvciBSZWQNCldyaXRlLUhvc3Qg
+echo IiINCldyaXRlLUhvc3QgIiAgVHlwZSBZRVMgdG8gY29udGludWUsIGFueXRoaW5n
+echo IGVsc2UgdG8gY2FuY2VsOiIgLUZvcmVncm91bmRDb2xvciBZZWxsb3cNCiRjb25m
+echo aXJtID0gUmVhZC1Ib3N0ICIgIENvbmZpcm0iDQppZiAoJGNvbmZpcm0gLW5lICJZ
+echo RVMiKSB7DQogICAgV3JpdGUtSG9zdCAiYG4gIENhbmNlbGxlZC4gTm90aGluZyB3
+echo YXMgY2hhbmdlZC4iIC1Gb3JlZ3JvdW5kQ29sb3IgR3JlZW4NCiAgICBleGl0IDAN
+echo Cn0NCg0KIyDilIDilIAgU3RlcCAxOiBLaWxsIGFsbCBBbGJlZG8gLyBQeXRob24g
+echo cHJvY2Vzc2VzIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgA0KV3JpdGUtU3RlcCAiVGVybWluYXRpbmcgQWxiZWRvIGFuZCBQ
+echo eXRob24gcHJvY2Vzc2VzIg0KDQokcHJvY1RhcmdldHMgPSBAKCJweXRob24iLCAi
+echo cHl0aG9udyIsICJweXciKQ0KZm9yZWFjaCAoJG5hbWUgaW4gJHByb2NUYXJnZXRz
+echo KSB7DQogICAgJHByb2NzID0gR2V0LVByb2Nlc3MgLU5hbWUgJG5hbWUgLUVycm9y
+echo QWN0aW9uIFNpbGVudGx5Q29udGludWUNCiAgICBpZiAoJHByb2NzKSB7DQogICAg
+echo ICAgICRwcm9jcyB8IFN0b3AtUHJvY2VzcyAtRm9yY2UgLUVycm9yQWN0aW9uIFNp
+echo bGVudGx5Q29udGludWUNCiAgICAgICAgV3JpdGUtT0sgIktpbGxlZCAkbmFtZSAo
+echo JCgkcHJvY3MuQ291bnQpIHByb2Nlc3MoZXMpKSINCiAgICB9IGVsc2Ugew0KICAg
+echo ICAgICBXcml0ZS1Ta2lwICIkbmFtZSDigJQgbm90IHJ1bm5pbmciDQogICAgfQ0K
+echo fQ0KU3RhcnQtU2xlZXAgLU1pbGxpc2Vjb25kcyAyMDAwICAgIyBsZXQgaGFuZGxl
+echo cyByZWxlYXNlDQoNCiMg4pSA4pSAIFN0ZXAgMjogUnVuIElubm8gU2V0dXAgdW5p
+echo bnN0YWxsZXIgKGlmIHByZXNlbnQpIOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgA0KV3JpdGUtU3RlcCAiUnVubmluZyBJbm5vIFNldHVwIHVuaW5zdGFs
+echo bGVyIg0KDQokdW5pbnN0YWxsZXIgPSBKb2luLVBhdGggJEluc3RhbGxEaXIgInVu
+echo aW5zMDAwLmV4ZSINCmlmIChUZXN0LVBhdGggJHVuaW5zdGFsbGVyKSB7DQogICAg
+echo dHJ5IHsNCiAgICAgICAgJHByb2MgPSBTdGFydC1Qcm9jZXNzIC1GaWxlUGF0aCAk
+echo dW5pbnN0YWxsZXIgYA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgLUFy
+echo Z3VtZW50TGlzdCAiL1ZFUllTSUxFTlQiLCAiL1NVUFBSRVNTTVNHQk9YRVMiLCAi
+echo L05PUkVTVEFSVCIgYA0KICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgLVdh
+echo aXQgLVBhc3NUaHJ1IC1FcnJvckFjdGlvbiBTdG9wDQogICAgICAgIFdyaXRlLU9L
+echo ICJJbm5vIHVuaW5zdGFsbGVyIHJhbiAoZXhpdCAkKCRwcm9jLkV4aXRDb2RlKSki
+echo DQogICAgfSBjYXRjaCB7DQogICAgICAgIFdyaXRlLVdhcm4gIklubm8gdW5pbnN0
+echo YWxsZXIgZmFpbGVkOiAkXyDigJQgd2lsbCBmb3JjZS1kZWxldGUgaW5zdGVhZCIN
+echo CiAgICB9DQogICAgU3RhcnQtU2xlZXAgLU1pbGxpc2Vjb25kcyAxNTAwDQp9IGVs
+echo c2Ugew0KICAgIFdyaXRlLVNraXAgIk5vIElubm8gdW5pbnN0YWxsZXIgZm91bmQg
+echo 4oCUIHNraXBwaW5nIHRvIGZvcmNlIGRlbGV0ZSINCn0NCg0KIyDilIDilIAgU3Rl
+echo cCAzOiBGb3JjZS1kZWxldGUgdGhlIGVudGlyZSBpbnN0YWxsIGRpcmVjdG9yeSDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIANCldyaXRlLVN0ZXAgIkZvcmNlLWRl
+echo bGV0aW5nIGluc3RhbGwgZGlyZWN0b3J5OiAkSW5zdGFsbERpciINCg0KaWYgKFRl
+echo c3QtUGF0aCAkSW5zdGFsbERpcikgew0KICAgICMgVGFrZSBvd25lcnNoaXAgZmly
+echo c3QgdG8gYXZvaWQgcGVybWlzc2lvbiBlcnJvcnMgb24gbmVzdGVkIGRpcnMNCiAg
+echo ICB0cnkgew0KICAgICAgICAmIHRha2Vvd24uZXhlIC9GICRJbnN0YWxsRGlyIC9S
+echo IC9EIFkgMj4mMSB8IE91dC1OdWxsDQogICAgICAgICYgaWNhY2xzLmV4ZSAkSW5z
+echo dGFsbERpciAvZ3JhbnQgIkFkbWluaXN0cmF0b3JzOkYiIC9UIC9DIC9RIDI+JjEg
+echo fCBPdXQtTnVsbA0KICAgIH0gY2F0Y2ggeyA8IyBub24tZmF0YWwgIz4gfQ0KDQog
+echo ICAgdHJ5IHsNCiAgICAgICAgUmVtb3ZlLUl0ZW0gLVBhdGggJEluc3RhbGxEaXIg
+echo LVJlY3Vyc2UgLUZvcmNlIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlDQog
+echo ICAgICAgIGlmICgtbm90IChUZXN0LVBhdGggJEluc3RhbGxEaXIpKSB7DQogICAg
+echo ICAgICAgICBXcml0ZS1PSyAiRGVsZXRlZDogJEluc3RhbGxEaXIiDQogICAgICAg
+echo IH0gZWxzZSB7DQogICAgICAgICAgICAjIFN0dWJib3JuIGZpbGVzIOKAlCB0cnkg
+echo ZmlsZS1ieS1maWxlDQogICAgICAgICAgICBXcml0ZS1XYXJuICJTb21lIGZpbGVz
+echo IGNvdWxkIG5vdCBiZSByZW1vdmVkIGluIG9uZSBwYXNzIOKAlCByZXRyeWluZy4u
+echo LiINCiAgICAgICAgICAgIEdldC1DaGlsZEl0ZW0gLVBhdGggJEluc3RhbGxEaXIg
+echo LVJlY3Vyc2UgLUZvcmNlIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRpbnVlIHwN
+echo CiAgICAgICAgICAgICAgICBTb3J0LU9iamVjdCB7ICRfLkZ1bGxOYW1lLkxlbmd0
+echo aCB9IC1EZXNjZW5kaW5nIHwNCiAgICAgICAgICAgICAgICBGb3JFYWNoLU9iamVj
+echo dCB7DQogICAgICAgICAgICAgICAgICAgIHRyeSB7IFJlbW92ZS1JdGVtICRfLkZ1
+echo bGxOYW1lIC1Gb3JjZSAtUmVjdXJzZSAtRXJyb3JBY3Rpb24gU3RvcCB9DQogICAg
+echo ICAgICAgICAgICAgICAgIGNhdGNoIHsgV3JpdGUtV2FybiAiQ291bGQgbm90IHJl
+echo bW92ZTogJCgkXy5GdWxsTmFtZSkiIH0NCiAgICAgICAgICAgICAgICB9DQogICAg
+echo ICAgICAgICB0cnkgeyBSZW1vdmUtSXRlbSAtUGF0aCAkSW5zdGFsbERpciAtRm9y
+echo Y2UgLVJlY3Vyc2UgLUVycm9yQWN0aW9uIFNpbGVudGx5Q29udGludWUgfSBjYXRj
+echo aCB7fQ0KICAgICAgICAgICAgaWYgKC1ub3QgKFRlc3QtUGF0aCAkSW5zdGFsbERp
+echo cikpIHsNCiAgICAgICAgICAgICAgICBXcml0ZS1PSyAiRGVsZXRlZDogJEluc3Rh
+echo bGxEaXIgKGFmdGVyIHJldHJ5KSINCiAgICAgICAgICAgIH0gZWxzZSB7DQogICAg
+echo ICAgICAgICAgICAgV3JpdGUtV2FybiAiJEluc3RhbGxEaXIgc3RpbGwgZXhpc3Rz
+echo IOKAlCBzb21lIGxvY2tlZCBmaWxlcyByZW1haW4uIg0KICAgICAgICAgICAgICAg
+echo IFdyaXRlLVdhcm4gIlJlYm9vdCBhbmQgcmUtcnVuIHRoaXMgc2NyaXB0LCBvciBk
+echo ZWxldGUgbWFudWFsbHkuIg0KICAgICAgICAgICAgfQ0KICAgICAgICB9DQogICAg
+echo fSBjYXRjaCB7DQogICAgICAgIFdyaXRlLUZhaWwgIkNvdWxkIG5vdCBkZWxldGUg
+echo JEluc3RhbGxEaXJgOiAkXyINCiAgICB9DQp9IGVsc2Ugew0KICAgIFdyaXRlLVNr
+echo aXAgIiRJbnN0YWxsRGlyIGRvZXMgbm90IGV4aXN0IOKAlCBub3RoaW5nIHRvIGRl
+echo bGV0ZSINCn0NCg0KIyDilIDilIAgU3RlcCA0OiBSZW1vdmUgSW5ubyBTZXR1cCBy
+echo ZWdpc3RyeSBlbnRyeSDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIANCldyaXRlLVN0ZXAgIlJlbW92aW5nIHJlZ2lz
+echo dHJ5IGVudHJpZXMiDQoNCiRpbm5vS2V5ID0gIkhLTE06XFNPRlRXQVJFXE1pY3Jv
+echo c29mdFxXaW5kb3dzXEN1cnJlbnRWZXJzaW9uXFVuaW5zdGFsbFx7QTFCMkMzRDQt
+echo RTVGNi03ODkwLUFCQ0QtRUYxMjM0NTY3ODkwfV9pczEiDQppZiAoVGVzdC1QYXRo
+echo ICRpbm5vS2V5KSB7DQogICAgdHJ5IHsNCiAgICAgICAgUmVtb3ZlLUl0ZW0gLVBh
+echo dGggJGlubm9LZXkgLUZvcmNlIC1FcnJvckFjdGlvbiBTdG9wDQogICAgICAgIFdy
+echo aXRlLU9LICJSZW1vdmVkIElubm8gdW5pbnN0YWxsIHJlZ2lzdHJ5IGtleSINCiAg
+echo ICB9IGNhdGNoIHsNCiAgICAgICAgV3JpdGUtV2FybiAiQ291bGQgbm90IHJlbW92
+echo ZSByZWdpc3RyeSBrZXk6ICRfIg0KICAgIH0NCn0gZWxzZSB7DQogICAgV3JpdGUt
+echo U2tpcCAiSW5ubyByZWdpc3RyeSBrZXkgbm90IGZvdW5kIChhbHJlYWR5IGdvbmUp
+echo Ig0KfQ0KDQojIEFsc28gY2hlY2sgMzItYml0IHZpZXcgb24gNjQtYml0IFdpbmRv
+echo d3MNCiRpbm5vS2V5MzIgPSAiSEtMTTpcU09GVFdBUkVcV09XNjQzMk5vZGVcTWlj
+echo cm9zb2Z0XFdpbmRvd3NcQ3VycmVudFZlcnNpb25cVW5pbnN0YWxsXHtBMUIyQzNE
+echo NC1FNUY2LTc4OTAtQUJDRC1FRjEyMzQ1Njc4OTB9X2lzMSINCmlmIChUZXN0LVBh
+echo dGggJGlubm9LZXkzMikgew0KICAgIHRyeSB7DQogICAgICAgIFJlbW92ZS1JdGVt
+echo IC1QYXRoICRpbm5vS2V5MzIgLUZvcmNlIC1FcnJvckFjdGlvbiBTdG9wDQogICAg
+echo ICAgIFdyaXRlLU9LICJSZW1vdmVkIElubm8gdW5pbnN0YWxsIHJlZ2lzdHJ5IGtl
+echo eSAoV09XNjQzMikiDQogICAgfSBjYXRjaCB7DQogICAgICAgIFdyaXRlLVdhcm4g
+echo IkNvdWxkIG5vdCByZW1vdmUgV09XNjQzMiBrZXk6ICRfIg0KICAgIH0NCn0NCg0K
+echo IyDilIDilIAgU3RlcCA1OiBSZW1vdmUgc2hvcnRjdXRzIOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKU
+echo gOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgOKUgA0KV3JpdGUt
+echo U3RlcCAiUmVtb3Zpbmcgc2hvcnRjdXRzIg0KDQokc2hvcnRjdXRQYXRocyA9IEAo
+echo DQogICAgIyBTdGFydCBNZW51IChhbGwgdXNlcnMpDQogICAgIiRlbnY6UHJvZ3Jh
+echo bURhdGFcTWljcm9zb2Z0XFdpbmRvd3NcU3RhcnQgTWVudVxQcm9ncmFtc1xBbGJl
+echo ZG8gTWlzc2lvbiBDb250cm9sIiwNCiAgICAiJGVudjpQcm9ncmFtRGF0YVxNaWNy
+echo b3NvZnRcV2luZG93c1xTdGFydCBNZW51XFByb2dyYW1zXEFsYmVkbyBNaXNzaW9u
+echo IENvbnRyb2wubG5rIiwNCiAgICAjIERlc2t0b3AgKGFsbCB1c2VycykNCiAgICAi
+echo JGVudjpQVUJMSUNcRGVza3RvcFxBbGJlZG8gTWlzc2lvbiBDb250cm9sLmxuayIs
+echo DQogICAgIiRlbnY6VVNFUlBST0ZJTEVcRGVza3RvcFxBbGJlZG8gTWlzc2lvbiBD
+echo b250cm9sLmxuayIsDQogICAgIyBDb21tb24gZGVza3RvcCAoSW5ubyB1c2VzIHtj
+echo b21tb25kZXNrdG9wfSkNCiAgICAiJChbU3lzdGVtLkVudmlyb25tZW50XTo6R2V0
+echo Rm9sZGVyUGF0aCgnQ29tbW9uRGVza3RvcERpcmVjdG9yeScpKVxBbGJlZG8gTWlz
+echo c2lvbiBDb250cm9sLmxuayIsDQogICAgIiQoW1N5c3RlbS5FbnZpcm9ubWVudF06
+echo OkdldEZvbGRlclBhdGgoJ0Rlc2t0b3BEaXJlY3RvcnknKSlcQWxiZWRvIE1pc3Np
+echo b24gQ29udHJvbC5sbmsiLA0KKQ0KDQpmb3JlYWNoICgkcGF0aCBpbiAkc2hvcnRj
+echo dXRQYXRocykgew0KICAgIGlmIChUZXN0LVBhdGggJHBhdGgpIHsNCiAgICAgICAg
+echo dHJ5IHsNCiAgICAgICAgICAgIFJlbW92ZS1JdGVtIC1QYXRoICRwYXRoIC1SZWN1
+echo cnNlIC1Gb3JjZSAtRXJyb3JBY3Rpb24gU3RvcA0KICAgICAgICAgICAgV3JpdGUt
+echo T0sgIlJlbW92ZWQ6ICRwYXRoIg0KICAgICAgICB9IGNhdGNoIHsNCiAgICAgICAg
+echo ICAgIFdyaXRlLVdhcm4gIkNvdWxkIG5vdCByZW1vdmUgJHBhdGhgOiAkXyINCiAg
+echo ICAgICAgfQ0KICAgIH0NCn0NCg0KIyBDYXRjaCBhbnkgbGVmdG92ZXIgQWxiZWRv
+echo Ki5sbmsgZmlsZXMgb24gYm90aCBkZXNrdG9wcw0KJGRlc2t0b3BzID0gQCgNCiAg
+echo ICBbU3lzdGVtLkVudmlyb25tZW50XTo6R2V0Rm9sZGVyUGF0aCgnQ29tbW9uRGVz
+echo a3RvcERpcmVjdG9yeScpLA0KICAgIFtTeXN0ZW0uRW52aXJvbm1lbnRdOjpHZXRG
+echo b2xkZXJQYXRoKCdEZXNrdG9wRGlyZWN0b3J5JykNCikNCmZvcmVhY2ggKCRkZXNr
+echo IGluICRkZXNrdG9wcykgew0KICAgIEdldC1DaGlsZEl0ZW0gLVBhdGggJGRlc2sg
+echo LUZpbHRlciAiQWxiZWRvKi5sbmsiIC1FcnJvckFjdGlvbiBTaWxlbnRseUNvbnRp
+echo bnVlIHwNCiAgICAgICAgRm9yRWFjaC1PYmplY3Qgew0KICAgICAgICAgICAgdHJ5
+echo IHsgUmVtb3ZlLUl0ZW0gJF8uRnVsbE5hbWUgLUZvcmNlOyBXcml0ZS1PSyAiUmVt
+echo b3ZlZDogJCgkXy5OYW1lKSIgfQ0KICAgICAgICAgICAgY2F0Y2ggeyBXcml0ZS1X
+echo YXJuICJDb3VsZCBub3QgcmVtb3ZlICQoJF8uTmFtZSkiIH0NCiAgICAgICAgfQ0K
+echo fQ0KDQojIOKUgOKUgCBTdGVwIDY6IFJlbW92ZSBXaW5kb3dzIERlZmVuZGVyIGV4
+echo Y2x1c2lvbiDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIANCldyaXRlLVN0ZXAgIlJlbW92aW5nIFdpbmRvd3MgRGVmZW5k
+echo ZXIgZXhjbHVzaW9uIg0KDQp0cnkgew0KICAgIFJlbW92ZS1NcFByZWZlcmVuY2Ug
+echo LUV4Y2x1c2lvblBhdGggJEluc3RhbGxEaXIgLUVycm9yQWN0aW9uIFNpbGVudGx5
+echo Q29udGludWUNCiAgICBXcml0ZS1PSyAiRGVmZW5kZXIgZXhjbHVzaW9uIHJlbW92
+echo ZWQgZm9yICRJbnN0YWxsRGlyIg0KfSBjYXRjaCB7DQogICAgV3JpdGUtU2tpcCAi
+echo RGVmZW5kZXIgZXhjbHVzaW9uIHJlbW92YWwgc2tpcHBlZCAoRGVmZW5kZXIgbWF5
+echo IGJlIGRpc2FibGVkKSINCn0NCg0KIyDilIDilIAgU3RlcCA3OiBSZW1vdmUgYW55
+echo IHNjaGVkdWxlZCB0YXNrcyDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDi
+echo lIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIDilIANCldyaXRlLVN0
+echo ZXAgIkNoZWNraW5nIGZvciBzY2hlZHVsZWQgdGFza3MiDQoNCiR0YXNrcyA9IEdl
+echo dC1TY2hlZHVsZWRUYXNrIC1UYXNrTmFtZSAiKkFsYmVkbyoiIC1FcnJvckFjdGlv
+echo biBTaWxlbnRseUNvbnRpbnVlDQppZiAoJHRhc2tzKSB7DQogICAgZm9yZWFjaCAo
+echo JHRhc2sgaW4gJHRhc2tzKSB7DQogICAgICAgIHRyeSB7DQogICAgICAgICAgICBV
+echo bnJlZ2lzdGVyLVNjaGVkdWxlZFRhc2sgLVRhc2tOYW1lICR0YXNrLlRhc2tOYW1l
+echo IC1Db25maXJtOiRmYWxzZQ0KICAgICAgICAgICAgV3JpdGUtT0sgIlJlbW92ZWQg
+echo c2NoZWR1bGVkIHRhc2s6ICQoJHRhc2suVGFza05hbWUpIg0KICAgICAgICB9IGNh
+echo dGNoIHsNCiAgICAgICAgICAgIFdyaXRlLVdhcm4gIkNvdWxkIG5vdCByZW1vdmUg
+echo dGFzayAkKCR0YXNrLlRhc2tOYW1lKTogJF8iDQogICAgICAgIH0NCiAgICB9DQp9
+echo IGVsc2Ugew0KICAgIFdyaXRlLVNraXAgIk5vIEFsYmVkbyBzY2hlZHVsZWQgdGFz
+echo a3MgZm91bmQiDQp9DQoNCiMg4pSA4pSAIERvbmUg4pSA4pSA4pSA4pSA4pSA4pSA
+echo 4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+echo 4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+echo 4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+echo 4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA4pSA
+echo DQpXcml0ZS1Ib3N0ICIiDQpXcml0ZS1Ib3N0ICIgIOKVlOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKVkOKV
+echo kOKVkOKVkOKVkOKVkOKVkOKVkOKVlyIgLUZvcmVncm91bmRDb2xvciBHcmVlbg0K
+echo V3JpdGUtSG9zdCAiICDilZEgICBBTEJFRE8gRlVMTFkgUkVNT1ZFRCAgICAgICAg
+echo ICAgICAgICAgICAgICAgICAgICAgICAgICAgIOKVkSIgLUZvcmVncm91bmRDb2xv
+echo ciBHcmVlbg0KV3JpdGUtSG9zdCAiICDilZEgICAgICAgICAgICAgICAgICAgICAg
+echo ICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIOKVkSIgLUZvcmVn
+echo cm91bmRDb2xvciBHcmVlbg0KV3JpdGUtSG9zdCAiICDilZEgICBJbnN0YWxsIGRp
+echo cmVjdG9yeSwgcmVnaXN0cnksIHNob3J0Y3V0cywgYW5kIERlZmVuZGVyICAgIOKV
+echo kSIgLUZvcmVncm91bmRDb2xvciBHcmVlbg0KV3JpdGUtSG9zdCAiICDilZEgICBl
+echo eGNsdXNpb24gaGF2ZSBhbGwgYmVlbiBjbGVhcmVkLiAgICAgICAgICAgICAgICAg
+echo ICAgICAgIOKVkSIgLUZvcmVncm91bmRDb2xvciBHcmVlbg0KV3JpdGUtSG9zdCAi
+echo ICDilZEgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg
+echo ICAgICAgICAgICAgICAgIOKVkSIgLUZvcmVncm91bmRDb2xvciBHcmVlbg0KV3Jp
+echo dGUtSG9zdCAiICDilZEgICBZb3UgY2FuIG5vdyBydW4gYW55IEFsYmVkby1TZXR1
+echo cC14LngueC5leGUgaW5zdGFsbGVyICAgIOKVkSIgLUZvcmVncm91bmRDb2xvciBH
+echo cmVlbg0KV3JpdGUtSG9zdCAiICDilZEgICBmb3IgYSBndWFyYW50ZWVkIGNsZWFu
+echo IGZyZXNoIGluc3RhbGwuICAgICAgICAgICAgICAgICAgIOKVkSIgLUZvcmVncm91
+echo bmRDb2xvciBHcmVlbg0KV3JpdGUtSG9zdCAiICDilZrilZDilZDilZDilZDilZDi
+echo lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi
+echo lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi
+echo lZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDilZDi
+echo lZDilZDilZDilZDilZDilZDilZ0iIC1Gb3JlZ3JvdW5kQ29sb3IgR3JlZW4NCldy
+echo aXRlLUhvc3QgIiINCg==
+) > "%B64%"
 
-set "TMPSCRIPT=%TEMP%\albedo_hard_uninstall_%RANDOM%.ps1"
+certutil -decode "%B64%" "%PS1%" >nul 2>&1
+erase "%B64%" 2>nul
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
- "$c=Get-Content -Raw -LiteralPath '%~f0'; $m=[regex]::Match($c,'(?s)::##PS1_START##\r?\n(.+?)\r?\n::##PS1_END##'); [System.IO.File]::WriteAllText('%TMPSCRIPT%',$m.Groups[1].Value,[System.Text.Encoding]::UTF8)"
-
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%TMPSCRIPT%"
-del /f /q "%TMPSCRIPT%" 2>nul
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
+erase "%PS1%" 2>nul
 
 echo.
 echo  Press any key to close...
 pause >nul
-exit /b
-
-::##PS1_START##
-# Albedo-Hard-Uninstall - embedded PowerShell (do not edit this section)
-# Called by the .bat wrapper above. Requires admin (bat handles elevation).
-
-$ErrorActionPreference = "Continue"
-$ProgressPreference    = "SilentlyContinue"
-$InstallDir            = "C:\Albedo"
-
-function Write-Step { param($msg) Write-Host "`n[>>] $msg" -ForegroundColor Cyan }
-function Write-OK   { param($msg) Write-Host "  [OK] $msg" -ForegroundColor Green }
-function Write-Skip { param($msg) Write-Host "  [--] $msg" -ForegroundColor DarkGray }
-function Write-Warn { param($msg) Write-Host "  [!!] $msg" -ForegroundColor Yellow }
-function Write-Fail { param($msg) Write-Host "  [XX] $msg" -ForegroundColor Red }
-
-Write-Host ""
-Write-Host "  +===========================================================+" -ForegroundColor Red
-Write-Host "  |   ALBEDO HARD UNINSTALLER                                 |" -ForegroundColor Red
-Write-Host "  |                                                           |" -ForegroundColor Red
-Write-Host "  |   This will COMPLETELY remove Albedo from this machine.   |" -ForegroundColor Red
-Write-Host "  |   C:\Albedo and ALL its contents will be deleted.         |" -ForegroundColor Red
-Write-Host "  |   Ollama and its models are NOT affected.                 |" -ForegroundColor Red
-Write-Host "  +===========================================================+" -ForegroundColor Red
-Write-Host ""
-Write-Host "  Type YES to continue, anything else to cancel:" -ForegroundColor Yellow
-$confirm = Read-Host "  Confirm"
-if ($confirm -ne "YES") {
-    Write-Host "`n  Cancelled. Nothing was changed." -ForegroundColor Green
-    exit 0
-}
-
-# Step 1: Kill processes
-Write-Step "Terminating Albedo and Python processes"
-foreach ($name in @("python","pythonw","pyw")) {
-    $procs = Get-Process -Name $name -ErrorAction SilentlyContinue
-    if ($procs) {
-        $procs | Stop-Process -Force -ErrorAction SilentlyContinue
-        Write-OK "Killed $name ($($procs.Count) instance(s))"
-    } else { Write-Skip "$name not running" }
-}
-Start-Sleep -Milliseconds 2000
-
-# Step 2: Run Inno uninstaller
-Write-Step "Running Inno Setup uninstaller"
-$unins = Join-Path $InstallDir "unins000.exe"
-if (Test-Path $unins) {
-    try {
-        $p = Start-Process $unins -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
-        Write-OK "Inno uninstaller ran (exit $($p.ExitCode))"
-    } catch { Write-Warn "Inno uninstaller failed: $_ -- continuing" }
-    Start-Sleep -Milliseconds 1500
-} else { Write-Skip "No Inno uninstaller found" }
-
-# Step 3: Force-delete entire install dir
-Write-Step "Force-deleting: $InstallDir"
-if (Test-Path $InstallDir) {
-    try { & takeown.exe /F $InstallDir /R /D Y 2>&1 | Out-Null } catch {}
-    try { & icacls.exe $InstallDir /grant "Administrators:F" /T /C /Q 2>&1 | Out-Null } catch {}
-    Remove-Item -Path $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-    if (-not (Test-Path $InstallDir)) {
-        Write-OK "Deleted: $InstallDir"
-    } else {
-        Write-Warn "Some files remain — retrying file by file..."
-        Get-ChildItem $InstallDir -Recurse -Force -ErrorAction SilentlyContinue |
-            Sort-Object { $_.FullName.Length } -Descending |
-            ForEach-Object { try { Remove-Item $_.FullName -Force -Recurse -ErrorAction Stop } catch {} }
-        try { Remove-Item $InstallDir -Force -Recurse -ErrorAction SilentlyContinue } catch {}
-        if (Test-Path $InstallDir) {
-            Write-Warn "$InstallDir still has locked files. Reboot and delete manually."
-        } else { Write-OK "Deleted: $InstallDir (after retry)" }
-    }
-} else { Write-Skip "$InstallDir does not exist" }
-
-# Step 4: Remove registry key
-Write-Step "Removing registry entries"
-$keys = @(
-    "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}_is1",
-    "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}_is1"
-)
-foreach ($key in $keys) {
-    if (Test-Path $key) {
-        try { Remove-Item $key -Force; Write-OK "Removed: $key" }
-        catch { Write-Warn "Could not remove $key`: $_" }
-    }
-}
-
-# Step 5: Remove shortcuts
-Write-Step "Removing shortcuts"
-$lnkPaths = @(
-    "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Albedo Mission Control",
-    "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\Albedo Mission Control.lnk",
-    "$([System.Environment]::GetFolderPath('CommonDesktopDirectory'))\Albedo Mission Control.lnk",
-    "$([System.Environment]::GetFolderPath('DesktopDirectory'))\Albedo Mission Control.lnk"
-)
-foreach ($p in $lnkPaths) {
-    if (Test-Path $p) {
-        try { Remove-Item $p -Recurse -Force; Write-OK "Removed: $(Split-Path $p -Leaf)" }
-        catch { Write-Warn "Could not remove $p" }
-    }
-}
-foreach ($desk in @([System.Environment]::GetFolderPath('CommonDesktopDirectory'),
-                    [System.Environment]::GetFolderPath('DesktopDirectory'))) {
-    Get-ChildItem $desk -Filter "Albedo*.lnk" -ErrorAction SilentlyContinue |
-        ForEach-Object { try { Remove-Item $_.FullName -Force; Write-OK "Removed: $($_.Name)" } catch {} }
-}
-
-# Step 6: Remove Defender exclusion
-Write-Step "Removing Windows Defender exclusion"
-try { Remove-MpPreference -ExclusionPath $InstallDir -ErrorAction SilentlyContinue; Write-OK "Defender exclusion removed" }
-catch { Write-Skip "Defender exclusion removal skipped" }
-
-# Step 7: Remove scheduled tasks
-Write-Step "Checking for scheduled tasks"
-$tasks = Get-ScheduledTask -TaskName "*Albedo*" -ErrorAction SilentlyContinue
-if ($tasks) {
-    foreach ($t in $tasks) {
-        try { Unregister-ScheduledTask -TaskName $t.TaskName -Confirm:$false; Write-OK "Removed task: $($t.TaskName)" }
-        catch { Write-Warn "Could not remove task: $($t.TaskName)" }
-    }
-} else { Write-Skip "No Albedo scheduled tasks found" }
-
-Write-Host ""
-Write-Host "  +===========================================================+" -ForegroundColor Green
-Write-Host "  |   ALBEDO FULLY REMOVED                                    |" -ForegroundColor Green
-Write-Host "  |                                                           |" -ForegroundColor Green
-Write-Host "  |   You can now run Albedo-Setup-x.x.x.exe for a clean     |" -ForegroundColor Green
-Write-Host "  |   fresh install with the setup wizard.                    |" -ForegroundColor Green
-Write-Host "  +===========================================================+" -ForegroundColor Green
-Write-Host ""
-::##PS1_END##
