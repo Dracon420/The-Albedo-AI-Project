@@ -83,11 +83,11 @@ if (-not (Test-Path $mainPy)) {
 }
 
 # ============================================================================
-# Package health check -- redirect to wizard if customtkinter is missing
+# Package health check -- redirect to wizard if eel is missing
 # ============================================================================
 
 $_chk = Start-Process -FilePath $python `
-    -ArgumentList '-c "import customtkinter"' `
+    -ArgumentList '-c "import eel"' `
     -WindowStyle Hidden -PassThru -Wait
 if ($_chk.ExitCode -ne 0) {
     Write-Host ""
@@ -118,7 +118,7 @@ if ($_chk.ExitCode -ne 0) {
 
     # Re-check after wizard exits — if install succeeded, continue launching.
     $_chk2 = Start-Process -FilePath $python `
-        -ArgumentList '-c "import customtkinter"' `
+        -ArgumentList '-c "import eel"' `
         -WindowStyle Hidden -PassThru -Wait
     if ($_chk2.ExitCode -ne 0) {
         Write-Host ""

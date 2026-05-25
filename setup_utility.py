@@ -250,9 +250,8 @@ def _write_env(
         "DEEPGRAM_MODEL":       "nova-2",
         "DEEPGRAM_LANGUAGE":    "en",
         "DEEPGRAM_TIMEOUT":     "10",
-        # Phase 2 alpha: UI selector. Tk remains the default until the Eel
-        # frontend ships out of alpha. Users opt in with ALBEDO_UI=eel.
-        "ALBEDO_UI":            "tk",
+        # Eel Cyberdeck UI is the default for all fresh installs (v2.0.0+).
+        "ALBEDO_UI":            "eel",
     }
     def _env_format(val: str) -> str:
         # python-dotenv interprets \v \n \t etc inside DOUBLE quotes —
