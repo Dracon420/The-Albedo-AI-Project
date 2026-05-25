@@ -159,9 +159,20 @@ def _ollama_chat(message: str, history: list[dict] | None = None,
 
 def direct_reply(message: str, history: list[dict] | None = None) -> str:
     """
-    Lightweight conversational path — always direct Ollama, never interpreter.
-    150-token output cap makes "hello" loops physically impossible.
+    Lightweight conversational path.
+    Tries cloud (Gemini → Groq) first; falls back to Ollama when offline.
     """
+    try:
+        import sys as _sys, os as _os
+        _sys.path.insert(0, str(_os.path.dirname(_os.path.dirname(__file__))))
+        from swarm import swarm_chat
+        with _active_model_lock:
+            sys_prompt = _active_sys_prompt or _SYSTEM_PROMPT
+        cloud = swarm_chat(message, system_prompt=sys_prompt, history=history)
+        if cloud:
+            return cloud
+    except Exception as _exc:
+        print(f"[bridge] cloud direct_reply failed: {_exc}")
     return _ollama_chat(message, history=history,
                         num_predict=_PREDICT_CONVERSATIONAL, temperature=0.1)
 
@@ -212,12 +223,26 @@ def get_interpreter():
 
 def bridge_chat(message: str, history: list[dict] | None = None) -> str:
     """
-    Send an augmented prompt to the LLM.
+    Send an augmented RAG prompt to the LLM.
 
-    Uses Open Interpreter (Bridge Control) when available.
-    Falls back to direct Ollama (_ollama_chat) otherwise.
-    History is always forwarded so rolling context survives the fallback.
+    Priority: Gemini → Groq → Open Interpreter (Ollama) → bare Ollama.
+    Cloud providers get the full Albedo system prompt and conversation history.
+    Ollama is the offline fallback only.
     """
+    # ── 1. Cloud path (Gemini → Groq) ─────────────────────────────────────
+    try:
+        import sys as _sys, os as _os
+        _sys.path.insert(0, str(_os.path.dirname(_os.path.dirname(__file__))))
+        from swarm import swarm_chat
+        with _active_model_lock:
+            sys_prompt = _active_sys_prompt or _SYSTEM_PROMPT
+        cloud = swarm_chat(message, system_prompt=sys_prompt, history=history)
+        if cloud:
+            return cloud
+    except Exception as _exc:
+        print(f"[bridge] cloud bridge_chat failed: {_exc}")
+
+    # ── 2. Local Ollama fallback (offline / API key missing) ───────────────
     if not _interpreter_available():
         return _ollama_chat(message, history=history)
 

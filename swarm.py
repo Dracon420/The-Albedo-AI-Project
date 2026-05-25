@@ -395,6 +395,78 @@ def direct_gemini_search(prompt: str) -> str:
     return _UPLINK_ERROR
 
 
+def swarm_chat(message: str, system_prompt: str | None = None,
+               history: list[dict] | None = None) -> str | None:
+    """
+    Generate a response using cloud LLMs (Gemini → Groq fallback).
+
+    This is the primary brain path for all general queries.
+    Returns None only if offline or every cloud provider fails, so the
+    caller can fall back to local Ollama.
+
+    history: list of {"role": "user"|"assistant", "content": str} dicts.
+    """
+    load_swarm_keys()
+    if not check_connection():
+        return None
+
+    sys = system_prompt or _DIRECT_ANSWER_INSTRUCTION
+
+    # Gemini first — best quality, 1500 req/day free
+    if _gemini_client is not None:
+        try:
+            from google.genai import types
+
+            # Build multi-turn contents if history is present
+            contents: list = []
+            if history:
+                for h in history[-6:]:   # last 3 exchanges
+                    role = "user" if h.get("role") == "user" else "model"
+                    contents.append(
+                        types.Content(role=role,
+                                      parts=[types.Part(text=h["content"])])
+                    )
+            contents.append(
+                types.Content(role="user", parts=[types.Part(text=message)])
+            )
+
+            response = _gemini_client.models.generate_content(
+                model=_gemini_model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=sys,
+                    temperature=0.1,
+                ),
+            )
+            result = response.text.strip()
+            if result:
+                print("[swarm] Gemini answered.")
+                return result
+        except Exception as exc:
+            print(f"[swarm] Gemini chat failed: {exc} — trying Groq.")
+
+    # Groq fallback — llama-3.1-8b-instant, generous free tier
+    if _groq_client is not None:
+        try:
+            messages: list[dict] = [{"role": "system", "content": sys}]
+            if history:
+                messages.extend(history[-6:])
+            messages.append({"role": "user", "content": message})
+
+            completion = _groq_client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=messages,
+            )
+            result = completion.choices[0].message.content.strip()
+            if result:
+                print("[swarm] Groq answered.")
+                return result
+        except Exception as exc:
+            print(f"[swarm] Groq chat failed: {exc}")
+
+    return None   # all cloud providers failed — caller falls back to Ollama
+
+
 def query_gemini_stream(prompt: str, on_sentence=None) -> str:
     """
     Stream a response from Gemini using the google-genai SDK.
