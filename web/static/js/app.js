@@ -1,37 +1,59 @@
 // ============================================================
 // app.js — top-level controller. Wires modules together once the
-//          DOM has loaded and the Eel websocket is ready.
+//          DOM and Eel websocket are ready.
 // ============================================================
 
 (function () {
-  function start() {
-    Drawer.init();
-    Settings.init();
-    Chat.init();
-    Telemetry.start();
-    Swarm.start();
-    Neural.init();
+  // Minimal appendLine that works even before Chat.init() runs.
+  // Used to surface init errors that would otherwise be invisible.
+  function _emergencyLog(kind, text) {
+    const feed = document.getElementById("chat");
+    if (!feed) return;
+    const line = document.createElement("div");
+    line.className = `chat__line chat__line--${kind}`;
+    line.textContent = text;
+    feed.appendChild(line);
+    feed.scrollTop = feed.scrollHeight;
+  }
 
-    // Friendly banner once we know Eel is alive.
+  function start() {
+    // Wrap each module init individually — one failure won't kill the rest.
+    try { Drawer.init(); } catch (e) {
+      _emergencyLog("error", "[SYS] Drawer init error: " + e);
+    }
+    try { Settings.init(); } catch (e) {
+      _emergencyLog("error", "[SYS] Settings init error: " + e);
+    }
+    try { Chat.init(); } catch (e) {
+      _emergencyLog("error", "[SYS] Chat init error: " + e);
+    }
+    try { Telemetry.start(); } catch (e) {
+      _emergencyLog("error", "[SYS] Telemetry init error: " + e);
+    }
+    try { Swarm.start(); } catch (e) { /* non-fatal */ }
+    try { Neural.init(); } catch (e) { /* non-fatal */ }
+
+    // Confirm Eel bridge is alive and show persona.
     eel.get_version()().then((r) => {
       if (r && r.ok) {
-        // Apply persona from version payload (seeded from settings.json)
         if (r.persona && window._albedo_persona_push) {
           window._albedo_persona_push(r.persona);
         }
         const persona = r.persona || "ALBEDO";
         Chat.appendLine("system",
-          `[SYS] Eel UI online — ${persona} v${r.version}, uptime ${r.uptime_s}s.`);
+          `[SYS] Eel UI online -- ${persona} v${r.version}, uptime ${r.uptime_s}s.`);
       }
-    }).catch(() => {
-      Chat.appendLine("error", "[SYS] Eel bridge unreachable.");
+    }).catch((e) => {
+      Chat.appendLine("error", "[SYS] Eel bridge unreachable: " + e);
     });
   }
 
-  // Eel exposes window.eel after /eel.js loads. Wait for DOMContentLoaded
-  // OR a short poll for eel.js to be ready, whichever comes last.
+  // Poll until eel.js has loaded and registered its functions.
   function _whenEelReady(cb) {
-    if (typeof eel !== "undefined" && eel.get_version) { cb(); return; }
+    if (typeof eel !== "undefined" && typeof eel.get_version === "function") {
+      cb();
+      return;
+    }
     setTimeout(() => _whenEelReady(cb), 50);
   }
 

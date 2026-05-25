@@ -731,11 +731,27 @@ def run(query: str, use_web: bool = False,
         return _strip_markdown(bridge_chat(verify_data["synthesis_prompt"],
                                            history=history))
 
-    # ── 2. Obsidian vault RAG + optional web search ──────────────────────────
+    # ── 2. Obsidian vault RAG + smart web search ────────────────────────────
     # Skip RAG for very short inputs — no useful embedding match and can
     # cause n_results=0 crashes in ChromaDB.
     memory_chunks = [] if len(query) < 5 else search_memory(query)
-    web_results   = web_search(query) if use_web else []
+
+    # Auto web search: always search if explicitly requested OR if local RAG
+    # has no useful results OR if the query looks like it needs current info.
+    _WEB_SIGNALS = frozenset({
+        "today", "current", "latest", "now", "recent", "new", "update",
+        "weather", "news", "price", "stock", "score", "schedule",
+        "who is", "what is", "when did", "when was", "how do", "how does",
+        "where is", "why is", "what happened", "what are",
+        "vs", "versus", "compare", "difference between",
+    })
+    q_lower = query.lower()
+    _needs_web = (
+        use_web
+        or not memory_chunks
+        or any(sig in q_lower for sig in _WEB_SIGNALS)
+    )
+    web_results = web_search(query) if _needs_web else []
 
     prompt = _build_standard_prompt(query, memory_chunks, web_results)
     return _strip_markdown(bridge_chat(prompt, history=history))
