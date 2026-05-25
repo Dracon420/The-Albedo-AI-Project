@@ -59,8 +59,9 @@ def _word_to_label(word: str) -> str:
 def notify_persona_change(word: str) -> None:
     """
     Called (from the wake-word listener callback or wakeword detection code)
-    when a specific wake word fires. Updates the module-level persona name
-    and pushes the new label to the JS layer via eel if available.
+    when a specific wake word fires. Updates the module-level persona name,
+    swaps the active Ollama model (albedo-cortana / albedo-jarvis), and
+    pushes the new label to the JS layer via eel if available.
 
     Safe to call from any thread.
     """
@@ -68,7 +69,13 @@ def notify_persona_change(word: str) -> None:
     label = _word_to_label(word)
     with _persona_lock:
         _persona_name = label
-    # Push to JS — _albedo_persona_push is registered by chat.js
+    # Swap the Ollama model + system prompt in the inference bridge
+    try:
+        from albedo.bridge import set_active_persona
+        set_active_persona(word)
+    except Exception:
+        pass
+    # Push display label to JS — _albedo_persona_push is registered by chat.js
     try:
         import eel as _eel
         _eel._albedo_persona_push(label)()  # noqa: SLF001
@@ -100,7 +107,7 @@ def get_version() -> dict:
     except OSError:
         version = "unknown"
 
-    # Seed persona name from settings.json on first call (before any wake word fires)
+    # Seed persona name + active Ollama model from settings.json on first call
     global _persona_name
     try:
         s = _read_settings_dict()
@@ -108,6 +115,12 @@ def get_version() -> dict:
         if persona_key:
             with _persona_lock:
                 _persona_name = _word_to_label(persona_key)
+            # Also swap the inference model so the right Ollama model is used
+            try:
+                from albedo.bridge import set_active_persona
+                set_active_persona(persona_key)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -573,6 +586,9 @@ def set_setting(key: str, value: Any) -> dict:
                 _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
             except OSError:
                 return {"ok": False, "error": "settings file not writable"}
+        # Live-swap inference model when persona changes via settings panel
+        if key == "active_persona" and isinstance(value, str):
+            notify_persona_change(value)
         return {"ok": True, "key": key, "value": value}
     except Exception as exc:                                        # noqa: BLE001
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}

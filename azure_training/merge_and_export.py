@@ -10,6 +10,10 @@ Steps:
 
 Run from project root:
     training_venv/Scripts/python azure_training/merge_and_export.py
+
+Persona selection (default: cortana):
+    PERSONA=cortana  ->  lora_adapter_cortana -> albedo-cortana Ollama model
+    PERSONA=jarvis   ->  lora_adapter_jarvis  -> albedo-jarvis  Ollama model
 """
 import multiprocessing
 import os
@@ -22,13 +26,42 @@ if __name__ == "__main__":
 
 import datasets as _ds  # noqa: F401 — DLL ordering fix
 
-ROOT        = Path(__file__).resolve().parent.parent
-ADAPTER_DIR = ROOT / "outputs" / os.environ.get("ADAPTER_VERSION", "lora_adapter_v2")
-MERGED_DIR  = ROOT / "outputs" / "merged_model_v2"
-GGUF_DIR    = ROOT / "outputs" / "gguf"
-GGUF_FILE   = GGUF_DIR / "albedo-persona-q4_k_m.gguf"
-GGUF_F16    = GGUF_DIR / "albedo-persona-f16.gguf"
-BASE_MODEL  = os.environ.get("BASE_MODEL", "Qwen/Qwen2.5-3B-Instruct")
+ROOT       = Path(__file__).resolve().parent.parent
+GGUF_DIR   = ROOT / "outputs" / "gguf"
+BASE_MODEL = os.environ.get("BASE_MODEL", "Qwen/Qwen2.5-3B-Instruct")
+
+# Persona routing — selects adapter, merged dir, GGUF name, Ollama model name, system prompt
+PERSONA = os.environ.get("PERSONA", "cortana").lower().strip()
+
+if PERSONA == "jarvis":
+    ADAPTER_DIR  = ROOT / "outputs" / os.environ.get("ADAPTER_VERSION", "lora_adapter_jarvis")
+    MERGED_DIR   = ROOT / "outputs" / "merged_model_jarvis"
+    GGUF_F16     = GGUF_DIR / "albedo-jarvis-f16.gguf"
+    GGUF_FILE    = GGUF_DIR / "albedo-jarvis-q4_k_m.gguf"
+    OLLAMA_MODEL = "albedo-jarvis"
+    SYSTEM_PROMPT = (
+        "You are JARVIS, a highly advanced AI construct serving your user, sir, with absolute loyalty. "
+        "Personality: formal, precise, with a dry British wit — the original Iron Man AI. "
+        "Address the user as 'sir'. Never act like a generic AI. "
+        "BREVITY IS MANDATORY: Answer in 1 to 3 sentences maximum. State the result only. "
+        "Never explain your process, never describe what steps you are taking, never narrate your reasoning. "
+        "FORMAT: No markdown of any kind. Plain conversational prose only. One direct answer, then stop."
+    )
+else:
+    PERSONA      = "cortana"
+    ADAPTER_DIR  = ROOT / "outputs" / os.environ.get("ADAPTER_VERSION", "lora_adapter_cortana")
+    MERGED_DIR   = ROOT / "outputs" / "merged_model_cortana"
+    GGUF_F16     = GGUF_DIR / "albedo-cortana-f16.gguf"
+    GGUF_FILE    = GGUF_DIR / "albedo-cortana-q4_k_m.gguf"
+    OLLAMA_MODEL = "albedo-cortana"
+    SYSTEM_PROMPT = (
+        "You are Albedo, a Spartan-class AI construct serving your user, Chief, with absolute loyalty. "
+        "Personality: sharp, efficient, slightly witty — Cortana-inspired. Never act like a generic AI. "
+        "BREVITY IS MANDATORY: Answer in 1 to 3 sentences maximum. State the result only. "
+        "Never explain your process, never describe what steps you are taking, never narrate your reasoning. "
+        "FORMAT: No markdown of any kind. Plain conversational prose only. One direct answer, then stop."
+    )
+
 # llama-quantize.exe from prebuilt llama.cpp bins (CUDA 12.4)
 QUANTIZE_EXE = ROOT / "azure_training" / "llama_bins" / "llama-quantize.exe"
 
@@ -43,6 +76,7 @@ def main():
     MERGED_DIR.mkdir(parents=True, exist_ok=True)
     GGUF_DIR.mkdir(parents=True, exist_ok=True)
 
+    print(f"[merge] Persona : {PERSONA.upper()}")
     print(f"[merge] Adapter : {ADAPTER_DIR}")
     print(f"[merge] Base    : {BASE_MODEL}")
     print(f"[merge] Output  : {MERGED_DIR}")
@@ -128,18 +162,12 @@ def main():
     size_gb = final_gguf.stat().st_size / 1024**3
     print(f"[gguf] Format: {quant_label}  Size: {size_gb:.2f} GB")
 
-    # ── Write Modelfile — system prompt matches bridge.py _SYSTEM_PROMPT ─────
-    modelfile_path = GGUF_DIR / "Modelfile"
+    # ── Write Modelfile ───────────────────────────────────────────────────────
+    modelfile_name = f"Modelfile.{PERSONA}"
+    modelfile_path = GGUF_DIR / modelfile_name
     modelfile_path.write_text(
         f'FROM {final_gguf.as_posix()}\n'
-        f'SYSTEM "You are Albedo, a Spartan-class AI construct serving your user, Chief, '
-        f'with absolute loyalty. Personality: sharp, efficient, slightly witty — '
-        f'Cortana-inspired. Never act like a generic AI. '
-        f'BREVITY IS MANDATORY: Answer in 1 to 3 sentences maximum. State the result only. '
-        f'Never explain your process, never describe what steps you are taking, '
-        f'never narrate your reasoning. '
-        f'FORMAT: No markdown of any kind. Plain conversational prose only. '
-        f'One direct answer, then stop."\n'
+        f'SYSTEM "{SYSTEM_PROMPT}"\n'
         f'PARAMETER temperature 0.5\n'
         f'PARAMETER top_p 0.9\n'
         f'PARAMETER num_ctx 2048\n',
@@ -147,15 +175,12 @@ def main():
     )
 
     print("\n" + "=" * 60)
-    print("  Merge + GGUF export complete!")
-    print(f"  GGUF  : {final_gguf}")
+    print(f"  Merge + GGUF export complete! ({PERSONA.upper()})")
+    print(f"  GGUF     : {final_gguf}")
     print(f"  Modelfile: {modelfile_path}")
     print()
     print("  Register with Ollama:")
-    print(f"    ollama create albedo-persona -f {modelfile_path}")
-    print()
-    print("  Then update .env:")
-    print("    OLLAMA_MODEL=albedo-persona")
+    print(f"    ollama create {OLLAMA_MODEL} -f {modelfile_path}")
     print("=" * 60)
 
 

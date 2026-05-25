@@ -22,12 +22,53 @@ stop     sequences are injected into every payload so the model cannot simulate
 
 from __future__ import annotations
 
+import threading as _threading
+
 from albedo.config import OLLAMA_MODEL, OLLAMA_BASE_URL
 
 # ── Generation constants ───────────────────────────────────────────────────────
 _NUM_CTX              = 2048   # context window — covers system prompt + history
 _PREDICT_STANDARD     = 150    # hard output cap for normal answers
 _PREDICT_CONVERSATIONAL = 150  # hard output cap for greetings / one-liners
+
+# ── Persona-aware model routing ────────────────────────────────────────────────
+# Updated by set_active_persona() when a wake word fires or settings change.
+_active_model_lock: "_threading.Lock" = _threading.Lock()
+_active_model:      str = ""   # empty → fall back to OLLAMA_MODEL from .env
+_active_sys_prompt: str = ""   # empty → fall back to _SYSTEM_PROMPT below
+
+
+def set_active_persona(word: str) -> None:
+    """
+    Swap the Ollama model and system prompt to match the detected wake word.
+    Called from albedo.eel_app.bridge.notify_persona_change().
+
+    Recognised words → Ollama model:
+        "cortana" → albedo-cortana  (Halo / Cortana-style personality)
+        "jarvis"  → albedo-jarvis   (Iron Man / JARVIS-style personality)
+    Unknown words leave the model unchanged.
+    """
+    global _active_model, _active_sys_prompt
+    w = word.strip().lower()
+    with _active_model_lock:
+        if w == "jarvis":
+            _active_model = "albedo-jarvis"
+            _active_sys_prompt = (
+                "You are JARVIS, a highly advanced AI construct serving your user, sir, "
+                "with absolute loyalty. Personality: formal, precise, with a dry British wit "
+                "— the original Iron Man AI. Address the user as 'sir'. Never act like a generic AI. "
+                "BREVITY IS MANDATORY: Answer in 1 to 3 sentences maximum. State the result only. "
+                "Never explain your process, never describe what steps you are taking, "
+                "never narrate your reasoning. "
+                "FORMAT: No markdown of any kind. Plain conversational prose only. "
+                "One direct answer, then stop."
+            )
+        elif w == "cortana":
+            _active_model = "albedo-cortana"
+            _active_sys_prompt = ""   # will fall back to _SYSTEM_PROMPT (Cortana style)
+        else:
+            # Unknown persona — keep whatever was active
+            pass
 
 # Stop sequences prevent the model from entering a self-simulated dialogue loop.
 # Llama 3.2 will stop generating the moment it would emit any of these tokens.
@@ -82,13 +123,17 @@ def _ollama_chat(message: str, history: list[dict] | None = None,
     """
     import httpx
 
-    messages: list[dict] = [{"role": "system", "content": _SYSTEM_PROMPT}]
+    with _active_model_lock:
+        model_to_use  = _active_model or OLLAMA_MODEL
+        sys_to_use    = _active_sys_prompt or _SYSTEM_PROMPT
+
+    messages: list[dict] = [{"role": "system", "content": sys_to_use}]
     if history:
         messages.extend(history)
     messages.append({"role": "user", "content": message})
 
     payload = {
-        "model": OLLAMA_MODEL,
+        "model": model_to_use,
         "messages": messages,
         "stream": False,
         "options": {

@@ -1,14 +1,15 @@
 """
-train_local.py — Albedo QLoRA fine-tune for local RTX 2060 (6 GB VRAM).
+train_local.py — Albedo/Jarvis QLoRA fine-tune for local RTX 2060 (6 GB VRAM).
 
 Uses standard HuggingFace transformers + PEFT + bitsandbytes (no Unsloth).
-Reads ../training_data/albedo_dataset.jsonl, fine-tunes with QLoRA,
-saves LoRA adapter to ../outputs/lora_adapter/.
-
-Estimated time on RTX 2060: ~5-15 minutes for 49 examples x 3 epochs.
+Fine-tunes with QLoRA and saves LoRA adapter to ../outputs/.
 
 Run from project root:
     training_venv/Scripts/python azure_training/train_local.py
+
+Persona selection (default: cortana):
+    PERSONA=cortana  ->  albedo_dataset.jsonl  -> lora_adapter_cortana
+    PERSONA=jarvis   ->  jarvis_dataset.jsonl  -> lora_adapter_jarvis
 """
 import json
 import multiprocessing
@@ -27,10 +28,18 @@ if __name__ == "__main__":
 import datasets as _datasets_preload  # noqa: F401 — side-effect import
 
 # ── Config ────────────────────────────────────────────────────────────────────
-ROOT        = Path(__file__).resolve().parent.parent
-DATA_FILE   = ROOT / "training_data" / "albedo_dataset.jsonl"
-OUTPUT_DIR  = ROOT / "outputs"
-ADAPTER_DIR = OUTPUT_DIR / "lora_adapter_v2"   # v2 — keep v1 for rollback
+ROOT       = Path(__file__).resolve().parent.parent
+OUTPUT_DIR = ROOT / "outputs"
+
+# Persona routing — PERSONA env var selects dataset + adapter name
+PERSONA    = os.environ.get("PERSONA", "cortana").lower().strip()
+if PERSONA == "jarvis":
+    DATA_FILE   = ROOT / "training_data" / "jarvis_dataset.jsonl"
+    ADAPTER_DIR = OUTPUT_DIR / "lora_adapter_jarvis"
+else:
+    PERSONA     = "cortana"
+    DATA_FILE   = ROOT / "training_data" / "albedo_dataset.jsonl"
+    ADAPTER_DIR = OUTPUT_DIR / "lora_adapter_cortana"
 
 BASE_MODEL  = os.environ.get("BASE_MODEL", "Qwen/Qwen2.5-3B-Instruct")
 MAX_SEQ_LEN = int(os.environ.get("MAX_SEQ_LEN", "512"))
@@ -74,8 +83,10 @@ def main():
 
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    print(f"[albedo-train] Persona     : {PERSONA.upper()}")
     print(f"[albedo-train] Base model  : {BASE_MODEL}")
     print(f"[albedo-train] Dataset     : {DATA_FILE}")
+    print(f"[albedo-train] Adapter out : {ADAPTER_DIR}")
     print(f"[albedo-train] Epochs      : {EPOCHS}")
     print(f"[albedo-train] Batch size  : {BATCH_SIZE} x {GRAD_ACCUM} grad accum = effective {BATCH_SIZE * GRAD_ACCUM}")
     print(f"[albedo-train] LoRA rank   : {LORA_RANK}")
