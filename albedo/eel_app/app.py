@@ -134,8 +134,100 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
         _wake_lock = _threading.Lock()
 
         def _on_mic_wakeword() -> None:
-            """Called by the listener thread each time a wake word fires."""
-            print("[eel_app] Wake word fired — ready for voice input.")
+            """
+            Called by the wakeword listener thread each time a wake word fires.
+
+            Full response cycle:
+              1. Play the wake-ack phrase ("Yes?")
+              2. Record the follow-up utterance via VAD
+              3. Transcribe via Vosk STT
+              4. Route through the pipeline (cloud → Ollama fallback)
+              5. Speak the reply via TTS
+              6. Push both the user text and reply into the Eel chat feed
+            """
+            word = _ww.get_last_detected_word()
+            print(f"[eel_app] Wake word '{word}' fired — capturing utterance.")
+
+            # Push detection event into the chat feed
+            try:
+                import eel as _eel
+                _eel._albedo_chat_push("system", f"[WAKE] '{word.upper()}' detected — listening…")()
+            except Exception:
+                pass
+
+            # 1. Play acknowledgement phrase
+            try:
+                import os as _os
+                ack = _os.environ.get("WAKE_ACK_PHRASE", "Yes?").strip()
+                if ack:
+                    from albedo.audio.tts import speak
+                    speak(ack)
+            except Exception as _exc:
+                print(f"[eel_app] Wake ack TTS failed: {_exc}")
+
+            # 2. Record follow-up utterance
+            audio = None
+            try:
+                from albedo.audio.capture import record_utterance
+                with _wake_lock:
+                    stream_ref = _wake_stream
+                if stream_ref is not None:
+                    audio = record_utterance(stream_ref)
+            except Exception as _exc:
+                print(f"[eel_app] Wake record failed: {_exc}")
+
+            if audio is None or len(audio) == 0:
+                print("[eel_app] Wake: no audio captured after wake word.")
+                return
+
+            # 3. Transcribe
+            text = ""
+            try:
+                from albedo.audio.stt import transcribe
+                text = transcribe(audio).strip()
+            except Exception as _exc:
+                print(f"[eel_app] Wake STT failed: {_exc}")
+
+            if not text:
+                print("[eel_app] Wake: nothing transcribed.")
+                return
+
+            print(f"[eel_app] Wake utterance: {text!r}")
+
+            # Push user text to chat feed
+            try:
+                import eel as _eel
+                _eel._albedo_chat_push("user", f"> {text}")()
+            except Exception:
+                pass
+
+            # 4. Route through pipeline
+            reply = ""
+            try:
+                from albedo.pipeline import run as _pipeline_run
+                reply = _pipeline_run(text)
+            except Exception as _exc:
+                print(f"[eel_app] Wake pipeline failed: {_exc}")
+                reply = "Sorry, I ran into an error processing that."
+
+            if not reply:
+                return
+
+            # 5. Speak reply
+            try:
+                from albedo.audio.tts import speak
+                speak(reply)
+            except Exception as _exc:
+                print(f"[eel_app] Wake TTS reply failed: {_exc}")
+
+            # 6. Push reply to chat feed
+            try:
+                import eel as _eel
+                from albedo.eel_app.bridge import get_active_persona_name
+                persona = get_active_persona_name().get("name", "ALBEDO")
+                _eel._albedo_chat_push("albedo", f"{persona}  {reply}")()
+            except Exception:
+                pass
 
         def _wake_observer(state: WakeState) -> None:
             nonlocal _wake_stream, _wake_stop

@@ -116,6 +116,9 @@ const Chat = (() => {
   // Python pushes persona changes here when a wake word fires
   window._albedo_persona_push = function (name) { _applyPersonaName(name); };
 
+  // Python pushes chat lines here from backend threads (e.g. wake-word pipeline)
+  window._albedo_chat_push = function (kind, text) { appendLine(kind, text); };
+
   // Settings panel calls this when the user changes persona from the drawer
   window._albedo_persona_select = function (name) { _applyPersonaName(name); };
 
