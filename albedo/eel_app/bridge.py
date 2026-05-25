@@ -45,11 +45,9 @@ _persona_lock = threading.Lock()
 _persona_name = "ALBEDO"   # display name: "CORTANA", "JARVIS", or "ALBEDO"
 
 # Mapping: bare wake word → display label shown in chat / topbar.
-# "jarvis" is the OWW trigger (hey_jarvis model) but maps to CORTANA
-# display because that's the persona identity of this assistant.
 _PERSONA_LABELS: dict[str, str] = {
     "cortana": "CORTANA",
-    "jarvis":  "CORTANA",   # hey_jarvis OWW model → Cortana persona
+    "jarvis":  "JARVIS",
 }
 
 
@@ -71,13 +69,10 @@ def notify_persona_change(word: str) -> None:
     label = _word_to_label(word)
     with _persona_lock:
         _persona_name = label
-    # Swap the Ollama model + system prompt in the inference bridge.
-    # Pass the display label (e.g. "CORTANA") normalised to lowercase so
-    # set_active_persona routes to the correct model regardless of which
-    # OWW wake word triggered (e.g. "hey_jarvis" maps to CORTANA display).
+    # Swap the Ollama model + system prompt in the inference bridge
     try:
         from albedo.bridge import set_active_persona
-        set_active_persona(label.lower())
+        set_active_persona(word)
     except Exception:
         pass
     # Push display label to JS — _albedo_persona_push is registered by chat.js

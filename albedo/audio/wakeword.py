@@ -118,13 +118,43 @@ def set_active_model(words: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _get_oww_model() -> "_OWWModel":
-    """Return a cached OWW Model instance loaded with the hey_jarvis model."""
+    """
+    Return a cached OWW Model instance.
+
+    Loads the custom hey_core_tah_nuh.onnx ("hey cortana") model from the
+    wakewords/ directory if present, then hey_jarvis as a secondary trigger,
+    then falls back to the bundled alexa model so there's always something.
+    """
     global _oww_model
     with _oww_lock:
         if _oww_model is None:
-            print("[wakeword] Loading OpenWakeWord hey_jarvis model...")
+            import os
+            from pathlib import Path
+            root = Path(__file__).resolve().parent.parent.parent
+            ww_dir = root / "wakewords"
+
+            models_to_load: list[str] = []
+
+            # Priority 1: custom hey_cortana model
+            cortana_model = ww_dir / "hey_core_tah_nuh.onnx"
+            if cortana_model.exists():
+                models_to_load.append(str(cortana_model))
+                print(f"[wakeword] Found custom cortana model: {cortana_model.name}")
+
+            # Priority 2: hey_jarvis in wakewords/ dir
+            jarvis_model = ww_dir / "hey_jarvis_v0.1.onnx"
+            if jarvis_model.exists():
+                models_to_load.append(str(jarvis_model))
+                print(f"[wakeword] Found jarvis model: {jarvis_model.name}")
+
+            # Fallback: bundled hey_jarvis
+            if not models_to_load:
+                models_to_load.append("hey_jarvis_v0.1.onnx")
+                print("[wakeword] Using bundled hey_jarvis fallback.")
+
+            print(f"[wakeword] Loading OWW with {len(models_to_load)} model(s)...")
             _oww_model = _OWWModel(
-                wakeword_models=["hey_jarvis_v0.1.onnx"],
+                wakeword_models=models_to_load,
                 inference_framework="onnx",
             )
             print("[wakeword] OpenWakeWord ready.")
@@ -149,16 +179,18 @@ def _oww_detect_chunk(model: "_OWWModel", chunk) -> tuple[bool, str]:
     scores = model.predict(audio_in)
     for model_name, score in scores.items():
         if score >= _OWW_THRESHOLD:
-            # Map OWW model name → configured wake word label
             mn_lower = model_name.lower()
-            for word in _word_set():
-                if word in mn_lower or mn_lower in word:
-                    return True, word
-            # "hey_jarvis" fires → return "jarvis" as the label
+            # Custom cortana model — phonetic spelling maps to "cortana"
+            if "core_tah_nuh" in mn_lower or "cortana" in mn_lower:
+                return True, "cortana"
             if "jarvis" in mn_lower:
                 return True, "jarvis"
             if "alexa" in mn_lower:
                 return True, "alexa"
+            # Generic fallback: match against configured wake words
+            for word in _word_set():
+                if word in mn_lower:
+                    return True, word
             return True, model_name.split("_")[0]
     return False, ""
 
