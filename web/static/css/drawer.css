@@ -217,6 +217,13 @@
 .setting__select:focus,
 .setting__input:focus { border-color: var(--c-cyan); }
 
+/* Force <option> elements to use the cyberdeck palette —
+   Chromium/Edge respects these even in the native dropdown popup. */
+.setting__select option {
+  background: #0a0f18;
+  color: #d000ff;
+}
+
 /* Range slider — cyan thumb on dark track */
 .setting__range {
   -webkit-appearance: none;

@@ -134,6 +134,49 @@ def get_version() -> dict:
 
 
 @_expose
+def check_for_update() -> dict:
+    """
+    Compare the local VERSION file against the latest GitHub release.
+    Returns {ok, current, latest, up_to_date, release_url, error}.
+    """
+    from pathlib import Path
+    import json
+    import urllib.request
+
+    root = Path(__file__).resolve().parent.parent.parent
+    try:
+        current = (root / "VERSION").read_text(encoding="utf-8").strip()
+    except OSError:
+        current = "unknown"
+
+    try:
+        req = urllib.request.Request(
+            "https://api.github.com/repos/Dracon420/The-Albedo-AI-Project/releases/latest",
+            headers={"User-Agent": "Albedo-UpdateChecker/1.0"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode())
+
+        latest      = data.get("tag_name", "").lstrip("v")
+        release_url = data.get("html_url", "")
+        up_to_date  = (latest == current)
+
+        return {
+            "ok":          True,
+            "current":     current,
+            "latest":      latest,
+            "up_to_date":  up_to_date,
+            "release_url": release_url,
+        }
+    except Exception as exc:
+        return {
+            "ok":      False,
+            "current": current,
+            "error":   str(exc),
+        }
+
+
+@_expose
 def get_config_values(keys: list) -> dict:
     """Return a subset of config values by key name for the UI."""
     try:

@@ -223,8 +223,12 @@
       <section class="drawer__section">
         <h3>UPDATES</h3>
         <div class="setting">
-          <label class="setting__label" for="autoUpdateSelect">Auto-check interval</label>
-          <select id="autoUpdateSelect" class="setting__select"></select>
+          <button class="drawer__action" id="checkUpdateBtn">CHECK FOR UPDATE</button>
+          <pre class="drawer__readout drawer__readout--small" id="updateStatus">// update check not yet run</pre>
+          <a id="updateDownloadLink" class="setting__hint" href="#" target="_blank"
+             style="display:none; color:var(--c-cyan); text-shadow:var(--glow-cyan);">
+            ▶ Open release page to download
+          </a>
         </div>
       </section>
 

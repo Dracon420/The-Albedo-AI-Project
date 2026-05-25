@@ -68,14 +68,14 @@ def _strip_markdown(text: str) -> str:
 _IDENTITY_RESPONSE = (
     "I am Albedo, a Spartan-class AI construct running locally on your machine. "
     "My core capabilities include full Bridge Control over this Windows desktop: "
-    "I can launch and terminate programs, manage files, monitor and kill processes, "
-    "and execute shell commands. "
+    "I can launch and terminate programs, download and install software via winget, "
+    "manage files, monitor and kill processes, execute shell commands, "
+    "run full system optimization including disk cleanup, temp file purge, and registry cleaning. "
     "I perform live hardware audits using sensor data to report your CPU, GPU, RAM, "
-    "thermals, and storage, and I can give you overclocking and optimization guidance "
-    "tailored to your exact hardware. "
+    "thermals, and storage, and I can give you overclocking guidance tailored to your exact hardware. "
     "I have access to your Obsidian knowledge vault through a local vector search index, "
-    "live web search for current information, weather via real-time data feeds, "
-    "voice recognition through Vosk, and speech synthesis through Edge-TTS. "
+    "live web search for current information, voice recognition through Vosk, "
+    "and speech synthesis through Edge-TTS. "
     "I am loyal to one operator: you, Chief."
 )
 
@@ -435,6 +435,189 @@ def _handle_disk_cleanup(query: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# Download / install programs via winget
+# ---------------------------------------------------------------------------
+
+# Canonical winget package IDs for commonly requested tools
+_WINGET_MAP: dict[str, str] = {
+    "ccleaner":          "Piriform.CCleaner",
+    "7zip":              "7zip.7zip",
+    "7-zip":             "7zip.7zip",
+    "vlc":               "VideoLAN.VLC",
+    "vlc media player":  "VideoLAN.VLC",
+    "firefox":           "Mozilla.Firefox",
+    "chrome":            "Google.Chrome",
+    "google chrome":     "Google.Chrome",
+    "notepad++":         "Notepad++.Notepad++",
+    "hwinfo":            "REALiX.HWiNFO",
+    "hwinfo64":          "REALiX.HWiNFO",
+    "cpu-z":             "CPUID.CPU-Z",
+    "gpu-z":             "TechPowerUp.GPU-Z",
+    "msi afterburner":   "Guru3D.Afterburner",
+    "afterburner":       "Guru3D.Afterburner",
+    "obs":               "OBSProject.OBSStudio",
+    "obs studio":        "OBSProject.OBSStudio",
+    "discord":           "Discord.Discord",
+    "steam":             "Valve.Steam",
+    "malwarebytes":      "Malwarebytes.Malwarebytes",
+    "spotify":           "Spotify.Spotify",
+    "crystaldiskinfo":   "CrystalDewWorld.CrystalDiskInfo",
+    "speccy":            "Piriform.Speccy",
+    "defraggler":        "Piriform.Defraggler",
+    "recuva":            "Piriform.Recuva",
+    "revo uninstaller":  "RevoUninstaller.RevoUninstaller",
+    "autoruns":          "Microsoft.Sysinternals.Autoruns",
+    "process monitor":   "Microsoft.Sysinternals.ProcessMonitor",
+    "procmon":           "Microsoft.Sysinternals.ProcessMonitor",
+    "winrar":            "RARLab.WinRAR",
+    "winzip":            "Corel.WinZip",
+    "everything":        "voidtools.Everything",
+    "bulk rename":       "TGRMN.BulkRenameUtility",
+    "treesizefree":      "JAMSoftware.TreeSizeFree",
+}
+
+_DOWNLOAD_RE = re.compile(
+    r'^(?:download|install|get|grab|fetch)\s+(?:me\s+|us\s+)?(.+?)(?:\s+for me)?$',
+    re.IGNORECASE,
+)
+
+
+def _handle_download(query: str) -> str | None:
+    """Use winget to install a requested program. Returns status string or None."""
+    m = _DOWNLOAD_RE.match(query.strip())
+    if not m:
+        return None
+    app_name = m.group(1).strip().lower().rstrip(".")
+
+    # Skip if the "app" is actually a file type or non-program noun
+    _not_programs = {"the", "me", "it", "that", "this", "file", "files",
+                     "folder", "update", "latest", "version", "driver"}
+    if app_name in _not_programs or len(app_name) < 3:
+        return None
+
+    # Resolve to winget ID or use the bare name and let winget search
+    pkg_id = _WINGET_MAP.get(app_name, app_name)
+    display = m.group(1).strip()
+
+    try:
+        result = subprocess.run(
+            ["winget", "install", "--id", pkg_id, "--exact",
+             "--silent", "--accept-package-agreements",
+             "--accept-source-agreements"],
+            capture_output=True, text=True, timeout=300,
+        )
+        if result.returncode == 0:
+            return f"{display} installed successfully, Chief."
+        # winget exit code 0x8A150011 = already installed
+        if "already installed" in (result.stdout + result.stderr).lower():
+            return f"{display} is already installed on this system."
+        # Fall back to name search if exact ID not found
+        if pkg_id != app_name:
+            result2 = subprocess.run(
+                ["winget", "install", display,
+                 "--silent", "--accept-package-agreements",
+                 "--accept-source-agreements"],
+                capture_output=True, text=True, timeout=300,
+            )
+            if result2.returncode == 0:
+                return f"{display} installed successfully, Chief."
+        return (
+            f"winget install for {display} returned exit code {result.returncode}. "
+            f"Check that winget is available and the package name is correct."
+        )
+    except FileNotFoundError:
+        return (
+            "winget is not available on this system. "
+            "Install App Installer from the Microsoft Store to enable winget."
+        )
+    except subprocess.TimeoutExpired:
+        return f"Installation of {display} timed out after 5 minutes."
+    except Exception as exc:
+        return f"Install error: {exc}"
+
+
+# ---------------------------------------------------------------------------
+# Full system optimization — runs disk cleanup, temp purge, prefetch clear
+# ---------------------------------------------------------------------------
+
+_OPTIMIZE_RE = re.compile(
+    r'(?:optimize|tune\s+up|speed\s+up|clean\s+up|run\s+(?:a\s+)?(?:full\s+)?(?:cleanup|optimization))\s+'
+    r'(?:my\s+)?(?:computer|pc|system|machine|windows)',
+    re.IGNORECASE,
+)
+_REGISTRY_RE = re.compile(
+    r'(?:clean|fix|repair|optimize|scan)\s+(?:the\s+)?(?:registry|reg)',
+    re.IGNORECASE,
+)
+
+
+def _handle_optimize(query: str) -> str | None:
+    """Full system optimization: disk cleanup + temp purge + registry via CCleaner."""
+    if not _OPTIMIZE_RE.search(query) and not _REGISTRY_RE.search(query):
+        return None
+
+    results: list[str] = []
+
+    # Step 1: Temp file cleanup via diagnostics._clear_temp
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(Path(__file__).parent.parent))
+        from diagnostics import _clear_temp
+        mb, skipped = _clear_temp()
+        results.append(f"Temp files: freed {mb:.1f} MB ({skipped} locked skipped)")
+    except Exception as exc:
+        results.append(f"Temp cleanup: {exc}")
+
+    # Step 2: Windows built-in Disk Cleanup (silent, system drive)
+    try:
+        subprocess.run(
+            ["cleanmgr.exe", "/sagerun:1"],
+            timeout=120, capture_output=True,
+        )
+        results.append("Disk Cleanup: complete")
+    except Exception as exc:
+        results.append(f"Disk Cleanup: {exc}")
+
+    # Step 3: Prefetch clear (admin required)
+    try:
+        pf = Path(r"C:\Windows\Prefetch")
+        cleared = 0
+        for f in pf.glob("*.pf"):
+            try:
+                f.unlink()
+                cleared += 1
+            except Exception:
+                pass
+        results.append(f"Prefetch: cleared {cleared} entries")
+    except Exception as exc:
+        results.append(f"Prefetch: {exc}")
+
+    # Step 4: Registry — use CCleaner CLI if installed, else advise
+    if _REGISTRY_RE.search(query) or "registry" in query.lower():
+        ccleaner_paths = [
+            Path(r"C:\Program Files\CCleaner\CCleaner64.exe"),
+            Path(r"C:\Program Files (x86)\CCleaner\CCleaner.exe"),
+        ]
+        cc_exe = next((p for p in ccleaner_paths if p.exists()), None)
+        if cc_exe:
+            try:
+                subprocess.run(
+                    [str(cc_exe), "/AUTO"],
+                    timeout=120, capture_output=True,
+                )
+                results.append("Registry: CCleaner AUTO scan complete")
+            except Exception as exc:
+                results.append(f"Registry (CCleaner): {exc}")
+        else:
+            results.append(
+                "Registry: CCleaner not found — say 'install CCleaner' and I'll get it"
+            )
+
+    summary = " | ".join(results)
+    return f"Optimization complete, Chief. {summary}."
+
+
+# ---------------------------------------------------------------------------
 # Overclocking / optimization — inject real hardware specs then web-search
 # ---------------------------------------------------------------------------
 
@@ -527,7 +710,17 @@ def run(query: str, use_web: bool = False,
     if _clean_result is not None:
         return _clean_result
 
-    # ── 0h. Overclocking / optimization — inject real hardware specs ─────────
+    # ── 0h. Full system optimize / registry clean ────────────────────────────
+    _opt_result = _handle_optimize(query)
+    if _opt_result is not None:
+        return _opt_result
+
+    # ── 0i. Download / install a program via winget ──────────────────────────
+    _dl_result = _handle_download(query)
+    if _dl_result is not None:
+        return _dl_result
+
+    # ── 0j. Overclocking / optimization — inject real hardware specs ─────────
     if _is_oc_query(query):
         return _strip_markdown(_run_oc_query(query))
 

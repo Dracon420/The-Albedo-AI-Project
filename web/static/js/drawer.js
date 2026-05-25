@@ -191,6 +191,44 @@ const Drawer = (() => {
       }, 5000);
     }
 
+    // ── Update checker ────────────────────────────────────────────────────
+    const checkUpdateBtn    = document.getElementById("checkUpdateBtn");
+    const updateStatus      = document.getElementById("updateStatus");
+    const updateDownloadLink = document.getElementById("updateDownloadLink");
+
+    if (checkUpdateBtn) {
+      checkUpdateBtn.addEventListener("click", async () => {
+        checkUpdateBtn.disabled = true;
+        checkUpdateBtn.textContent = "CHECKING…";
+        if (updateStatus)      updateStatus.textContent = "// contacting GitHub...";
+        if (updateDownloadLink) updateDownloadLink.style.display = "none";
+
+        try {
+          const r = await eel.check_for_update()();
+          if (!r || !r.ok) {
+            if (updateStatus)
+              updateStatus.textContent = `// check failed: ${r ? r.error : "no response"}`;
+          } else if (r.up_to_date) {
+            if (updateStatus)
+              updateStatus.textContent = `// up to date — v${r.current} is the latest`;
+          } else {
+            if (updateStatus)
+              updateStatus.textContent =
+                `// update available!\n// current: v${r.current}\n// latest:  v${r.latest}`;
+            if (updateDownloadLink && r.release_url) {
+              updateDownloadLink.href = r.release_url;
+              updateDownloadLink.style.display = "block";
+            }
+          }
+        } catch (e) {
+          if (updateStatus) updateStatus.textContent = `// error: ${e}`;
+        } finally {
+          checkUpdateBtn.disabled = false;
+          checkUpdateBtn.textContent = "CHECK FOR UPDATE";
+        }
+      });
+    }
+
     // Keyboard: Escape closes the drawer
     document.addEventListener("keydown", (ev) => {
       if (ev.key === "Escape") close();
