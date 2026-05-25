@@ -12,9 +12,9 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D4?style=flat-square&logo=windows)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
-![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Llama%203.2-black?style=flat-square)
+![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20DeepSeek%20R1%20%7C%20Custom%20LoRA-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-v3.1.0-00F0FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-v2.0.0-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice & text command catalog
 
@@ -34,9 +34,16 @@ When given a directive, Albedo executes it.
 
 ## CORE ARCHITECTURE
 
-### Language Model — Llama 3.2 3B (CPU-Optimized)
+### Language Model — Dual-Persona Fine-Tuned Models (QLoRA on DeepSeek R1)
 
-The inference core runs **Llama 3.2:3b** via Ollama, quantized and memory-mapped to operate within the 6 GB VRAM envelope of an RTX 2060. A fixed `num_ctx` of 2048 tokens covers the system prompt, a full 10-turn rolling conversation history, and the current user query — without ever crowding out the generation budget. Output is hard-capped at 250 tokens per response with injected stop sequences that prevent the model from entering self-simulated dialogue loops. ChromaDB embeddings run entirely on CPU to preserve every byte of VRAM for LLM inference. Offline-first by design — web search is additive intelligence, not a dependency.
+V2 ships two custom-trained Ollama models, each a QLoRA fine-tune of **DeepSeek-R1-Distill-Qwen-1.5B**, quantized to Q4_K_M GGUF (1.80 GB each) for the RTX 2060's 6 GB VRAM envelope:
+
+| Model | Wake Word | Personality | Training |
+|---|---|---|---|
+| `albedo-cortana` | *"Hey Cortana"* | Halo Spartan-class AI — precise, loyal, tactical | Round 2 · 147 examples · rank 16 · cosine LR |
+| `albedo-jarvis` | *"Hey Jarvis"* | Iron Man AI — formal, British wit, addresses user as "sir" | 83 examples · rank 16 · 5 epochs |
+
+Wake word detection routes to the correct model at runtime via `set_active_persona()` in `albedo/bridge.py`. The persona can also be swapped live from the Settings panel without restarting. A fixed `num_ctx` of 2048 tokens covers the system prompt, 10-turn rolling history, and the current query. ChromaDB embeddings run entirely on CPU to preserve every byte of VRAM for LLM inference. Offline-first by design — web search is additive intelligence, not a dependency.
 
 ### Speech-to-Text & Wake Word — Vosk (CPU, offline)
 
@@ -96,7 +103,7 @@ Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and
 
 <div align="center">
 
-### [⬇ Download Albedo-Setup-3.1.0.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.1.0/Albedo-Setup-3.1.0.exe)
+### [⬇ Download Albedo-Setup-2.0.0.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v2.0.0/Albedo-Setup-2.0.0.exe)
 
 </div>
 
@@ -120,14 +127,14 @@ Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and
 
 **Deployment sequence:**
 
-1. **Download** `Albedo-Setup-3.1.0.exe` from the link above
+1. **Download** `Albedo-Setup-2.0.0.exe` from the link above
 2. **Run** the installer — accept the UAC prompt
 3. The **Setup Wizard** launches automatically and executes:
    - System dependency verification (Python 3.12 + Ollama)
    - Virtual environment creation and full pip dependency installation
    - Piper voice model download (Kristin + Ryan from HuggingFace)
    - `.env` configuration write with persona, voice, and wake word paths
-   - Ollama model pull (`llama3.2:3b`) with live progress output
+   - Ollama model pull (`albedo-cortana` + `albedo-jarvis`) with live progress output
    - Desktop shortcut creation
 4. **Select your initial persona** (Cortana or Jarvis) in the wizard
 5. **Double-click** the Albedo shortcut — Mission Control is online
@@ -299,7 +306,7 @@ The installer creates a **Start Menu** shortcut and an optional **Desktop** shor
 | Shortcut / Method | Action |
 |---|---|
 | **Albedo Mission Control** shortcut | Starts Ollama silently, then opens Mission Control via pythonw |
-| Re-run `Albedo-Setup-3.1.0.exe` | Upgrades in-place, preserves all user data |
+| Re-run `Albedo-Setup-2.0.0.exe` | Upgrades in-place, preserves all user data |
 | Windows **Add or remove programs** → Albedo | Uninstalls — preserves `.env`, `settings.json`, `chroma_db`, `albedo_memory_db` |
 
 Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.
@@ -310,7 +317,7 @@ Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those v
 
 | Parameter | Standard — RTX 2060 · 6 GB VRAM | High-Spec — RTX 3080+ · 8 GB+ VRAM |
 |---|---|---|
-| `OLLAMA_MODEL` | `llama3.2:3b` | `llama3.1:8b` |
+| `OLLAMA_MODEL` | `albedo-cortana` / `albedo-jarvis` | `albedo-cortana` / `albedo-jarvis` |
 | `VOSK_MODEL_PATH` | `vosk-model-small-en-us-0.15` (~40 MB) | `vosk-model-en-us-0.22` (~1.8 GB) |
 | `RAG_TOP_K` | `5` | `10` |
 | `num_ctx` | `2048` | `4096` |
@@ -323,7 +330,7 @@ Edit `.env` and restart to switch tiers. No reinstall required.
 
 | Layer | Technology |
 |---|---|
-| LLM runtime | [Ollama](https://ollama.com) · `llama3.2:3b` |
+| LLM runtime | [Ollama](https://ollama.com) · `albedo-cortana` / `albedo-jarvis` (DeepSeek-R1-Distill-Qwen-1.5B · Q4_K_M) |
 | Vision model | [Moondream](https://github.com/vikhyat/moondream) via Ollama |
 | Vector store | [ChromaDB](https://www.trychroma.com) · CPU embeddings (`all-MiniLM-L6-v2`) |
 | Speech-to-text + wake word | [Vosk](https://alphacephei.com/vosk/) · CPU · `vosk-model-small-en-us-0.15` |
