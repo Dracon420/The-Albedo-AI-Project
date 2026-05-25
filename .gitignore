@@ -47,7 +47,8 @@ models/
 vosk_models/
 *.pt
 
-# Piper TTS voice models (downloaded by installer — not committed)
+# Piper TTS binary and voice models (downloaded by installer — not committed)
+piper/
 voices/
 
 # Claude Code local settings
