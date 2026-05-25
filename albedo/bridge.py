@@ -27,9 +27,9 @@ import threading as _threading
 from albedo.config import OLLAMA_MODEL, OLLAMA_BASE_URL
 
 # ── Generation constants ───────────────────────────────────────────────────────
-_NUM_CTX              = 2048   # context window — covers system prompt + history
-_PREDICT_STANDARD     = 150    # hard output cap for normal answers
-_PREDICT_CONVERSATIONAL = 150  # hard output cap for greetings / one-liners
+_NUM_CTX              = 4096   # context window — covers system prompt + history
+_PREDICT_STANDARD     = 512    # hard output cap for normal answers
+_PREDICT_CONVERSATIONAL = 200  # hard output cap for greetings / one-liners
 
 # ── Persona-aware model routing ────────────────────────────────────────────────
 # Updated by set_active_persona() when a wake word fires or settings change.

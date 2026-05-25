@@ -119,6 +119,56 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     eel.init(str(_WEB_DIR))
     from albedo.eel_app import bridge       # noqa: F401  — registers @eel.expose
 
+    # ── Wake-word listener — starts/stops when the WAKE button is toggled ──
+    # The UI calls set_wake_state("armed"/"disarmed") which fires comm_mode
+    # observers. We register one here that actually starts/stops the Vosk
+    # background listener so clicking WAKE does something.
+    try:
+        import threading as _threading
+        from albedo.audio.capture import AudioStream
+        from albedo.audio import wakeword as _ww
+        from albedo.audio.comm_mode import on_wake_change, WakeState
+
+        _wake_stream: AudioStream | None = None
+        _wake_stop:   _threading.Event | None = None
+        _wake_lock = _threading.Lock()
+
+        def _on_mic_wakeword() -> None:
+            """Called by the listener thread each time a wake word fires."""
+            print("[eel_app] Wake word fired — ready for voice input.")
+
+        def _wake_observer(state: WakeState) -> None:
+            nonlocal _wake_stream, _wake_stop
+            with _wake_lock:
+                if state == WakeState.ARMED:
+                    if _wake_stop and not _wake_stop.is_set():
+                        return  # already running
+                    try:
+                        _wake_stream = AudioStream()
+                        _wake_stream.start()
+                        _wake_stop = _ww.start_background_listener(
+                            _wake_stream, _on_mic_wakeword
+                        )
+                        print("[eel_app] Wake-word listener ARMED.")
+                    except Exception as exc:
+                        print(f"[eel_app] Wake-word listener failed to start: {exc}")
+                else:
+                    if _wake_stop:
+                        _wake_stop.set()
+                        _wake_stop = None
+                    if _wake_stream:
+                        try:
+                            _wake_stream.stop()
+                        except Exception:
+                            pass
+                        _wake_stream = None
+                    print("[eel_app] Wake-word listener DISARMED.")
+
+        on_wake_change(_wake_observer)
+        print("[eel_app] Wake-word observer registered.")
+    except Exception as exc:
+        print(f"[eel_app] Wake-word setup failed (non-fatal): {exc}")
+
     # Start the idle monitor — fires the dream cycle after IDLE_THRESHOLD_MINUTES
     # of no keyboard/mouse activity.
     try:
