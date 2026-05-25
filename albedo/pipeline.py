@@ -181,12 +181,11 @@ _AUDIT_EXACT = frozenset({
     "whats in my computer", "whats in my pc", "inside my computer",
     "my computer hardware", "my pc hardware", "my rig hardware",
 })
-_AUDIT_VERB = frozenset({
-    "optimize", "optimise", "check", "scan",
-    "diagnose", "analyse", "analyze", "clean", "audit",
-    "detect", "identify", "report", "display", "show",
-    "list", "find", "get", "tell", "give",
-    "what", "which", "how",   # interrogatives: "what cpu do I have", "how much ram"
+# Only report/query verbs — action verbs (optimize, clean, fix) must NOT be here
+# or they intercept the optimize/OC handlers that run later in the pipeline.
+_AUDIT_VERB_QUERY = frozenset({
+    "check", "scan", "diagnose", "report", "display", "show",
+    "list", "find", "get", "detect", "identify", "monitor", "measure", "test",
 })
 _AUDIT_NOUN = frozenset({
     "computer", "system", "pc", "rig", "machine", "hardware",
@@ -194,14 +193,31 @@ _AUDIT_NOUN = frozenset({
     "vitals", "cpu", "gpu", "ram", "memory", "vram", "processor",
     "graphics card", "graphics", "storage", "drive", "ssd", "hdd",
 })
+# Specific interrogative patterns that indicate a live data request.
+# "how much ram do I have" = audit.  "how does vram work" = NOT audit.
+_AUDIT_INTERROGATIVE_RE = re.compile(
+    r'\bhow\s+(?:much|many|fast|hot|high|low)\b', re.IGNORECASE
+)
 
 
 def _is_audit_query(query: str) -> bool:
-    """True when the user wants a hardware audit / system optimisation."""
+    """
+    True when the user wants live hardware sensor data from THIS machine.
+
+    Exact phrases always match. Verb+noun matching requires the query to be
+    about the user's own system ('my', 'do i', 'i have') so conceptual
+    questions like 'how does my RTX handle VRAM under load' don't trigger a
+    full live audit dump.
+    """
     q = query.lower()
     if any(s in q for s in _AUDIT_EXACT):
         return True
-    has_verb = any(s in q for s in _AUDIT_VERB)
+    # Must be about the user's own hardware, not a conceptual question
+    owns = "my " in q or " i have" in q or "do i " in q
+    if not owns:
+        return False
+    has_verb = (any(s in q for s in _AUDIT_VERB_QUERY)
+                or bool(_AUDIT_INTERROGATIVE_RE.search(q)))
     has_noun = any(s in q for s in _AUDIT_NOUN)
     return has_verb and has_noun
 
@@ -669,7 +685,18 @@ def run(query: str, use_web: bool = False,
     if _is_conversational(query):
         return _strip_markdown(direct_reply(query, history=history))
 
-    # ── 0b. Tactical Hardware Audit — bypass Ollama, return SitRep directly ──
+    # ── 0b. Overclocking / hardware optimization — runs BEFORE audit so that
+    #        "optimize my gpu / cpu / ram" reaches the OC handler, not the
+    #        audit dump.  Injects real sensor data then routes through Gemini.
+    if _is_oc_query(query):
+        return _strip_markdown(_run_oc_query(query))
+
+    # ── 0c. Full system optimize / registry clean ────────────────────────────
+    _opt_result = _handle_optimize(query)
+    if _opt_result is not None:
+        return _opt_result
+
+    # ── 0d. Tactical Hardware Audit — live sensor data SitRep ───────────────
     if _is_audit_query(query):
         try:
             import sys as _sys
@@ -685,44 +712,35 @@ def run(query: str, use_web: bool = False,
         except Exception as _exc:
             return f"Audit error: {_exc}"
 
-    # ── 0c. File count — resolve via pathlib, never via LLM ─────────────────
+    # ── 0e. File count — resolve via pathlib, never via LLM ─────────────────
     _ext = _extract_file_ext(query)
     if _ext:
         return _count_files_by_ext(_ext)
 
-    # ── 0d. Launch / open a program ──────────────────────────────────────────
+    # ── 0f. Launch / open a program ──────────────────────────────────────────
     _launch_result = _handle_launch(query)
     if _launch_result is not None:
         return _launch_result
 
-    # ── 0e. Kill a process ───────────────────────────────────────────────────
+    # ── 0g. Kill a process ───────────────────────────────────────────────────
     _kill_result = _handle_kill_process(query)
     if _kill_result is not None:
         return _kill_result
 
-    # ── 0f. Top processes list ───────────────────────────────────────────────
+    # ── 0h. Top processes list ───────────────────────────────────────────────
     _top_result = _handle_top_processes(query)
     if _top_result is not None:
         return _top_result
 
-    # ── 0g. Disk / temp cleanup ──────────────────────────────────────────────
+    # ── 0i. Disk / temp cleanup ──────────────────────────────────────────────
     _clean_result = _handle_disk_cleanup(query)
     if _clean_result is not None:
         return _clean_result
 
-    # ── 0h. Full system optimize / registry clean ────────────────────────────
-    _opt_result = _handle_optimize(query)
-    if _opt_result is not None:
-        return _opt_result
-
-    # ── 0i. Download / install a program via winget ──────────────────────────
+    # ── 0j. Download / install a program via winget ──────────────────────────
     _dl_result = _handle_download(query)
     if _dl_result is not None:
         return _dl_result
-
-    # ── 0j. Overclocking / optimization — inject real hardware specs ─────────
-    if _is_oc_query(query):
-        return _strip_markdown(_run_oc_query(query))
 
     # ── 1. Hardware Verify protocol ──────────────────────────────────────────
     if is_hardware_query(query):

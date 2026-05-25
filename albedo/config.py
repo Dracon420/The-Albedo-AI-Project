@@ -55,9 +55,15 @@ WAKE_ACK_PHRASE = os.getenv("WAKE_ACK_PHRASE", "Yes?")
 VISION_TEMPERATURE = float(os.getenv("VISION_TEMPERATURE", "0.2"))
 
 # --- Keywords that trigger the Verify protocol ---
+# Fault/symptom indicators ONLY — generic component names (gpu, cpu, ram, vram)
+# deliberately excluded. Those appear in conceptual questions ("how does VRAM
+# work?") that should go straight to Gemini, not the fault-diagnosis path.
 HARDWARE_KEYWORDS = {
-    "error", "crash", "driver", "temperature", "thermal", "overheat",
-    "gpu", "cpu", "ram", "memory", "vram", "bsod", "freeze", "lag",
-    "bottleneck", "fps", "stuttering", "artifact", "kernel",
-    "hardware", "diagnose", "diagnosis", "not working", "failed", "failure",
+    "error", "crash", "driver",
+    "overheat", "overheating", "thermal throttle", "throttling",
+    "bsod", "blue screen", "freeze", "frozen", "lag", "lagging",
+    "stuttering", "stutter", "artifact", "artifacting",
+    "kernel panic", "not working", "stopped working",
+    "failed", "failure", "corrupted", "corrupt",
+    "diagnose", "diagnosis", "troubleshoot",
 }
