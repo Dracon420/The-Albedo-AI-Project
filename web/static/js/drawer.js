@@ -159,17 +159,16 @@ const Drawer = (() => {
     if (dreamForceBtn) {
       dreamForceBtn.addEventListener("click", async () => {
         dreamForceBtn.disabled = true;
-        dreamForceBtn.textContent = "INITIATING…";
-        _setDreamText("// dream: initiating...");
+        dreamForceBtn.textContent = "DREAMING…";
+        _setDreamText("// dream: initiating forced cycle...\n// phases 1/3 → 2/3 → 3/3");
         try {
           const r = await eel.force_dream_cycle()();
-          if (r && r.ok) {
-            _setDreamText("// dream: dreaming — phase 1/3 (organizing files)");
-          } else {
+          if (!r || !r.ok) {
             _setDreamText(`// dream: ${r ? r.error : "bridge error"}`);
             dreamForceBtn.disabled = false;
             dreamForceBtn.textContent = "FORCE DREAM NOW";
           }
+          // Status updates flow in via window._albedo_dream_push as phases complete
         } catch (e) {
           _setDreamText(`// dream: error — ${e}`);
           dreamForceBtn.disabled = false;

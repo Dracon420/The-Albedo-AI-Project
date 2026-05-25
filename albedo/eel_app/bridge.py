@@ -730,7 +730,7 @@ def force_dream_cycle() -> dict:
             return {"ok": False, "error": "Dream cycle already active."}
         threading.Thread(
             target=_dream.start_dream,
-            kwargs={"status_cb": _dream_status_push},
+            kwargs={"status_cb": _dream_status_push, "forced": True},
             daemon=True,
             name="dream-manual",
         ).start()

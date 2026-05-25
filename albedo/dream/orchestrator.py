@@ -95,9 +95,13 @@ def _run_phase1(report: dict) -> None:
         report["phase1_error"] = str(exc)
 
 
-def _run_phase2(report: dict) -> None:
+def _run_phase2(report: dict, forced: bool = False) -> None:
     """System cataloging."""
-    if _is_interrupted():
+    # Only skip on interrupt if NOT a forced manual run.
+    # Clicking Force Dream Now registers as user activity → sets _interrupt;
+    # forced=True bypasses that so phases 2/3 always run when manually triggered.
+    if not forced and _is_interrupted():
+        print("[dream] Phase 2 skipped — interrupted.")
         return
     _set_state(_STATE_DREAMING, "Phase 2 — System Catalog")
     try:
@@ -107,7 +111,9 @@ def _run_phase2(report: dict) -> None:
             if _status_cb:
                 _status_cb(_STATE_DREAMING, f"[2/3] {msg}")
 
-        result = build_catalog(interrupt=_is_interrupted, progress_cb=_prog)
+        # Pass the interrupt only for long inner loops, not at phase boundary
+        interruptor = None if forced else _is_interrupted
+        result = build_catalog(interrupt=interruptor, progress_cb=_prog)
         report["phase2_files"]    = result.total_files
         report["phase2_indexed"]  = result.indexed
         report["phase2_size_mb"]  = result.total_size_mb
@@ -115,14 +121,21 @@ def _run_phase2(report: dict) -> None:
         report["phase2_vault"]    = result.vault_note
         print(f"[dream] Phase 2 complete — {result.total_files} files cataloged, "
               f"{result.indexed} indexed.")
+        if _status_cb:
+            _status_cb(_STATE_DREAMING,
+                       f"[2/3] Complete — {result.total_files:,} files, "
+                       f"{result.indexed:,} indexed.")
     except Exception as exc:
         print(f"[dream] Phase 2 error: {exc}")
         report["phase2_error"] = str(exc)
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, f"[2/3] Error: {exc}")
 
 
-def _run_phase3(report: dict) -> None:
+def _run_phase3(report: dict, forced: bool = False) -> None:
     """Memory consolidation (REM cycle)."""
-    if _is_interrupted():
+    if not forced and _is_interrupted():
+        print("[dream] Phase 3 skipped — interrupted.")
         return
     _set_state(_STATE_DREAMING, "Phase 3 — Memory Consolidation")
     try:
@@ -140,19 +153,35 @@ def _run_phase3(report: dict) -> None:
         status = od.initiate_rem_cycle()
         report["phase3_status"] = str(status) if status else "complete"
         print(f"[dream] Phase 3 complete — {report['phase3_status']}")
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, f"[3/3] {report['phase3_status']}")
+    except RuntimeError as exc:
+        # Common case: OBSIDIAN_VAULT_PATH not set — non-fatal, note it and move on
+        msg = f"[3/3] Skipped — {exc}"
+        print(f"[dream] Phase 3 skipped: {exc}")
+        report["phase3_skipped"] = str(exc)
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, msg)
     except Exception as exc:
         print(f"[dream] Phase 3 error: {exc}")
         report["phase3_error"] = str(exc)
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, f"[3/3] Error: {exc}")
 
 
 # ---------------------------------------------------------------------------
 # Main dream cycle
 # ---------------------------------------------------------------------------
 
-def start_dream(status_cb: Optional[Callable[[str, str], None]] = None) -> None:
+def start_dream(status_cb: Optional[Callable[[str, str], None]] = None,
+                forced: bool = False) -> None:
     """
-    Entry point called by idle_monitor. Runs all three phases in sequence on
-    the calling thread (idle_monitor already spawns this in a daemon thread).
+    Entry point called by idle_monitor (forced=False) or Force Dream Now button
+    (forced=True).
+
+    forced=True skips inter-phase interrupt checks so that clicking the manual
+    trigger — which generates a mouse-activity event that would otherwise set
+    the interrupt flag — doesn't cause phases 2 and 3 to bail immediately.
     """
     global _status_cb, _last_report
 
@@ -168,12 +197,13 @@ def start_dream(status_cb: Optional[Callable[[str, str], None]] = None) -> None:
     report: dict = {
         "started_at": datetime.now().isoformat(timespec="seconds"),
         "interrupted": False,
+        "forced":      forced,
     }
 
     try:
         _run_phase1(report)
-        _run_phase2(report)
-        _run_phase3(report)
+        _run_phase2(report, forced=forced)
+        _run_phase3(report, forced=forced)
     except Exception as exc:
         print(f"[dream] Unhandled error in dream cycle: {exc}")
         report["fatal_error"] = str(exc)
