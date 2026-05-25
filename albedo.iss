@@ -15,7 +15,7 @@
 ; ── Build metadata ─────────────────────────────────────────────────────────
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.1.0"
+#define AppVersion   "2.0.0"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -43,7 +43,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.1.0
+OutputBaseFilename=Albedo-Setup-2.0.0
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
 
@@ -279,7 +279,7 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.1.0.' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v2.0.0.' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +
