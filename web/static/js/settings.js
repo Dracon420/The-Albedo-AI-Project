@@ -91,10 +91,12 @@ const Settings = (() => {
     _visionVal.textContent = Number(_visionRange.value).toFixed(2);
     _setRangePercent(_visionRange, Number(_visionRange.value), range.min, range.max);
 
-    // Auto-update interval
-    _fillSelect(_autoUpdateSel,
-      choices.auto_update || ["Every 24 hours"],
-      cur.auto_update);
+    // Auto-update interval (select removed in favour of CHECK FOR UPDATE button)
+    if (_autoUpdateSel) {
+      _fillSelect(_autoUpdateSel,
+        choices.auto_update || ["Every 24 hours"],
+        cur.auto_update);
+    }
 
     _silent = false;
   }
@@ -182,7 +184,7 @@ const Settings = (() => {
                        Number(_visionRange.min), Number(_visionRange.max));
     });
     _visionRange  .addEventListener("change", (e) => _persist("vision_temperature", Number(e.target.value)));
-    _autoUpdateSel.addEventListener("change", (e) => _persist("auto_update", e.target.value));
+    if (_autoUpdateSel) _autoUpdateSel.addEventListener("change", (e) => _persist("auto_update", e.target.value));
 
     // Drawer open is the cheapest trigger — populate when the drawer toggle
     // is clicked OR when SETTINGS tab is clicked, whichever comes first.
