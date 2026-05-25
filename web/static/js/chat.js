@@ -153,12 +153,53 @@ const Chat = (() => {
     _modeBtn .addEventListener("click", _toggleMode);
     _wakeBtn .addEventListener("click", _toggleWake);
 
-    // MIC + SCAN are placeholders in the alpha — full voice loop ports
-    // in a follow-up. Show a friendly note instead of silently doing nothing.
-    _micBtn .addEventListener("click", () =>
-      appendLine("system", "[SYS] MIC voice loop is wired into the Tk GUI today; Eel mic capture is queued for the next alpha."));
-    _scanBtn.addEventListener("click", () =>
-      appendLine("system", "[SYS] SCAN (visual capture) is queued for a follow-up alpha."));
+    // MIC: trigger voice capture via the backend pipeline
+    _micBtn.addEventListener("click", async () => {
+      appendLine("system", "[SYS] MIC activated — listening...");
+      try {
+        const r = await eel.trigger_mic_capture()();
+        if (r && r.ok && r.text) {
+          // Treat the transcribed text as a typed query
+          _inputEl.value = r.text;
+          appendLine("user", "> " + r.text);
+          _inputEl.value = "";
+          _sendBtn.disabled = true;
+          _sendBtn.textContent = "...";
+          try {
+            const qr = await eel.send_query(r.text, false)();
+            if (qr && qr.ok) {
+              appendLine("albedo", _personaName + "  " + (qr.reply || "(no response)"));
+            } else {
+              appendLine("error", "[SYS] " + (qr && qr.error ? qr.error : "no response"));
+            }
+          } finally {
+            _sendBtn.disabled = false;
+            _sendBtn.textContent = "SEND";
+          }
+        } else if (r && r.error) {
+          appendLine("error", "[SYS] MIC: " + r.error);
+        } else {
+          appendLine("system", "[SYS] MIC: nothing captured.");
+        }
+      } catch (e) {
+        appendLine("error", "[SYS] MIC error: " + e);
+      }
+    });
+    _scanBtn.addEventListener("click", async () => {
+      appendLine("system", "[SYS] SCAN capturing screen...");
+      try {
+        const r = await eel.trigger_scan_capture()();
+        if (r && r.ok && r.description) {
+          appendLine("albedo", _personaName + "  " + r.description);
+        } else if (r && r.error) {
+          appendLine("error", "[SYS] SCAN: " + r.error);
+        } else {
+          appendLine("system", "[SYS] SCAN: no result.");
+        }
+      } catch (e) {
+        appendLine("error", "[SYS] SCAN error: " + e);
+      }
+    });
 
     _initState();
     setInterval(_pollWebhook, 1500);

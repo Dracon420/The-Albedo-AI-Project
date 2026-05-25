@@ -530,6 +530,53 @@ def send_query(text: str, use_web: bool = False) -> dict:
     return result
 
 
+@_expose
+def trigger_mic_capture() -> dict:
+    """
+    One-shot voice capture for the MIC button in the Eel UI.
+    Records until silence, transcribes via Vosk/Whisper, returns the text.
+    """
+    try:
+        from albedo.audio.stt import transcribe_once
+        text = transcribe_once()
+        if text and text.strip():
+            return {"ok": True, "text": text.strip()}
+        return {"ok": True, "text": None, "error": "nothing transcribed"}
+    except ImportError:
+        return {"ok": False, "error": "STT not available — check AUDIO_STT setting"}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@_expose
+def trigger_scan_capture() -> dict:
+    """
+    Screenshot + vision analysis for the SCAN button in the Eel UI.
+    Captures the screen and describes it using the configured vision model.
+    """
+    try:
+        import tempfile, os
+        from PIL import ImageGrab
+        # Capture screen
+        img = ImageGrab.grab()
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            tmp_path = f.name
+        img.save(tmp_path)
+        # Route through vision pipeline if available
+        try:
+            from albedo.vision import describe_image
+            description = describe_image(tmp_path)
+        except ImportError:
+            # Fallback: just confirm screenshot was taken
+            description = f"Screenshot captured ({img.width}x{img.height}). Vision model not configured."
+        finally:
+            try: os.unlink(tmp_path)
+            except Exception: pass
+        return {"ok": True, "description": description}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 # ---------------------------------------------------------------------------
 # Webhook bridge — drained by the JS poller
 # ---------------------------------------------------------------------------

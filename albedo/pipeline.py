@@ -113,6 +113,14 @@ _TECHNICAL_SIGNALS = frozenset({
     "file", "folder", "code", "run", "execute", "script", "import",
     "temperature", "fps", "kernel", "bsod", "port", "network", "server",
     "print", "gcode", "slicer", "model", "config",
+    # Action words that should never be swallowed as greetings
+    "open", "launch", "start", "close", "kill", "terminate",
+    "download", "get", "fetch", "grab",
+    "optimize", "clean", "speed", "boost", "tune",
+    "overclock", "undervolt", "xmp", "expo", "docp",
+    "spec", "specs", "hardware", "audit", "sitrep",
+    "registry", "disk", "storage", "temp", "junk",
+    "scan", "diagnose", "check", "monitor",
 })
 
 
@@ -183,9 +191,11 @@ _AUDIT_EXACT = frozenset({
 })
 # Only report/query verbs — action verbs (optimize, clean, fix) must NOT be here
 # or they intercept the optimize/OC handlers that run later in the pipeline.
+# "what" and "which" are safe now that the "owns" guard is in place.
 _AUDIT_VERB_QUERY = frozenset({
     "check", "scan", "diagnose", "report", "display", "show",
     "list", "find", "get", "detect", "identify", "monitor", "measure", "test",
+    "what", "which",   # safe with "owns" guard: "what is my X" → audit, "what is X" → Gemini
 })
 _AUDIT_NOUN = frozenset({
     "computer", "system", "pc", "rig", "machine", "hardware",
@@ -351,12 +361,25 @@ _APP_MAP: dict[str, str] = {
 }
 
 
+# Words that can't be the start of an app name — prevents "run a full cleanup"
+# from being treated as launching an app called "a full cleanup".
+_LAUNCH_NOT_APP_STARTS = frozenset({
+    "a", "an", "the", "my", "your", "this", "that", "it", "them",
+    "full", "now", "please", "me", "us", "all", "some", "any",
+    "cleanup", "optimization", "scan", "check", "audit",
+})
+
+
 def _handle_launch(query: str) -> str | None:
     """Return a confirmation string if query is a launch command, else None."""
     m = _LAUNCH_RE.match(query.strip())
     if not m:
         return None
     target = m.group(1).strip()
+    # Reject if the captured target starts with a non-app word
+    first_word = target.split()[0].lower() if target else ""
+    if first_word in _LAUNCH_NOT_APP_STARTS:
+        return None
     exe    = _APP_MAP.get(target.lower(), target)
     try:
         if exe.endswith(".msc"):
@@ -681,13 +704,14 @@ def run(query: str, use_web: bool = False,
     if _is_identity_query(query):
         return _IDENTITY_RESPONSE
 
-    # ── 0a. Conversational bypass ────────────────────────────────────────────
-    if _is_conversational(query):
-        return _strip_markdown(direct_reply(query, history=history))
+    # ── Action interceptors run BEFORE conversational bypass ─────────────────
+    # Reason: conversational bypass matches any query ≤40 chars without a
+    # technical signal word. Many short action commands ("open notepad",
+    # "optimize my pc", "download vlc") would be swallowed before they could
+    # reach their handlers. All action handlers check first; conversational
+    # bypass is the fallback for everything they don't match.
 
-    # ── 0b. Overclocking / hardware optimization — runs BEFORE audit so that
-    #        "optimize my gpu / cpu / ram" reaches the OC handler, not the
-    #        audit dump.  Injects real sensor data then routes through Gemini.
+    # ── 0b. Overclocking / hardware optimization ─────────────────────────────
     if _is_oc_query(query):
         return _strip_markdown(_run_oc_query(query))
 
@@ -741,6 +765,11 @@ def run(query: str, use_web: bool = False,
     _dl_result = _handle_download(query)
     if _dl_result is not None:
         return _dl_result
+
+    # ── 0k. Conversational bypass (AFTER all action handlers) ────────────────
+    # Short social exchanges go direct to Gemini/Groq with no RAG overhead.
+    if _is_conversational(query):
+        return _strip_markdown(direct_reply(query, history=history))
 
     # ── 1. Hardware Verify protocol ──────────────────────────────────────────
     if is_hardware_query(query):

@@ -56,7 +56,7 @@ _location     = os.getenv("NODE_LOCATION", "").strip() or "Raymond, Washington"
 # The google-genai SDK targets the v1beta endpoint. Gemini 1.5 models only exist
 # on v1 — they 404 on v1beta. gemini-2.0-flash-lite is the correct free-tier
 # model for v1beta: 1500 req/day, no grounding quota, resolves correctly.
-_gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-lite").strip() or "gemini-2.0-flash-lite"
+_gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.0-flash").strip() or "gemini-2.0-flash"
 
 # ---------------------------------------------------------------------------
 # Semantic location interceptor
