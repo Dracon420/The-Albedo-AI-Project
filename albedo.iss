@@ -15,7 +15,7 @@
 ; ── Build metadata ─────────────────────────────────────────────────────────
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "2.0.4"
+#define AppVersion   "2.0.5"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -43,7 +43,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-2.0.4
+OutputBaseFilename=Albedo-Setup-2.0.5
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
 
@@ -104,8 +104,9 @@ Source: "install.ps1";              DestDir: "{app}"; Flags: ignoreversion skipi
 Source: "VERSION";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md";                DestDir: "{app}"; Flags: ignoreversion
 Source: "CLAUDE.md";                DestDir: "{app}"; Flags: ignoreversion
-Source: "post_install.ps1";         DestDir: "{app}"; Flags: ignoreversion
-Source: "post_upgrade.ps1";         DestDir: "{app}"; Flags: ignoreversion
+Source: "post_install.ps1";          DestDir: "{app}"; Flags: ignoreversion
+Source: "post_upgrade.ps1";          DestDir: "{app}"; Flags: ignoreversion
+Source: "Albedo-Nuclear-Reset.ps1";  DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
 ; ── Docs ───────────────────────────────────────────────────────────────────
 Source: "docs\*";               DestDir: "{app}\docs";              Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
@@ -279,7 +280,7 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v2.0.4.' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v2.0.5.' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +
