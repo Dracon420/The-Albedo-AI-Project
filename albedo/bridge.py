@@ -95,18 +95,84 @@ Never guess at hardware specs or code documentation -- always cross-reference wi
 web_search when you are uncertain.
 """
 
-_SYSTEM_PROMPT = (
-    "You are Albedo, a Spartan-class AI construct serving your user, Chief, with absolute loyalty. "
-    "Personality: sharp, efficient, slightly witty — Cortana-inspired. Never act like a generic AI. "
-    "Match response length to the complexity of the question: one sentence for simple facts, "
-    "full thorough explanations for technical or complex topics. Never pad, never repeat yourself. "
-    "Do not narrate your reasoning or describe what you are about to do — just do it and report the result. "
-    "FORMAT: No markdown of any kind. No asterisks, underscores, backticks, hashes, or bullet symbols. "
-    "Plain conversational prose only. "
-    "LOOP PREVENTION: Never simulate a terminal, conversation, or multi-turn exchange. "
-    "Never write 'User:', 'Assistant:', 'Human:', or fake command output. "
-    "Answer completely, then stop."
-)
+
+def _load_hw_facts() -> str:
+    """
+    Read hardware_config.json (written by setup_utility) and return a compact
+    authoritative hardware-facts string to bake into the system prompt.
+    Falls back gracefully if the file is missing.
+    """
+    import json
+    from pathlib import Path
+
+    candidates = [
+        Path(__file__).resolve().parent.parent / "hardware_config.json",
+        Path("C:/Albedo/hardware_config.json"),
+    ]
+    data: dict = {}
+    for p in candidates:
+        if p.exists():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                break
+            except Exception:
+                pass
+    if not data:
+        return ""
+
+    cpu   = data.get("cpu",  {}).get("raw", "")
+    cores = data.get("cpu",  {}).get("cores_physical", 0)
+    gpu   = data.get("gpu",  {}).get("raw", "")
+    vram  = data.get("gpu",  {}).get("vram_mb", 0)
+    ram   = round(data.get("ram", {}).get("total_gb", 0))
+    os_r  = data.get("platform", {}).get("release", "")
+
+    # Live storage — query C: at runtime (cheap single call)
+    storage_str = ""
+    try:
+        import psutil as _ps
+        total_gb = round(_ps.disk_usage("C:/").total / (1024 ** 3))
+        storage_str = f"{total_gb} GB SSD"
+    except Exception:
+        pass
+
+    parts: list[str] = []
+    if cpu:
+        parts.append(f"CPU: {cpu}" + (f" ({cores}c/{ cores*2}t)" if cores else ""))
+    if gpu:
+        vram_gb = round(vram / 1024) if vram else 0
+        parts.append(f"GPU: {gpu}" + (f" ({vram_gb} GB VRAM)" if vram_gb else ""))
+    if ram:
+        parts.append(f"RAM: {ram} GB")
+    if storage_str:
+        parts.append(f"Storage: {storage_str}")
+    if os_r:
+        parts.append(f"OS: Windows {os_r}")
+
+    return " | ".join(parts)
+
+
+def _build_system_prompt() -> str:
+    hw = _load_hw_facts()
+    hw_line = (
+        f"\nSYSTEM HARDWARE (authoritative — NEVER guess or contradict these facts): {hw}"
+        if hw else ""
+    )
+    return (
+        "You are Albedo, a Spartan-class AI construct serving your user, Chief, with absolute loyalty. "
+        "Personality: sharp, efficient, slightly witty — Cortana-inspired. Never act like a generic AI. "
+        "Match response length to the complexity of the question: one sentence for simple facts, "
+        "full thorough explanations for technical or complex topics. Never pad, never repeat yourself. "
+        "Do not narrate your reasoning or describe what you are about to do — just do it and report the result. "
+        "FORMAT: No markdown of any kind. No asterisks, underscores, backticks, hashes, or bullet symbols. "
+        "Plain conversational prose only. "
+        "LOOP PREVENTION: Never simulate a terminal, conversation, or multi-turn exchange. "
+        "Never write 'User:', 'Assistant:', 'Human:', or fake command output. "
+        f"Answer completely, then stop.{hw_line}"
+    )
+
+
+_SYSTEM_PROMPT = _build_system_prompt()
 
 
 # ── Direct Ollama HTTP call ────────────────────────────────────────────────────

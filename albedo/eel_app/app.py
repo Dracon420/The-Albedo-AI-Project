@@ -216,6 +216,19 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
                 except Exception as _exc:
                     print(f"[eel_app] Wake ack TTS failed: {_exc}")
 
+            # 1b. Brief gap so user can start speaking after hearing the ack.
+            #     Also drains the mic ring-buffer to discard any ack echo that
+            #     leaked in before the user's voice arrives.
+            import time as _time
+            _time.sleep(0.35)
+            with _wake_lock:
+                _s_drain = _wake_stream
+            if _s_drain:
+                try:
+                    _s_drain.drain()
+                except Exception:
+                    pass
+
             # 2. Record follow-up utterance
             audio = None
             try:

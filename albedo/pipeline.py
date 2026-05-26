@@ -188,6 +188,10 @@ _AUDIT_EXACT = frozenset({
     "what graphics", "what is in my computer", "what is in my pc",
     "whats in my computer", "whats in my pc", "inside my computer",
     "my computer hardware", "my pc hardware", "my rig hardware",
+    # Short-form triggers — user just says "my computer" / "my pc" / "my rig"
+    "my computer", "my pc", "my rig", "my machine", "my system",
+    "about my computer", "about my pc", "about my rig",
+    "tell me about my computer", "tell me about my pc",
 })
 # Only report/query verbs — action verbs (optimize, clean, fix) must NOT be here
 # or they intercept the optimize/OC handlers that run later in the pipeline.
