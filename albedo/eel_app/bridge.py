@@ -705,9 +705,15 @@ def set_setting(key: str, value: Any) -> dict:
                 _SETTINGS_FILE.write_text(json.dumps(data, indent=2), encoding="utf-8")
             except OSError:
                 return {"ok": False, "error": "settings file not writable"}
-        # Live-swap inference model when persona changes via settings panel
+        # Live-swap inference model + wake-word model when persona changes
         if key == "active_persona" and isinstance(value, str):
             notify_persona_change(value)
+            # Reload OWW so only the new persona's wake word is active
+            try:
+                from albedo.audio.wakeword import reset_wake_model
+                reset_wake_model()
+            except Exception:
+                pass
         return {"ok": True, "key": key, "value": value}
     except Exception as exc:                                        # noqa: BLE001
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}

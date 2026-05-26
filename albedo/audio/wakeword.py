@@ -72,6 +72,7 @@ _active_words:       str = WAKE_WORDS
 _last_detected_word: str = ""
 _detected_lock       = threading.Lock()
 _oww_model:          "_OWWModel | None" = None
+_oww_loaded_for:     str = ""   # persona name the current model was built for
 _oww_lock            = threading.Lock()
 
 # OpenWakeWord detection threshold (0–1).  Lower = more sensitive but more
@@ -118,47 +119,105 @@ def set_active_model(words: str) -> None:
 # OpenWakeWord engine
 # ---------------------------------------------------------------------------
 
+def _get_active_persona() -> str:
+    """
+    Read active_persona from settings.json.
+    Returns the bare lowercase persona key ("cortana" or "jarvis").
+    Falls back to "cortana" when the file is missing or unreadable.
+    """
+    try:
+        import json
+        from pathlib import Path
+        candidates = [
+            Path(__file__).resolve().parent.parent.parent / "settings.json",
+            Path("C:/Albedo/settings.json"),
+        ]
+        for p in candidates:
+            if p.exists():
+                data = json.loads(p.read_text(encoding="utf-8"))
+                return data.get("active_persona", "cortana").strip().lower()
+    except Exception:
+        pass
+    return "cortana"
+
+
+def reset_wake_model() -> None:
+    """
+    Force the OWW model to reload on the next detection cycle.
+    Call this when the user changes active persona in settings so the
+    listener immediately switches to only the new persona's wake word.
+    """
+    global _oww_model, _oww_loaded_for
+    with _oww_lock:
+        _oww_model      = None
+        _oww_loaded_for = ""
+    print("[wakeword] Model cache cleared — will reload for new persona.")
+
+
 def _get_oww_model() -> "_OWWModel":
     """
-    Return a cached OWW Model instance.
+    Return a cached OWW Model instance locked to the currently active persona.
 
-    Loads the custom hey_core_tah_nuh.onnx ("hey cortana") model from the
-    wakewords/ directory if present, then hey_jarvis as a secondary trigger,
-    then falls back to the bundled alexa model so there's always something.
+    Only ONE model is ever loaded at a time:
+      cortana  →  hey_core_tah_nuh.onnx  (custom model in wakewords/)
+      jarvis   →  hey_jarvis_v0.1.onnx   (wakewords/ or bundled fallback)
+
+    When the user changes persona via settings, reset_wake_model() clears
+    _oww_model and _oww_loaded_for so this function rebuilds the model for
+    the new persona on the very next detection cycle.
     """
-    global _oww_model
+    global _oww_model, _oww_loaded_for
     with _oww_lock:
-        if _oww_model is None:
-            import os
-            from pathlib import Path
-            root = Path(__file__).resolve().parent.parent.parent
-            ww_dir = root / "wakewords"
+        persona = _get_active_persona()
 
-            models_to_load: list[str] = []
+        # Return cached model if it's already built for the current persona
+        if _oww_model is not None and _oww_loaded_for == persona:
+            return _oww_model
 
-            # Priority 1: custom hey_cortana model
-            cortana_model = ww_dir / "hey_core_tah_nuh.onnx"
-            if cortana_model.exists():
-                models_to_load.append(str(cortana_model))
-                print(f"[wakeword] Found custom cortana model: {cortana_model.name}")
+        from pathlib import Path
+        root   = Path(__file__).resolve().parent.parent.parent
+        ww_dir = root / "wakewords"
 
-            # Priority 2: hey_jarvis in wakewords/ dir
-            jarvis_model = ww_dir / "hey_jarvis_v0.1.onnx"
-            if jarvis_model.exists():
-                models_to_load.append(str(jarvis_model))
-                print(f"[wakeword] Found jarvis model: {jarvis_model.name}")
+        models_to_load: list[str] = []
 
-            # Fallback: bundled hey_jarvis
+        if persona == "cortana":
+            m = ww_dir / "hey_core_tah_nuh.onnx"
+            if m.exists():
+                models_to_load.append(str(m))
+                print(f"[wakeword] Persona=cortana — loading {m.name}")
+            else:
+                print("[wakeword] WARN: hey_core_tah_nuh.onnx not found in wakewords/")
+        elif persona == "jarvis":
+            m = ww_dir / "hey_jarvis_v0.1.onnx"
+            if m.exists():
+                models_to_load.append(str(m))
+                print(f"[wakeword] Persona=jarvis — loading {m.name}")
+            else:
+                # Use the bundled OWW copy as fallback
+                models_to_load.append("hey_jarvis_v0.1.onnx")
+                print("[wakeword] Persona=jarvis — using bundled hey_jarvis fallback")
+        else:
+            # Unknown persona — load both so at least something works
+            for name, path in [("cortana", ww_dir / "hey_core_tah_nuh.onnx"),
+                                ("jarvis",  ww_dir / "hey_jarvis_v0.1.onnx")]:
+                if path.exists():
+                    models_to_load.append(str(path))
             if not models_to_load:
                 models_to_load.append("hey_jarvis_v0.1.onnx")
-                print("[wakeword] Using bundled hey_jarvis fallback.")
+            print(f"[wakeword] Unknown persona '{persona}' — loading all available models")
 
-            print(f"[wakeword] Loading OWW with {len(models_to_load)} model(s)...")
-            _oww_model = _OWWModel(
-                wakeword_models=models_to_load,
-                inference_framework="onnx",
-            )
-            print("[wakeword] OpenWakeWord ready.")
+        if not models_to_load:
+            # No model file found at all — keep old model rather than crashing
+            if _oww_model is not None:
+                print(f"[wakeword] No model file for persona '{persona}' — keeping previous model")
+                return _oww_model
+            models_to_load.append("hey_jarvis_v0.1.onnx")
+
+        print(f"[wakeword] Loading OWW model(s): {[Path(m).name for m in models_to_load]}")
+        _oww_model      = _OWWModel(wakeword_models=models_to_load,
+                                     inference_framework="onnx")
+        _oww_loaded_for = persona
+        print(f"[wakeword] OpenWakeWord ready — only '{persona}' wake word active.")
         return _oww_model
 
 
