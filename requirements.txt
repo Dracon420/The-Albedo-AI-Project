@@ -59,3 +59,6 @@ together>=1.2.0
 
 # TTS — Edge-TTS (primary, cloud) + Piper (fallback, offline)
 edge-tts>=6.1.9
+
+# Wake word detection — OpenWakeWord (primary engine, custom cortana model in wakewords/)
+openwakeword>=0.6.0
