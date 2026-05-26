@@ -133,37 +133,88 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
         _wake_stop:   _threading.Event | None = None
         _wake_lock = _threading.Lock()
 
+        def _push_chat(kind: str, text: str) -> None:
+            """Push a line to the JS chat feed from any thread."""
+            try:
+                import eel as _eel
+                _eel._albedo_chat_push(kind, text)()
+            except Exception:
+                pass
+
+        def _set_send_stop(is_stop: bool) -> None:
+            """Toggle the SEND button to STOP (or back) in the JS UI."""
+            try:
+                import eel as _eel
+                _eel._albedo_send_stop(is_stop)()
+            except Exception:
+                pass
+
+        def _transcribe_wake(audio) -> str:
+            """
+            Transcribe wake-word follow-up audio.
+            Uses Groq Whisper API when GROQ_API_KEY is set (far more accurate
+            than Vosk small for short voice queries).  Falls back to Vosk.
+            """
+            import os as _os, io as _io, wave as _wave
+            import numpy as _np
+            groq_key = _os.environ.get("GROQ_API_KEY", "").strip()
+            if groq_key:
+                try:
+                    import groq as _groq
+                    client = _groq.Groq(api_key=groq_key)
+                    # Convert float32 audio → 16kHz mono WAV bytes
+                    pcm = (_np.clip(audio, -1.0, 1.0) * 32767).astype(_np.int16)
+                    buf = _io.BytesIO()
+                    with _wave.open(buf, "wb") as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(16000)
+                        wf.writeframes(pcm.tobytes())
+                    buf.seek(0)
+                    result = client.audio.transcriptions.create(
+                        model="whisper-large-v3-turbo",
+                        file=("wake.wav", buf, "audio/wav"),
+                        language="en",
+                    )
+                    text = (result.text or "").strip()
+                    if text:
+                        print(f"[eel_app] Groq Whisper: {text!r}")
+                        return text
+                except Exception as _exc:
+                    print(f"[eel_app] Groq Whisper failed, falling back to Vosk: {_exc}")
+            # Fallback: Vosk
+            from albedo.audio.stt import transcribe as _vosk_transcribe
+            return _vosk_transcribe(audio).strip()
+
         def _on_mic_wakeword() -> None:
             """
             Called by the wakeword listener thread each time a wake word fires.
 
             Full response cycle:
-              1. Play the wake-ack phrase ("Yes?")
+              1. Play the wake-ack phrase ("Yes?") — skipped if audio muted
               2. Record the follow-up utterance via VAD
-              3. Transcribe via Vosk STT
+              3. Transcribe via Groq Whisper (→ Vosk fallback)
               4. Route through the pipeline (cloud → Ollama fallback)
-              5. Speak the reply via TTS
-              6. Push both the user text and reply into the Eel chat feed
+              5. Speak the reply — skipped if audio muted
+              6. Push user text + reply into the Eel chat feed
+              7. Cooldown: drain mic buffer so TTS audio can't re-trigger wake
             """
+            from albedo.eel_app.bridge import is_audio_muted
+
             word = _ww.get_last_detected_word()
             print(f"[eel_app] Wake word '{word}' fired — capturing utterance.")
-
-            # Push detection event into the chat feed
-            try:
-                import eel as _eel
-                _eel._albedo_chat_push("system", f"[WAKE] '{word.upper()}' detected — listening…")()
-            except Exception:
-                pass
+            _push_chat("system", f"[WAKE] '{word.upper()}' detected — listening…")
 
             # 1. Play acknowledgement phrase
-            try:
-                import os as _os
-                ack = _os.environ.get("WAKE_ACK_PHRASE", "Yes?").strip()
-                if ack:
-                    from albedo.audio.tts import speak
-                    speak(ack)
-            except Exception as _exc:
-                print(f"[eel_app] Wake ack TTS failed: {_exc}")
+            if not is_audio_muted():
+                try:
+                    import os as _os
+                    ack = _os.environ.get("WAKE_ACK_PHRASE", "Yes?").strip()
+                    if ack:
+                        from albedo.audio.tts import speak
+                        speak(ack)
+                except Exception as _exc:
+                    print(f"[eel_app] Wake ack TTS failed: {_exc}")
 
             # 2. Record follow-up utterance
             audio = None
@@ -180,26 +231,22 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
                 print("[eel_app] Wake: no audio captured after wake word.")
                 return
 
-            # 3. Transcribe
+            # 3. Transcribe (Groq Whisper → Vosk fallback)
             text = ""
             try:
-                from albedo.audio.stt import transcribe
-                text = transcribe(audio).strip()
+                text = _transcribe_wake(audio)
             except Exception as _exc:
-                print(f"[eel_app] Wake STT failed: {_exc}")
+                print(f"[eel_app] Wake transcribe failed: {_exc}")
 
             if not text:
                 print("[eel_app] Wake: nothing transcribed.")
                 return
 
             print(f"[eel_app] Wake utterance: {text!r}")
+            _push_chat("user", f"> {text}")
 
-            # Push user text to chat feed
-            try:
-                import eel as _eel
-                _eel._albedo_chat_push("user", f"> {text}")()
-            except Exception:
-                pass
+            # Signal UI: switch SEND → STOP
+            _set_send_stop(True)
 
             # 4. Route through pipeline
             reply = ""
@@ -210,22 +257,35 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
                 print(f"[eel_app] Wake pipeline failed: {_exc}")
                 reply = "Sorry, I ran into an error processing that."
 
+            _set_send_stop(False)
+
             if not reply:
                 return
 
-            # 5. Speak reply
+            # Push reply to chat feed
             try:
-                from albedo.audio.tts import speak
-                speak(reply)
-            except Exception as _exc:
-                print(f"[eel_app] Wake TTS reply failed: {_exc}")
-
-            # 6. Push reply to chat feed
-            try:
-                import eel as _eel
                 from albedo.eel_app.bridge import get_active_persona_name
                 persona = get_active_persona_name().get("name", "ALBEDO")
-                _eel._albedo_chat_push("albedo", f"{persona}  {reply}")()
+                _push_chat("albedo", f"{persona}  {reply}")
+            except Exception:
+                pass
+
+            # 5. Speak reply
+            if not is_audio_muted():
+                try:
+                    from albedo.audio.tts import speak
+                    speak(reply)
+                except Exception as _exc:
+                    print(f"[eel_app] Wake TTS reply failed: {_exc}")
+
+            # 7. Cooldown — drain mic buffer so TTS audio can't re-trigger OWW
+            try:
+                import sounddevice as _sd
+                with _wake_lock:
+                    s = _wake_stream
+                if s:
+                    s.drain()
+                _sd.sleep(1500)  # 1.5 s silence before re-arming
             except Exception:
                 pass
 

@@ -478,6 +478,35 @@ def set_wake_state(state: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# TTS control — stop / mute
+# ---------------------------------------------------------------------------
+
+_audio_muted = False   # when True, speak() calls are skipped entirely
+
+@_expose
+def stop_tts() -> dict:
+    """Immediately halt any active TTS playback. Called by the STOP button."""
+    try:
+        from albedo.audio.tts import stop_audio
+        stop_audio()
+        return {"ok": True}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@_expose
+def set_audio_muted(muted: bool) -> dict:
+    """Toggle backend audio mute. When muted, speak() is a no-op."""
+    global _audio_muted
+    _audio_muted = bool(muted)
+    return {"ok": True, "muted": _audio_muted}
+
+
+def is_audio_muted() -> bool:
+    return _audio_muted
+
+
+# ---------------------------------------------------------------------------
 # Chat — the main interaction
 # ---------------------------------------------------------------------------
 

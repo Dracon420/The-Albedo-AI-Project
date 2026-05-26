@@ -6,7 +6,8 @@
 
 const Chat = (() => {
   let _feedEl, _inputEl, _sendBtn, _micBtn, _scanBtn, _audioBtn, _modeBtn, _wakeBtn;
-  let _audioMuted  = false;
+  let _audioMuted     = false;
+  let _wakeProcessing = false;  // true while wake-word pipeline is running (SEND→STOP)
   let _commMode    = "latch";   // matches CommMode.LATCH.value
   let _wakeState   = "disarmed";
   let _personaName = "ALBEDO";  // display label — updated by wake word or settings
@@ -26,6 +27,11 @@ const Chat = (() => {
   }
 
   async function _send() {
+    // When the wake-word pipeline is running, the button reads "STOP" — intercept.
+    if (_wakeProcessing) {
+      try { await eel.stop_tts()(); } catch { /* ignore */ }
+      return;
+    }
     const raw = _inputEl.value.trim();
     if (!raw) return;
     _inputEl.value = "";
@@ -85,11 +91,12 @@ const Chat = (() => {
     } catch (err) { appendLine("error", "[SYS] " + err); }
   }
 
-  // ── Audio mute (client-side flag for now — server still sends WAV) ──
-  function _toggleAudio() {
+  // ── Audio mute — synced to backend so wake-word TTS is also suppressed ──
+  async function _toggleAudio() {
     _audioMuted = !_audioMuted;
     _audioBtn.classList.toggle("is-muted", _audioMuted);
     _audioBtn.textContent = _audioMuted ? "AUDIO: OFF" : "AUDIO: ON";
+    try { await eel.set_audio_muted(_audioMuted)(); } catch { /* ignore */ }
   }
 
   // ── Webhook poller — drains pending remote commands into the feed ───
@@ -123,6 +130,22 @@ const Chat = (() => {
 
   // Settings panel calls this when the user changes persona from the drawer
   window._albedo_persona_select = function (name) { _applyPersonaName(name); };
+
+  // Python toggles SEND→STOP (true) / STOP→SEND (false) around wake pipeline
+  window._albedo_send_stop = function(isStop) {
+    _wakeProcessing = !!isStop;
+    if (!_sendBtn) return;
+    if (isStop) {
+      _sendBtn.disabled  = false;
+      _sendBtn.textContent = "STOP";
+      _sendBtn.setAttribute("data-state", "stop");
+    } else {
+      _sendBtn.disabled  = false;
+      _sendBtn.textContent = "SEND";
+      _sendBtn.removeAttribute("data-state");
+    }
+  };
+  eel.expose(_albedo_send_stop, "_albedo_send_stop");
 
   async function _initState() {
     try {
