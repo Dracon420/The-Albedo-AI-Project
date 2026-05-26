@@ -93,6 +93,8 @@ def _run_phase1(report: dict) -> None:
     except Exception as exc:
         print(f"[dream] Phase 1 error: {exc}")
         report["phase1_error"] = str(exc)
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, f"[1/3] Error: {exc}")
 
 
 def _run_phase2(report: dict, forced: bool = False) -> None:

@@ -50,6 +50,7 @@ const Drawer = (() => {
   window._albedo_dream_push = function (label) {
     _setDreamText(label);
   };
+  eel.expose(_albedo_dream_push, "_albedo_dream_push");
 
   async function _refreshDreamState() {
     try {
