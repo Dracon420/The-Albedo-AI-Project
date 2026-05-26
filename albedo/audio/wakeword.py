@@ -75,8 +75,9 @@ _oww_model:          "_OWWModel | None" = None
 _oww_lock            = threading.Lock()
 
 # OpenWakeWord detection threshold (0–1).  Lower = more sensitive but more
-# false positives.  0.3 gives good sensitivity for "hey jarvis".
-_OWW_THRESHOLD = 0.3
+# false positives.  0.5 balances sensitivity with rejection of ambient speech
+# ("jarvis" phonetically overlaps "services" etc. at 0.3, causing false fires).
+_OWW_THRESHOLD = 0.5
 
 # Frames of audio fed to OWW per chunk.  OWW expects 80ms frames at 16kHz
 # = 1280 samples (matches AUDIO_CHUNK_MS=80 in config).
@@ -165,9 +166,10 @@ def _oww_detect_chunk(model: "_OWWModel", chunk) -> tuple[bool, str]:
     """
     Feed one chunk to OWW.  Returns (detected, word_label).
 
-    OWW predict() returns a dict: {model_name: score}.  We check if the
-    top score exceeds _OWW_THRESHOLD and also do a string match so the
-    detected label maps back to configured wake words.
+    OWW predict() returns a dict: {model_name: score}.  We pick the
+    HIGHEST-scoring model that exceeds _OWW_THRESHOLD so that when multiple
+    models are loaded (cortana + jarvis), the one the user actually said wins
+    rather than whichever was inserted into the dict first.
     """
     import numpy as np
     # OWW expects float32 or int16 at 16kHz mono
@@ -177,22 +179,24 @@ def _oww_detect_chunk(model: "_OWWModel", chunk) -> tuple[bool, str]:
         audio_in = (np.clip(chunk, -1.0, 1.0) * 32767).astype(np.int16)
 
     scores = model.predict(audio_in)
-    for model_name, score in scores.items():
-        if score >= _OWW_THRESHOLD:
-            mn_lower = model_name.lower()
-            # Custom cortana model — phonetic spelling maps to "cortana"
-            if "core_tah_nuh" in mn_lower or "cortana" in mn_lower:
-                return True, "cortana"
-            if "jarvis" in mn_lower:
-                return True, "jarvis"
-            if "alexa" in mn_lower:
-                return True, "alexa"
-            # Generic fallback: match against configured wake words
-            for word in _word_set():
-                if word in mn_lower:
-                    return True, word
-            return True, model_name.split("_")[0]
-    return False, ""
+
+    # Find the single best-scoring model; reject if below threshold
+    best_name  = max(scores, key=lambda k: scores[k]) if scores else ""
+    best_score = scores.get(best_name, 0.0)
+    if best_score < _OWW_THRESHOLD:
+        return False, ""
+
+    mn_lower = best_name.lower()
+    if "core_tah_nuh" in mn_lower or "cortana" in mn_lower:
+        return True, "cortana"
+    if "jarvis" in mn_lower:
+        return True, "jarvis"
+    if "alexa" in mn_lower:
+        return True, "alexa"
+    for word in _word_set():
+        if word in mn_lower:
+            return True, word
+    return True, best_name.split("_")[0]
 
 
 # ---------------------------------------------------------------------------
