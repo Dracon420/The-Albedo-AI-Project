@@ -42,6 +42,17 @@ def _handle_sigint(sig, frame):
 def start(use_web: bool = False) -> None:
     signal.signal(signal.SIGINT, _handle_sigint)
 
+    # Start the Fly.io relay client so phone ↔ desktop works even in voice-only mode.
+    try:
+        from albedo import mobile_relay as _mr
+        if _mr.get_token():
+            _mr.start()
+            print("[listener] Mobile relay started (voice mode).")
+        else:
+            print("[listener] Mobile relay: no token — pair from Mission Control first.")
+    except Exception as _exc:
+        print(f"[listener] Mobile relay start failed (non-fatal): {_exc}")
+
     stream = AudioStream()
     stream.start()
     print("[listener] Albedo is online. Microphone active.")

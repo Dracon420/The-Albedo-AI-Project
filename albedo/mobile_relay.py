@@ -142,18 +142,19 @@ def push(payload: dict) -> None:
     """
     Send a JSON payload to all connected phones via the relay.
     Safe to call from any thread. No-op if not connected.
+
+    NOTE: websockets.sync.client is thread-safe for concurrent send + recv,
+    so calling ws.send() here while _relay_loop() iterates ws is fine.
+    The previous asyncio wrapper was wrong — ws.send() is synchronous and
+    returns None (not a coroutine), so run_until_complete(None) always raised
+    ValueError and silently dropped every outbound message.
     """
     with _ws_lock:
         ws = _ws
     if ws is None:
         return
     try:
-        import asyncio as _aio
-        loop = _aio.new_event_loop()
-        try:
-            loop.run_until_complete(ws.send(json.dumps(payload)))
-        finally:
-            loop.close()
+        ws.send(json.dumps(payload))
     except Exception as exc:
         print(f"[mobile_relay] push failed: {exc}")
 
@@ -175,7 +176,18 @@ def _handle_query(msg: dict) -> None:
             reply = pipeline_run(text) or ""
         except Exception as exc:
             reply = f"[error] {exc}"
+
+        # Push text response to phone first (fast path — shows in chat immediately)
         push({"type": "response", "text": reply, "id": msg_id})
+
+        # Also speak on desktop so local TTS still fires
+        # (non-blocking, fire-and-forget — don't block relay receive loop)
+        try:
+            from albedo.audio.tts import speak as _speak
+            threading.Thread(target=_speak, args=(reply,),
+                             daemon=True, name="mobile-tts").start()
+        except Exception:
+            pass
 
     threading.Thread(target=_run, daemon=True, name="mobile-query").start()
 
