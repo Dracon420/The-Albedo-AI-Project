@@ -94,3 +94,19 @@ logs/
 
 # Local Claude Code settings (machine-specific)
 .claude/settings.local.json
+
+# User settings (per-machine relay token, persona prefs — not for repo)
+settings.json
+
+# Flutter build artifacts (APK released as GitHub asset, not committed)
+albedo_mobile/build/
+albedo_mobile/.dart_tool/
+albedo_mobile/.flutter-plugins
+albedo_mobile/.flutter-plugins-dependencies
+albedo_mobile/pubspec.lock
+
+# Compiled mobile APK (attached to GitHub release instead)
+mobile/
+
+# Fly.io deploy script (local convenience only)
+deploy-relay.ps1

@@ -19,8 +19,12 @@ from pathlib import Path
 
 from memory import search_memory
 from albedo.web.search import web_search, format_web_results
+from albedo.web.wolfram import is_wolfram_query, wolfram_short_answer
+from albedo.web.wikipedia import is_wiki_candidate, wikipedia_summary
 from albedo.verify import is_hardware_query, run_verify
-from albedo.bridge import bridge_chat, direct_reply
+from albedo.bridge import bridge_chat, direct_reply, jarvis_tech_chat
+from albedo.router import classify, ROUTE_TECH, ROUTE_JARVIS
+from albedo.conversation_log import log_turn
 
 # ---------------------------------------------------------------------------
 # Markdown stripper — defence-in-depth on top of tts._sanitize_for_tts().
@@ -145,12 +149,16 @@ def _is_conversational(query: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _build_standard_prompt(query: str, memory_chunks: list[str],
-                            web_results: list[dict]) -> str:
+                            web_results: list[dict],
+                            wiki_summary: str | None = None) -> str:
     sections = []
 
     if memory_chunks:
         block = "\n\n".join(chunk.strip() for chunk in memory_chunks)
         sections.append(f"--- LOCAL KNOWLEDGE (OBSIDIAN VAULT) ---\n{block}")
+
+    if wiki_summary:
+        sections.append(f"--- WIKIPEDIA ---\n{wiki_summary}")
 
     if web_results:
         sections.append(f"--- WEB REFERENCE ---\n{format_web_results(web_results)}")
@@ -704,6 +712,7 @@ def _run_oc_query(query: str) -> str:
 
 def run(query: str, use_web: bool = False,
         history: list[dict] | None = None) -> str:
+    """Main pipeline entry point. Logs every turn for Smart Brain mining."""
     # ── 0. Identity query — hardcoded, instant, no LLM call ─────────────────
     if _is_identity_query(query):
         return _IDENTITY_RESPONSE
@@ -715,7 +724,13 @@ def run(query: str, use_web: bool = False,
     # reach their handlers. All action handlers check first; conversational
     # bypass is the fallback for everything they don't match.
 
-    # ── 0b. Overclocking / hardware optimization ─────────────────────────────
+    # ── 0b. Wolfram Alpha — math, units, computation (zero-hallucination path) ─
+    if is_wolfram_query(query):
+        answer = wolfram_short_answer(query)
+        if answer:
+            return answer  # exact computed result, no LLM needed
+
+    # ── 0c. Overclocking / hardware optimization ─────────────────────────────
     if _is_oc_query(query):
         return _strip_markdown(_run_oc_query(query))
 
@@ -782,7 +797,28 @@ def run(query: str, use_web: bool = False,
         return _strip_markdown(bridge_chat(verify_data["synthesis_prompt"],
                                            history=history))
 
-    # ── 2. Obsidian vault RAG + smart web search ────────────────────────────
+    # ── 1b. Meta-router — specialist agent dispatch ───────────────────────
+    # Classify the query and route to the optimal agent before RAG overhead.
+    # TECH  → JARVIS-Tech (Coder) for code, embedded, electronics queries.
+    # JARVIS → JARVIS-8b for strategic analysis, comparisons, deep dives.
+    # DEFAULT → fall through to RAG + active persona (Cortana or JARVIS).
+    _route = classify(query)
+    if _route == ROUTE_TECH:
+        print(f"[Router] TECH route → jarvis-tech")
+        # Still pull RAG context — code answers improve with local context
+        memory_chunks = [] if len(query) < 5 else search_memory(query)
+        web_results   = web_search(query) if not memory_chunks else []
+        augmented     = _build_standard_prompt(query, memory_chunks, web_results)
+        return _strip_markdown(jarvis_tech_chat(augmented, history=history))
+
+    if _route == ROUTE_JARVIS:
+        print(f"[Router] JARVIS route → jarvis-8b analysis")
+        memory_chunks = [] if len(query) < 5 else search_memory(query)
+        web_results   = web_search(query) if not memory_chunks else []
+        augmented     = _build_standard_prompt(query, memory_chunks, web_results)
+        return _strip_markdown(bridge_chat(augmented, history=history))
+
+    # ── 2. Obsidian vault RAG + smart web search + Wikipedia ────────────────
     # Skip RAG for very short inputs — no useful embedding match and can
     # cause n_results=0 crashes in ChromaDB.
     memory_chunks = [] if len(query) < 5 else search_memory(query)
@@ -804,5 +840,10 @@ def run(query: str, use_web: bool = False,
     )
     web_results = web_search(query) if _needs_web else []
 
-    prompt = _build_standard_prompt(query, memory_chunks, web_results)
-    return _strip_markdown(bridge_chat(prompt, history=history))
+    # Wikipedia: pull encyclopedic summary for factual queries as extra context
+    wiki = wikipedia_summary(query) if is_wiki_candidate(query) else None
+
+    prompt   = _build_standard_prompt(query, memory_chunks, web_results, wiki)
+    response = _strip_markdown(bridge_chat(prompt, history=history))
+    log_turn(query, response)
+    return response

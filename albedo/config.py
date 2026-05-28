@@ -7,10 +7,41 @@ import os
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_PROJECT_ROOT / ".env", override=False)
 
-OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL",    "llama3.2:3b")
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL",    "albedo-cortana-8b")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 
 WEB_SEARCH_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "5"))
+
+# --- External API keys (all free tiers) ---
+# Tavily web search — 1,000 queries/month free: https://app.tavily.com
+TAVILY_API_KEY  = os.getenv("TAVILY_API_KEY",  "")
+# Wolfram Alpha Short Answers — 2,000 queries/month free: https://developer.wolframalpha.com
+WOLFRAM_API_KEY = os.getenv("WOLFRAM_API_KEY", "")
+
+# --- Azure Cognitive Services (Tier 0 TTS + STT) ---
+# Free tier: 500K Neural TTS chars/month, 5 hrs STT/month
+# Create a Speech resource at https://portal.azure.com (free account, no credit card)
+AZURE_SPEECH_KEY    = os.getenv("AZURE_SPEECH_KEY",    "")
+AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION", "")
+# Voice overrides (defaults are CortanaNeural / GuyNeural)
+AZURE_TTS_VOICE_CORTANA = os.getenv("AZURE_TTS_VOICE_CORTANA", "en-US-CortanaNeural")
+AZURE_TTS_VOICE_JARVIS  = os.getenv("AZURE_TTS_VOICE_JARVIS",  "en-US-GuyNeural")
+AZURE_TTS_STYLE         = os.getenv("AZURE_TTS_STYLE",         "")
+AZURE_STT_LANGUAGE      = os.getenv("AZURE_STT_LANGUAGE",      "en-US")
+
+# --- Azure OpenAI (optional Tier 0 LLM — user's own deployment) ---
+# Works with any Azure OpenAI deployment (GPT-3.5, GPT-4, Phi-3.5, etc.)
+# Create: https://portal.azure.com → Azure OpenAI → Create deployment
+AZURE_OPENAI_KEY        = os.getenv("AZURE_OPENAI_KEY",        "")
+AZURE_OPENAI_ENDPOINT   = os.getenv("AZURE_OPENAI_ENDPOINT",   "")
+AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-35-turbo")
+AZURE_OPENAI_API_VERSION= os.getenv("AZURE_OPENAI_API_VERSION","2024-02-01")
+
+# --- XTTS-v2 local voice clone (Tier 1 TTS) ---
+# Free, local, no API. Clone any voice from a 6-second WAV reference clip.
+# pip install TTS  (Coqui TTS — downloads 1.8 GB model on first use)
+XTTS_VOICE_SAMPLE = os.getenv("XTTS_VOICE_SAMPLE", "")   # path to .wav ref clip
+XTTS_DEVICE       = os.getenv("XTTS_DEVICE",       "")   # "cuda" or "cpu"
 
 # --- Audio / Voice ---
 PIPER_BINARY = os.getenv("PIPER_BINARY", str(_PROJECT_ROOT / "piper" / "piper.exe"))

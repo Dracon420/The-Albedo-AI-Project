@@ -3,19 +3,27 @@
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
 ; Output: Output\Albedo-Setup-3.1.0.exe
 ;
+; What's new in 3.1.0
+;   - R4 fine-tuned models: albedo-cortana-8b + albedo-jarvis-8b
+;     (QLoRA rank 64, 15 epochs, Azure T4 — replaces R3 baselines)
+;   - Mobile companion app: Albedo.apk bundled in mobile\
+;   - Fly.io WebSocket relay server bundled in relay\
+;   - Safety-catch approval modal wired to Eel UI
+;   - Mission Control MOBILE tab (QR pairing, status, unpair)
+;   - ChromaDB auto-index fix (auto-populates on first search)
+;
 ; Upgrade behaviour:
 ;   - Detects existing install via AppId GUID — upgrades in-place
 ;   - Kills running Albedo processes before copying new files
-;   - Fresh install  → runs full setup wizard (setup_utility.py)
-;   - Upgrade        → runs setup_utility.py --upgrade (pip only, no wizard)
+;   - Fresh install  → runs full setup wizard (post_install.ps1)
+;   - Upgrade        → runs post_upgrade.ps1 (pip only, no wizard)
 ;   - User data preserved on both upgrade AND uninstall:
 ;       .env, settings.json, chroma_db, albedo_memory_db, hardware_config.json
-;   - .venv, logs, __pycache__ cleaned on full uninstall only
 
 ; ── Build metadata ─────────────────────────────────────────────────────────
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "2.2.9"
+#define AppVersion   "3.1.0"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -43,7 +51,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-2.2.9
+OutputBaseFilename=Albedo-Setup-3.1.0
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
 
@@ -72,6 +80,8 @@ Name: "{app}";                    Permissions: everyone-full
 ; Pre-create runtime dirs with full write access
 Name: "{app}\logs";               Permissions: everyone-full
 Name: "{app}\vosk_models";        Permissions: everyone-full
+Name: "{app}\relay";              Permissions: everyone-full
+Name: "{app}\mobile";             Permissions: everyone-full
 ; User-data dirs: uninsneveruninstall = survived both upgrade AND full uninstall
 Name: "{app}\chroma_db";          Permissions: everyone-full; Flags: uninsneveruninstall
 Name: "{app}\albedo_memory_db";   Permissions: everyone-full; Flags: uninsneveruninstall
@@ -104,8 +114,8 @@ Source: "install.ps1";              DestDir: "{app}"; Flags: ignoreversion skipi
 Source: "VERSION";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md";                DestDir: "{app}"; Flags: ignoreversion
 Source: "CLAUDE.md";                DestDir: "{app}"; Flags: ignoreversion
-Source: "post_install.ps1";          DestDir: "{app}"; Flags: ignoreversion
-Source: "post_upgrade.ps1";          DestDir: "{app}"; Flags: ignoreversion
+Source: "post_install.ps1";         DestDir: "{app}"; Flags: ignoreversion
+Source: "post_upgrade.ps1";         DestDir: "{app}"; Flags: ignoreversion
 Source: "Albedo-Nuclear-Reset.ps1";   DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "Albedo-Hard-Uninstall.ps1";  DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "Albedo-Hard-Uninstall.bat";  DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -115,6 +125,15 @@ Source: "docs\*";               DestDir: "{app}\docs";              Flags: ignor
 
 ; ── Eel frontend ───────────────────────────────────────────────────────────
 Source: "web\*";                DestDir: "{app}\web";               Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; ── Fly.io WebSocket relay server ──────────────────────────────────────────
+; Self-hostable relay for the Albedo mobile app (no Tailscale needed).
+; Deploy with: cd C:\Albedo\relay && fly deploy
+Source: "relay\*";              DestDir: "{app}\relay";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
+
+; ── Mobile companion APK ───────────────────────────────────────────────────
+; Sideload Albedo.apk onto an Android phone to use voice/chat remotely.
+Source: "mobile\Albedo.apk";   DestDir: "{app}\mobile";            Flags: ignoreversion skipifsourcedoesntexist
 
 ; ── Background images ──────────────────────────────────────────────────────
 Source: "Albedo-mission-control-background-1.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
@@ -282,7 +301,12 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v2.2.3.' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v3.1.0.' + #13#10 + #13#10 +
+      'What''s new in 3.1.0:' + #13#10 +
+      '  - R4 fine-tuned models (Cortana + JARVIS, rank 64)' + #13#10 +
+      '  - Albedo mobile companion app (Android APK)' + #13#10 +
+      '  - Fly.io relay server for phone pairing' + #13#10 +
+      '  - Command approval modal in Mission Control' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +

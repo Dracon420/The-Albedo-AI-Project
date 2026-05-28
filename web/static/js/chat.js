@@ -131,6 +131,36 @@ const Chat = (() => {
   // Settings panel calls this when the user changes persona from the drawer
   window._albedo_persona_select = function (name) { _applyPersonaName(name); };
 
+  // safety_catch — Python sends an approval request; we show the modal
+  window._albedo_approval_request = function(req) {
+    const modal    = document.getElementById("approvalModal");
+    const cmdEl    = document.getElementById("approvalCmd");
+    const reqEl    = document.getElementById("approvalRequester");
+    const approveBtn = document.getElementById("approvalApprove");
+    const denyBtn    = document.getElementById("approvalDeny");
+    if (!modal) return;
+
+    cmdEl.textContent = req.display  || "(unknown command)";
+    reqEl.textContent = "requester: " + (req.requester || "swarm");
+
+    function _respond(approved) {
+      modal.setAttribute("aria-hidden", "true");
+      modal.classList.remove("is-visible");
+      try { eel.approve_command(approved)(); } catch { /* ignore */ }
+      approveBtn.removeEventListener("click", _onApprove);
+      denyBtn.removeEventListener("click",    _onDeny);
+    }
+    function _onApprove() { _respond(true);  }
+    function _onDeny()    { _respond(false); }
+
+    approveBtn.addEventListener("click", _onApprove, { once: true });
+    denyBtn.addEventListener("click",    _onDeny,    { once: true });
+
+    modal.removeAttribute("aria-hidden");
+    modal.classList.add("is-visible");
+  };
+  eel.expose(_albedo_approval_request, "_albedo_approval_request");
+
   // Python toggles SEND→STOP (true) / STOP→SEND (false) around wake pipeline
   window._albedo_send_stop = function(isStop) {
     _wakeProcessing = !!isStop;

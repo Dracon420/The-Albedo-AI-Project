@@ -37,6 +37,13 @@
       </div>
     </nav>
 
+    <!-- View mode switcher -->
+    <div class="mode-switcher" role="group" aria-label="View mode">
+      <button class="mode-btn" data-mode="fullscreen" title="Fullscreen — immersive HUD">FULL</button>
+      <button class="mode-btn" data-mode="windowed"   title="Windowed — standard cyberdeck">WIN</button>
+      <button class="mode-btn" data-mode="widget"     title="Widget — compact floating overlay">WIDGET</button>
+    </div>
+
     <button class="drawer__toggle" id="drawerToggle" aria-label="Open tactical drawer">≡</button>
   </header>
 
@@ -174,6 +181,7 @@
       <button class="drawer__tab is-active" data-tab="settings">SETTINGS</button>
       <button class="drawer__tab"           data-tab="hardware">HARDWARE</button>
       <button class="drawer__tab"           data-tab="software">SOFTWARE</button>
+      <button class="drawer__tab"           data-tab="mobile">MOBILE</button>
     </nav>
 
     <!-- ── Settings tab: interactive controls ───────────────────── -->
@@ -283,6 +291,50 @@
         <pre class="drawer__readout" id="versionReadout">loading...</pre>
       </section>
     </div>
+
+    <!-- ── Mobile pairing tab ───────────────────────────────────────── -->
+    <div class="drawer__pane" data-pane="mobile">
+      <section class="drawer__section">
+        <h3>MOBILE LINK</h3>
+
+        <!-- Status strip -->
+        <div class="mobile-status" id="mobileStatusStrip">
+          <span class="mobile-status__dot" id="mobileStatusDot"></span>
+          <span class="mobile-status__label" id="mobileStatusLabel">checking...</span>
+        </div>
+
+        <!-- QR code display -->
+        <div class="mobile-qr-wrap" id="mobileQrWrap" style="display:none">
+          <canvas id="mobileQrCanvas" width="180" height="180"></canvas>
+          <p class="mobile-qr-hint">Scan with the Albedo mobile app</p>
+        </div>
+
+        <!-- Token readout (for manual entry) -->
+        <div class="mobile-token-wrap" id="mobileTokenWrap" style="display:none">
+          <label class="setting__label">Relay URL</label>
+          <div class="mobile-token-row">
+            <code id="mobileRelayUrl" class="mobile-token-code"></code>
+          </div>
+          <label class="setting__label" style="margin-top:8px">Pairing Token</label>
+          <div class="mobile-token-row">
+            <code id="mobileToken" class="mobile-token-code mobile-token-code--mono"></code>
+            <button class="mobile-copy-btn" id="mobileCopyBtn" title="Copy token">⎘</button>
+          </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="mobile-actions">
+          <button class="cmd-btn" id="mobilePairBtn">GENERATE CODE</button>
+          <button class="cmd-btn mobile-btn--unpair" id="mobileUnpairBtn"
+                  style="display:none">UNPAIR</button>
+        </div>
+
+        <p class="mobile-hint">
+          Download the Albedo app, tap <strong>Scan QR</strong>, and point it at the code above.
+          No account needed — the code is your secure key.
+        </p>
+      </section>
+    </div>
   </aside>
 
   <!-- Drawer scrim for click-to-close -->
@@ -295,7 +347,26 @@
   <script src="static/js/neural.js"></script>
   <script src="static/js/drawer.js"></script>
   <script src="static/js/settings.js"></script>
+  <script src="static/js/mobile.js"></script>
   <script src="static/js/chat.js"></script>
   <script src="static/js/app.js"></script>
+  <!-- Holographic orb animator (Canvas 2D, no deps) -->
+  <script src="static/js/orb.js"></script>
+  <!-- View mode switcher (FULL / WIN / WIDGET) -->
+  <script src="static/js/modes.js"></script>
+
+  <!-- ── Safety catch approval modal ──────────────────────────────────── -->
+  <div id="approvalModal" class="approval-modal" aria-hidden="true">
+    <div class="approval-modal__box">
+      <div class="approval-modal__title">⚠ COMMAND APPROVAL REQUIRED</div>
+      <div class="approval-modal__meta" id="approvalRequester"></div>
+      <div class="approval-modal__cmd"  id="approvalCmd"></div>
+      <div class="approval-modal__hint">Albedo wants to execute this command. Approve or deny.</div>
+      <div class="approval-modal__actions">
+        <button id="approvalDeny"    class="cmd-btn approval-modal__btn--deny">DENY</button>
+        <button id="approvalApprove" class="cmd-btn approval-modal__btn--approve">APPROVE</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

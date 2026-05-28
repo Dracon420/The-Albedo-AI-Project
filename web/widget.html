@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALBEDO // WIDGET</title>
+
+  <!-- Eel JS bridge (same Eel server serves this page) -->
+  <script type="text/javascript" src="/eel.js"></script>
+
+  <link rel="stylesheet" href="static/css/widget.css" />
+</head>
+<body>
+<div class="widget">
+
+  <!-- ── Header: orb + identity + state ───────────────────── -->
+  <header class="w-header">
+    <div class="w-orb" id="wOrb">
+      <canvas id="wOrbCanvas" style="position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;"></canvas>
+      <img src="static/backgrounds/albedo_logo.png" alt="Albedo" class="w-logo" />
+      <div class="w-ring"></div>
+      <div class="w-ring w-ring--inner"></div>
+    </div>
+    <div class="w-identity">
+      <div class="w-brand" id="wBrand">ALBEDO</div>
+      <div class="w-state" id="wState" data-state="STANDBY">STANDBY</div>
+    </div>
+  </header>
+
+  <!-- ── Mini gauge row: CPU / GPU / RAM / VRAM ────────────── -->
+  <div class="w-gauges">
+    <div class="w-gauge">
+      <div class="w-gauge__label">CPU</div>
+      <div class="w-gauge__bar"><div class="w-gauge__fill" id="wCpuBar"></div></div>
+      <div class="w-gauge__val" id="wCpuVal">0%</div>
+    </div>
+    <div class="w-gauge">
+      <div class="w-gauge__label">GPU</div>
+      <div class="w-gauge__bar"><div class="w-gauge__fill" id="wGpuBar"></div></div>
+      <div class="w-gauge__val" id="wGpuVal">0%</div>
+    </div>
+    <div class="w-gauge">
+      <div class="w-gauge__label">RAM</div>
+      <div class="w-gauge__bar"><div class="w-gauge__fill" id="wRamBar"></div></div>
+      <div class="w-gauge__val" id="wRamVal">0%</div>
+    </div>
+    <div class="w-gauge">
+      <div class="w-gauge__label">TEMP</div>
+      <div class="w-gauge__bar"><div class="w-gauge__fill" id="wTempBar" style="background:var(--c-orange);box-shadow:0 0 6px var(--c-orange);"></div></div>
+      <div class="w-gauge__val" id="wTempVal">--°C</div>
+    </div>
+  </div>
+
+  <!-- ── Chat feed ─────────────────────────────────────────── -->
+  <div class="w-chat" id="wChat">
+    <div class="w-line w-line--system">[SYS] Widget online.</div>
+  </div>
+
+  <!-- ── Input row ─────────────────────────────────────────── -->
+  <div class="w-input-row">
+    <button class="w-btn w-btn--mic" id="wMicBtn">MIC</button>
+    <input class="w-input" id="wInput" type="text"
+           placeholder="Ask Albedo…" autocomplete="off" />
+    <button class="w-btn" id="wSendBtn">SEND</button>
+  </div>
+
+</div>
+
+<script>
+/* ── Widget mini-orb canvas animator ─────────────────────── */
+(function () {
+  const STATE_COLORS = {
+    standby:  [255, 174,   0],
+    active:   [208,   0, 255],
+    listening: [ 57, 255,  20],
+    error:    [255,  42, 109],
+  };
+  let _state = "standby", _t = 0, _ctx, _W, _H, _cx, _cy;
+
+  const orbEl  = document.getElementById("wOrb");
+  const canvas = document.getElementById("wOrbCanvas");
+
+  function resize() {
+    const rect = orbEl.getBoundingClientRect();
+    _W = rect.width  || 68;
+    _H = rect.height || 68;
+    const dpr     = window.devicePixelRatio || 1;
+    canvas.width  = _W * dpr;
+    canvas.height = _H * dpr;
+    _ctx = canvas.getContext("2d");
+    _ctx.scale(dpr, dpr);
+    _cx = _W / 2;
+    _cy = _H / 2;
+  }
+  resize();
+
+  function rgba(col, a) {
+    return `rgba(${col[0]|0},${col[1]|0},${col[2]|0},${a.toFixed(3)})`;
+  }
+
+  function draw(dt) {
+    _t += dt;
+    _ctx.clearRect(0, 0, _W, _H);
+    const col = STATE_COLORS[_state] || STATE_COLORS.standby;
+
+    // Glow
+    const g = _ctx.createRadialGradient(_cx,_cy,0,_cx,_cy,_cx);
+    g.addColorStop(0, rgba(col, 0.12));
+    g.addColorStop(1, rgba(col, 0));
+    _ctx.fillStyle = g;
+    _ctx.beginPath();
+    _ctx.arc(_cx,_cy,_cx,0,Math.PI*2);
+    _ctx.fill();
+
+    // Two particle rings
+    for (const [r, speed, count, tilt] of [
+      [_cx * 0.95,  0.4, 12, 0.35],
+      [_cx * 0.75, -0.7,  8, 0.60],
+    ]) {
+      const angle = _t * speed;
+      const ry = r * (1 - tilt);
+      _ctx.beginPath();
+      _ctx.ellipse(_cx,_cy,r,ry,0,0,Math.PI*2);
+      _ctx.strokeStyle = rgba(col, 0.10);
+      _ctx.lineWidth = 0.5;
+      _ctx.stroke();
+      for (let i=0; i<count; i++) {
+        const a = angle + (i/count)*Math.PI*2;
+        const depth = (Math.sin(a)+1)*0.5;
+        _ctx.beginPath();
+        _ctx.arc(_cx+Math.cos(a)*r, _cy+Math.sin(a)*ry, 0.8+depth*1.6, 0, Math.PI*2);
+        _ctx.fillStyle = rgba(col, 0.25+depth*0.55);
+        _ctx.fill();
+      }
+    }
+  }
+
+  let last = performance.now();
+  (function loop(now) {
+    draw(Math.min((now-last)/1000, 0.05));
+    last = now;
+    requestAnimationFrame(loop);
+  })(performance.now());
+
+  // State sync via MutationObserver on the state badge
+  const stateEl = document.getElementById("wState");
+  new MutationObserver(() => {
+    _state = (stateEl.dataset.state || "standby").toLowerCase();
+  }).observe(stateEl, { attributes: true, attributeFilter: ["data-state"] });
+})();
+
+/* ── Eel bridge functions exposed to Python ───────────────── */
+/** Python calls this to push a chat line to the widget feed. */
+eel.expose(function _w_chat_push(kind, text) {
+  const chat = document.getElementById("wChat");
+  if (!chat) return;
+  const line = document.createElement("div");
+  line.className = `w-line w-line--${kind}`;
+  line.textContent = text;
+  chat.appendChild(line);
+  chat.scrollTop = chat.scrollHeight;
+});
+
+/** Python calls this to update the widget state badge. */
+eel.expose(function _w_set_state(state) {
+  const el = document.getElementById("wState");
+  if (el) { el.textContent = state; el.dataset.state = state; }
+});
+
+/** Python calls this to update widget persona branding. */
+eel.expose(function _w_set_persona(name) {
+  const el = document.getElementById("wBrand");
+  if (el) el.textContent = name.toUpperCase();
+});
+
+/** Python calls this with telemetry { cpu, gpu, ram, temp } (all 0–100). */
+eel.expose(function _w_telemetry(data) {
+  function set(barId, valId, pct, fmt) {
+    const bar = document.getElementById(barId);
+    const val = document.getElementById(valId);
+    if (bar) bar.style.width = Math.min(100, pct) + "%";
+    if (val) val.textContent = fmt;
+    // Heat-map bar color
+    if (bar) {
+      bar.style.background = pct > 85 ? "var(--c-red)"
+                           : pct > 60 ? "var(--c-orange)"
+                           : "var(--c-cyan)";
+      bar.style.boxShadow = pct > 85
+        ? "0 0 6px var(--c-red)"
+        : "0 0 6px var(--c-cyan)";
+    }
+  }
+  if (data.cpu  != null) set("wCpuBar",  "wCpuVal",  data.cpu,  data.cpu.toFixed(0) + "%");
+  if (data.gpu  != null) set("wGpuBar",  "wGpuVal",  data.gpu,  data.gpu.toFixed(0) + "%");
+  if (data.ram  != null) set("wRamBar",  "wRamVal",  data.ram,  data.ram.toFixed(0) + "%");
+  if (data.temp != null) set("wTempBar", "wTempVal", (data.temp/100)*100, data.temp.toFixed(0) + "°C");
+});
+
+/* ── Telemetry polling (1 Hz) ───────────────────────────────── */
+(function startTelemetry() {
+  async function poll() {
+    try {
+      const t = await eel.get_telemetry()();
+      if (!t) return;
+      const data = {
+        cpu:  t.cpu  ? t.cpu.percent : null,
+        gpu:  t.gpu  ? t.gpu.load_percent : null,
+        ram:  t.ram  ? t.ram.percent : null,
+        temp: t.gpu  ? t.gpu.temp_c : (t.cpu && t.cpu.temp_c ? t.cpu.temp_c : null),
+      };
+      _w_telemetry(data);
+    } catch (_) {}
+  }
+  // Wait for eel to be ready
+  function waitEel() {
+    if (typeof eel !== "undefined" && typeof eel.get_telemetry === "function") {
+      poll();
+      setInterval(poll, 1000);
+    } else {
+      setTimeout(waitEel, 100);
+    }
+  }
+  waitEel();
+})();
+
+/* ── Input handling ─────────────────────────────────────────── */
+const wInput   = document.getElementById("wInput");
+const wSendBtn = document.getElementById("wSendBtn");
+const wMicBtn  = document.getElementById("wMicBtn");
+const wChat    = document.getElementById("wChat");
+
+function addLine(kind, text) {
+  const line = document.createElement("div");
+  line.className = `w-line w-line--${kind}`;
+  line.textContent = text;
+  wChat.appendChild(line);
+  wChat.scrollTop = wChat.scrollHeight;
+}
+
+async function sendQuery() {
+  const q = wInput.value.trim();
+  if (!q) return;
+  wInput.value = "";
+  addLine("user", `> ${q}`);
+  document.getElementById("wState").textContent = "ACTIVE";
+  document.getElementById("wState").dataset.state = "ACTIVE";
+  try {
+    const reply = await eel.run_pipeline(q)();
+    addLine("albedo", reply || "(no response)");
+  } catch (e) {
+    addLine("error", `[ERR] ${e}`);
+  } finally {
+    document.getElementById("wState").textContent = "STANDBY";
+    document.getElementById("wState").dataset.state = "STANDBY";
+  }
+}
+
+wSendBtn.addEventListener("click", sendQuery);
+wInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendQuery(); });
+
+// MIC button — calls Eel mic recording
+wMicBtn.addEventListener("click", () => {
+  if (window.eel) {
+    try { eel.widget_mic_press()(); } catch(_) {}
+  }
+});
+</script>
+</body>
+</html>

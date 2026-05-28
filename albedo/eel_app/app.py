@@ -19,12 +19,90 @@ from __future__ import annotations
 
 import os
 import socket
+import subprocess
 from pathlib import Path
 from typing import Optional
 
 
 _ROOT    = Path(__file__).resolve().parent.parent.parent
 _WEB_DIR = _ROOT / "web"
+
+# Module-level port — set once eel.start() is called so widget launcher can use it.
+_active_port: int = 8088
+
+
+# ---------------------------------------------------------------------------
+# Widget + mode Eel functions — exposed before eel.init() via late-import
+# so they're available to any connected browser window (main + widget).
+# ---------------------------------------------------------------------------
+
+def _expose_widget_fns() -> None:
+    """Register widget-related @eel.expose functions. Called once in run()."""
+    try:
+        import eel as _eel
+
+        @_eel.expose
+        def open_widget_window() -> None:
+            """
+            Launch the compact widget overlay in a separate frameless Chrome window.
+            Finds Chrome/Edge on Windows and opens widget.html via --app= mode.
+            """
+            port = _active_port
+            url  = f"http://127.0.0.1:{port}/widget.html"
+
+            chrome_candidates = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            ]
+            exe = next((p for p in chrome_candidates if Path(p).exists()), None)
+            if exe:
+                try:
+                    subprocess.Popen([
+                        exe,
+                        f"--app={url}",
+                        "--window-size=380,560",
+                        "--window-position=30,80",
+                        "--disable-extensions",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                    ])
+                    print(f"[eel_app] Widget window opened → {url}")
+                except Exception as exc:
+                    print(f"[eel_app] Widget launch failed: {exc}")
+            else:
+                print("[eel_app] Chrome/Edge not found — cannot open widget.")
+
+        @_eel.expose
+        def set_window_mode(mode: str) -> None:
+            """
+            Called by modes.js when the user switches between FULL / WINDOW / WIDGET.
+            Currently a no-op stub; can be extended to call ctypes for OS-level
+            window resizing if needed.
+            """
+            print(f"[eel_app] View mode → {mode}")
+
+        @_eel.expose
+        def run_pipeline(query: str) -> str:
+            """
+            Execute the Albedo pipeline for a query — used by widget.html's chat.
+            Returns the text response.
+            """
+            try:
+                from albedo.pipeline import run as _run
+                return _run(query) or ""
+            except Exception as exc:
+                print(f"[eel_app] run_pipeline error: {exc}")
+                return f"[ERR] {exc}"
+
+        @_eel.expose
+        def widget_mic_press() -> None:
+            """Placeholder for widget MIC button — hooks into the same PTT flow."""
+            print("[eel_app] Widget MIC pressed — not yet wired to capture.")
+
+    except Exception as exc:
+        print(f"[eel_app] Widget fn registration failed (non-fatal): {exc}")
 
 
 def _full_screen_size() -> tuple[int, int]:
@@ -110,6 +188,8 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
             f"or check that the install bundle is complete."
         )
 
+    global _active_port
+
     import eel
 
     # Importing the bridge applies @eel.expose to every public function.
@@ -118,6 +198,29 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     # so order doesn't matter — do init() first for clarity.
     eel.init(str(_WEB_DIR))
     from albedo.eel_app import bridge       # noqa: F401  — registers @eel.expose
+
+    # Wire safety_catch to the Eel UI approval handler so command-approval
+    # prompts appear in the modal rather than the console.
+    try:
+        from albedo.safety_catch import set_approval_handler
+        set_approval_handler(bridge._eel_approval_handler)
+        print("[eel_app] safety_catch wired to Eel UI approval handler.")
+    except Exception as _exc:
+        print(f"[eel_app] safety_catch handler registration failed (non-fatal): {_exc}")
+
+    # Register widget + mode functions
+    _expose_widget_fns()
+
+    # ── Mobile relay — start in background if token is already configured ──
+    try:
+        from albedo import mobile_relay as _mr
+        if _mr.get_token():
+            _mr.start()
+            print("[eel_app] Mobile relay started.")
+        else:
+            print("[eel_app] Mobile relay: no token yet — pair from MOBILE tab first.")
+    except Exception as _exc:
+        print(f"[eel_app] Mobile relay start failed (non-fatal): {_exc}")
 
     # ── Wake-word listener — starts/stops when the WAKE button is toggled ──
     # The UI calls set_wake_state("armed"/"disarmed") which fires comm_mode
@@ -351,7 +454,8 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     except Exception as exc:
         print(f"[eel_app] Idle monitor failed to start: {exc}")
 
-    actual_port = _free_port(port)
+    actual_port  = _free_port(port)
+    _active_port = actual_port          # expose to widget launcher
     win_size = _full_screen_size()
     print(f"[eel_app] Window size: {win_size[0]} x {win_size[1]} "
           f"(full-screen auto-sized)")

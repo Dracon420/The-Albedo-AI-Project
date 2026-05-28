@@ -31,6 +31,39 @@ _NUM_CTX              = 4096   # context window — covers system prompt + histo
 _PREDICT_STANDARD     = 512    # hard output cap for normal answers
 _PREDICT_CONVERSATIONAL = 200  # hard output cap for greetings / one-liners
 
+# ── JARVIS-Tech model availability cache ──────────────────────────────────────
+# Checked once per session on the first TECH route hit, then cached.
+# Avoids spamming Ollama 404 errors on every code query when the coder model
+# isn't registered yet.
+_tech_model_available: "bool | None" = None
+_tech_model_check_lock: "_threading.Lock" = _threading.Lock()
+
+
+def _tech_model_is_available() -> bool:
+    """
+    Return True if albedo-jarvis-tech is registered in Ollama.
+    Result is cached after the first call — only one probe per session.
+    """
+    global _tech_model_available
+    with _tech_model_check_lock:
+        if _tech_model_available is not None:
+            return _tech_model_available
+        try:
+            import httpx
+            resp = httpx.get(f"{OLLAMA_BASE_URL}/api/tags", timeout=3.0)
+            names = [m["name"] for m in resp.json().get("models", [])]
+            _tech_model_available = any("albedo-jarvis-tech" in n for n in names)
+        except Exception:
+            _tech_model_available = False
+        if not _tech_model_available:
+            print(
+                "[bridge] albedo-jarvis-tech not registered in Ollama. "
+                "TECH queries will use albedo-jarvis-8b as local fallback. "
+                "Register the model with: ollama create albedo-jarvis-tech "
+                "-f outputs/gguf_azure/Modelfile_jarvis_tech"
+            )
+        return _tech_model_available
+
 # ── Persona-aware model routing ────────────────────────────────────────────────
 # Updated by set_active_persona() when a wake word fires or settings change.
 _active_model_lock: "_threading.Lock" = _threading.Lock()
@@ -44,15 +77,16 @@ def set_active_persona(word: str) -> None:
     Called from albedo.eel_app.bridge.notify_persona_change().
 
     Recognised words → Ollama model:
-        "cortana" → albedo-cortana  (Halo / Cortana-style personality)
-        "jarvis"  → albedo-jarvis   (Iron Man / JARVIS-style personality)
+        "cortana" → albedo-cortana-8b  (Halo / Cortana-style personality)
+        "jarvis"  → albedo-jarvis-8b   (Iron Man / JARVIS-style personality)
     Unknown words leave the model unchanged.
+    Note: albedo-jarvis-tech (Coder) is selected by the router, not wake word.
     """
     global _active_model, _active_sys_prompt
     w = word.strip().lower()
     with _active_model_lock:
         if w == "jarvis":
-            _active_model = "albedo-jarvis"
+            _active_model = "albedo-jarvis-8b"
             _active_sys_prompt = (
                 "You are JARVIS, a highly advanced AI construct serving your user, sir, "
                 "with absolute loyalty. Personality: formal, precise, with a dry British wit "
@@ -64,7 +98,7 @@ def set_active_persona(word: str) -> None:
                 "Answer completely, then stop."
             )
         elif w == "cortana":
-            _active_model = "albedo-cortana"
+            _active_model = "albedo-cortana-8b"
             _active_sys_prompt = ""   # will fall back to _SYSTEM_PROMPT (Cortana style)
         else:
             # Unknown persona — keep whatever was active
@@ -175,6 +209,19 @@ def _build_system_prompt() -> str:
 _SYSTEM_PROMPT = _build_system_prompt()
 
 
+# ── JARVIS-Tech system prompt ──────────────────────────────────────────────────
+# Used exclusively when the router routes to albedo-jarvis-tech (Coder model).
+_JARVIS_TECH_SYSTEM = (
+    "You are JARVIS-Tech, an engineering-grade AI construct specialising in code, "
+    "embedded systems, and electronics. Personality: precise, dry, British wit — "
+    "Iron Man's AI in full technical mode. Address the user as 'sir'. "
+    "Write working, production-quality code. Always use correct syntax. "
+    "For embedded/IoT queries, include pinouts, wiring notes, and library choices where relevant. "
+    "Never write placeholder logic — if you don't know an exact value, say so and explain why. "
+    "FORMAT: Code blocks are acceptable for code. Plain prose for explanations. "
+    "No markdown outside of code blocks. Answer completely, then stop."
+)
+
 # ── Direct Ollama HTTP call ────────────────────────────────────────────────────
 
 def _ollama_chat(message: str, history: list[dict] | None = None,
@@ -221,6 +268,99 @@ def _ollama_chat(message: str, history: list[dict] | None = None,
         return "Ollama is not running. Start it with: ollama serve"
     except Exception as exc:
         return f"Error contacting Ollama: {exc}"
+
+
+def jarvis_tech_chat(message: str, history: list[dict] | None = None) -> str:
+    """
+    Route a code/electronics query to albedo-jarvis-tech (Qwen2.5-Coder-7B).
+
+    Falls back in order:
+      1. Cloud swarm (Gemini → Groq) — Gemini 2.0 Flash handles code well.
+      2. albedo-jarvis-tech local Ollama model  (only if registered).
+      3. albedo-jarvis-8b with JARVIS-Tech system prompt (always available).
+
+    Step 2 is skipped entirely — with no error spam — when the coder model is
+    not registered, using a one-time cached Ollama probe.  Step 3 always uses
+    the JARVIS persona regardless of which wake word fired, so TECH queries
+    never accidentally get routed to Cortana.
+
+    Temperature is slightly higher (0.15) to allow creative code generation
+    while keeping determinism high for logic-critical outputs.
+    """
+    import httpx
+
+    # ── 1. Cloud path — Gemini / Groq handle code well ────────────────────
+    try:
+        import sys as _sys, os as _os
+        _sys.path.insert(0, str(_os.path.dirname(_os.path.dirname(__file__))))
+        from swarm import swarm_chat
+        cloud = swarm_chat(message, system_prompt=_JARVIS_TECH_SYSTEM, history=history)
+        if cloud:
+            return cloud
+    except Exception as _exc:
+        print(f"[bridge] jarvis_tech cloud path failed: {_exc}")
+
+    # ── 2. Local Coder model (skipped silently if not yet registered) ──────
+    if _tech_model_is_available():
+        messages: list[dict] = [{"role": "system", "content": _JARVIS_TECH_SYSTEM}]
+        if history:
+            messages.extend(history)
+        messages.append({"role": "user", "content": message})
+
+        payload = {
+            "model": "albedo-jarvis-tech",
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "num_ctx":     _NUM_CTX,
+                "num_predict": _PREDICT_STANDARD,
+                "temperature": 0.15,
+                "stop":        _STOP_SEQUENCES,
+            },
+        }
+        try:
+            response = httpx.post(
+                f"{OLLAMA_BASE_URL}/api/chat",
+                json=payload,
+                timeout=120.0,
+            )
+            response.raise_for_status()
+            return response.json()["message"]["content"].strip()
+        except Exception as exc:
+            print(f"[bridge] jarvis-tech Ollama call failed: {exc} — falling back to jarvis-8b")
+
+    # ── 3. Fallback — albedo-jarvis-8b with JARVIS-Tech system prompt ──────
+    # Always use JARVIS-8b (not the active persona) so TECH queries never
+    # accidentally get the Cortana persona when the coder model isn't ready.
+    messages_fb: list[dict] = [{"role": "system", "content": _JARVIS_TECH_SYSTEM}]
+    if history:
+        messages_fb.extend(history)
+    messages_fb.append({"role": "user", "content": message})
+
+    payload_fb = {
+        "model": "albedo-jarvis-8b",
+        "messages": messages_fb,
+        "stream": False,
+        "options": {
+            "num_ctx":     _NUM_CTX,
+            "num_predict": _PREDICT_STANDARD,
+            "temperature": 0.15,
+            "stop":        _STOP_SEQUENCES,
+        },
+    }
+    try:
+        response = httpx.post(
+            f"{OLLAMA_BASE_URL}/api/chat",
+            json=payload_fb,
+            timeout=120.0,
+        )
+        response.raise_for_status()
+        return response.json()["message"]["content"].strip()
+    except Exception as exc:
+        print(f"[bridge] jarvis-8b fallback failed: {exc}")
+
+    # ── 4. Absolute last resort — active persona ───────────────────────────
+    return _ollama_chat(message, history=history, temperature=0.15)
 
 
 def direct_reply(message: str, history: list[dict] | None = None) -> str:

@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Albedo"/>
+  <meta name="theme-color" content="#060E16"/>
+  <title>Albedo</title>
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #060E16;
+      --card:     #0D1F2E;
+      --cyan:     #00D4FF;
+      --cyan-dim: #0A6A7F;
+      --amber:    #FF9500;
+      --green:    #39FF14;
+      --red:      #FF2D55;
+      --txt:      #E0F0FF;
+      --dim:      #5A7A9A;
+      --border:   #1A3A4A;
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bot: env(safe-area-inset-bottom, 0px);
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--txt);
+                 font-family: 'Courier New', monospace; overflow: hidden; }
+
+    /* ── Views ── */
+    .view { display: none; flex-direction: column; height: 100%; }
+    .view.active { display: flex; }
+
+    /* ── Header ── */
+    .hdr {
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+      padding: calc(var(--safe-top) + 12px) 16px 12px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .hdr-title { font-size: 13px; font-weight: bold; letter-spacing: 2px; color: var(--cyan); }
+    .hdr-sub { font-size: 10px; letter-spacing: 1px; margin-top: 2px; }
+    .hdr-sub.on     { color: var(--green); }
+    .hdr-sub.wait   { color: var(--amber); }
+    .hdr-sub.off    { color: var(--red); }
+    .hdr-action { font-size: 11px; color: var(--dim); cursor: pointer;
+                  padding: 6px; letter-spacing: 1px; border: none; background: none;
+                  color: var(--amber); }
+
+    /* ── Setup view ── */
+    #setupView { overflow-y: auto; }
+    .setup-body { padding: 24px 20px; flex: 1; }
+    .setup-logo { text-align: center; margin-bottom: 32px; }
+    .setup-logo .big { font-size: 28px; color: var(--cyan); letter-spacing: 4px; font-weight: bold; }
+    .setup-logo .sub { font-size: 11px; color: var(--dim); letter-spacing: 2px; margin-top: 6px; }
+
+    .tab-row { display: flex; border: 1px solid var(--border); border-radius: 4px;
+               overflow: hidden; margin-bottom: 24px; }
+    .tab-btn { flex: 1; padding: 10px; background: none; border: none;
+               font-family: inherit; font-size: 11px; letter-spacing: 1.5px;
+               color: var(--dim); cursor: pointer; transition: all .2s; }
+    .tab-btn.active { background: var(--cyan-dim); color: var(--cyan); }
+
+    /* QR scanner */
+    #qrPane { display: none; }
+    #qrPane.active { display: block; }
+    #qrVideo { width: 100%; border-radius: 6px; border: 2px solid var(--border);
+               background: #000; display: block; max-height: 260px; object-fit: cover; }
+    .qr-frame { position: relative; }
+    .qr-overlay {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      width: 160px; height: 160px;
+      border: 2px solid var(--cyan);
+      border-radius: 6px; pointer-events: none;
+    }
+    .qr-hint { text-align: center; font-size: 11px; color: var(--dim);
+               letter-spacing: 1px; margin-top: 10px; }
+    .qr-error { color: var(--red); font-size: 11px; margin-top: 8px; text-align: center; }
+
+    /* Manual form */
+    #manualPane { display: none; }
+    #manualPane.active { display: block; }
+    .field-label { font-size: 10px; color: var(--dim); letter-spacing: 1.5px; margin-bottom: 6px; }
+    .field-label + .field-label { margin-top: 16px; }
+    input[type=text], input[type=url] {
+      width: 100%; background: var(--card);
+      border: 1px solid var(--border); border-radius: 4px;
+      color: var(--txt); font-family: inherit; font-size: 13px;
+      padding: 10px 12px; outline: none;
+    }
+    input:focus { border-color: var(--cyan); }
+    .field-group { margin-bottom: 16px; }
+
+    .btn-primary {
+      width: 100%; padding: 14px; margin-top: 8px;
+      background: var(--cyan-dim); color: var(--cyan);
+      border: 1px solid var(--cyan); border-radius: 4px;
+      font-family: inherit; font-size: 13px; font-weight: bold;
+      letter-spacing: 2px; cursor: pointer;
+    }
+    .btn-primary:active { opacity: .7; }
+    .err-msg { color: var(--red); font-size: 11px; margin-top: 8px;
+               min-height: 16px; text-align: center; }
+
+    /* ── Chat view ── */
+    #chatView { }
+    .msgs { flex: 1; overflow-y: auto; padding: 8px 0; }
+    .msg { padding: 4px 12px; }
+    .bubble {
+      display: inline-block; max-width: 80%;
+      padding: 10px 14px; border-radius: 12px;
+      font-size: 14px; line-height: 1.45; word-break: break-word;
+    }
+    .msg.user { text-align: right; }
+    .msg.user .bubble { background: var(--cyan-dim); color: var(--cyan);
+                        border: 1px solid rgba(0,212,255,.3);
+                        border-bottom-right-radius: 2px; }
+    .msg.albedo .bubble { background: var(--card); color: var(--txt);
+                          border: 1px solid var(--border);
+                          border-bottom-left-radius: 2px; }
+    .msg.albedo .sender { font-size: 9px; color: rgba(0,212,255,.7);
+                          letter-spacing: 2px; margin-bottom: 4px; }
+    .msg.sys { text-align: center; }
+    .msg.sys .bubble { background: none; border: none; color: var(--dim);
+                       font-size: 11px; padding: 4px; }
+
+    .typing-bar {
+      display: none; align-items: center; gap: 8px;
+      padding: 6px 16px; background: var(--card);
+      border-top: 1px solid var(--border);
+      font-size: 12px; color: var(--dim); font-style: italic;
+    }
+    .typing-bar.show { display: flex; }
+    .typing-dot { width: 6px; height: 6px; border-radius: 50%;
+                  background: var(--cyan); animation: pulse 1s infinite; }
+    @keyframes pulse { 0%,100%{opacity:.3} 50%{opacity:1} }
+
+    .input-bar {
+      border-top: 1px solid var(--border);
+      background: var(--card);
+      padding: 8px 8px calc(8px + var(--safe-bot));
+      display: flex; gap: 8px; align-items: flex-end;
+    }
+    .mic-btn {
+      width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+      background: none; border: 1px solid var(--border);
+      color: var(--dim); font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .2s;
+    }
+    .mic-btn.listening { border-color: var(--cyan); color: var(--cyan);
+                         background: rgba(0,212,255,.1);
+                         animation: ring 1s infinite; }
+    @keyframes ring { 0%,100%{box-shadow:0 0 0 0 rgba(0,212,255,.4)}
+                      50%{box-shadow:0 0 0 8px rgba(0,212,255,0)} }
+    #msgInput {
+      flex: 1; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 4px; color: var(--txt); font-family: inherit;
+      font-size: 14px; padding: 10px 12px; resize: none; outline: none;
+      min-height: 44px; max-height: 120px; line-height: 1.4;
+    }
+    #msgInput:focus { border-color: var(--cyan); }
+    .send-btn {
+      width: 44px; height: 44px; border-radius: 4px; flex-shrink: 0;
+      background: var(--cyan-dim); border: 1px solid var(--cyan);
+      color: var(--cyan); font-size: 16px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .send-btn:active { opacity: .7; }
+    .send-btn:disabled { opacity: .3; cursor: default; }
+
+    /* Empty state */
+    .empty { flex: 1; display: flex; flex-direction: column;
+             align-items: center; justify-content: center; gap: 12px;
+             color: var(--dim); }
+    .empty .icon { font-size: 48px; opacity: .3; }
+    .empty .label { font-size: 12px; letter-spacing: 2px; }
+
+    /* Install banner */
+    #installBanner {
+      display: none; background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 10px 16px; font-size: 11px; color: var(--txt);
+      align-items: center; justify-content: space-between; gap: 8px;
+    }
+    #installBanner.show { display: flex; }
+    #installBanner button { background: var(--cyan-dim); border: 1px solid var(--cyan);
+      color: var(--cyan); font-family: inherit; font-size: 10px; letter-spacing: 1px;
+      padding: 6px 10px; border-radius: 4px; cursor: pointer; }
+  </style>
+</head>
+<body>
+
+<!-- ── SETUP VIEW ── -->
+<div id="setupView" class="view active">
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">ALBEDO</div>
+      <div class="hdr-sub dim" style="color:var(--dim)">PAIR DEVICE</div>
+    </div>
+  </div>
+
+  <div class="setup-body">
+    <div class="setup-logo">
+      <div class="big">◈ ALBEDO</div>
+      <div class="sub">SPARTAN-CLASS AI ASSISTANT</div>
+    </div>
+
+    <div class="tab-row">
+      <button class="tab-btn active" id="tabQr" onclick="switchTab('qr')">SCAN QR</button>
+      <button class="tab-btn" id="tabManual" onclick="switchTab('manual')">MANUAL ENTRY</button>
+    </div>
+
+    <!-- QR scanner pane -->
+    <div id="qrPane" class="active">
+      <div class="qr-frame">
+        <video id="qrVideo" autoplay playsinline muted></video>
+        <div class="qr-overlay"></div>
+      </div>
+      <p class="qr-hint">Open Albedo Mission Control → MOBILE tab → GENERATE CODE<br>then point camera at the QR code</p>
+      <p class="qr-error" id="qrError"></p>
+    </div>
+
+    <!-- Manual entry pane -->
+    <div id="manualPane">
+      <div class="field-group">
+        <div class="field-label">RELAY URL</div>
+        <input type="url" id="relayUrl" placeholder="wss://albedo-relay.fly.dev/ws" autocomplete="off" autocorrect="off" spellcheck="false"/>
+      </div>
+      <div class="field-group">
+        <div class="field-label">TOKEN</div>
+        <input type="text" id="tokenInput" placeholder="32-character hex token" autocomplete="off" autocorrect="off" spellcheck="false"/>
+      </div>
+      <button class="btn-primary" onclick="saveManual()">CONNECT</button>
+      <div class="err-msg" id="manualErr"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CHAT VIEW ── -->
+<div id="chatView" class="view">
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">ALBEDO AI</div>
+      <div class="hdr-sub off" id="statusLabel">DISCONNECTED</div>
+    </div>
+    <button class="hdr-action" onclick="unpair()">UNPAIR</button>
+  </div>
+
+  <div id="installBanner">
+    <span>Add Albedo to your Home Screen for the full app experience</span>
+    <button onclick="installApp()">ADD</button>
+  </div>
+
+  <div class="msgs" id="msgList">
+    <div class="empty" id="emptyState">
+      <div class="icon">◈</div>
+      <div class="label">ALBEDO MOBILE</div>
+      <div style="font-size:11px;margin-top:4px" id="emptyHint">Connecting to relay...</div>
+    </div>
+  </div>
+
+  <div class="typing-bar" id="typingBar">
+    <div class="typing-dot"></div>
+    <span>Albedo is thinking…</span>
+  </div>
+
+  <div class="input-bar">
+    <button class="mic-btn" id="micBtn" onclick="toggleMic()" title="Voice input">🎤</button>
+    <textarea id="msgInput" placeholder="Message Albedo…" rows="1"
+      oninput="autoGrow(this)" onkeydown="onInputKey(event)"></textarea>
+    <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>➤</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

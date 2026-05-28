@@ -90,9 +90,9 @@ body::before {
   z-index: 5;
   height: var(--topbar-h);
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
-  gap: 24px;
+  gap: 16px;
   padding: 0 18px;
   background: var(--c-bg-panel-2);
   backdrop-filter: blur(var(--glass-blur));
@@ -529,3 +529,256 @@ body::before {
 }
 .cmd-btn[data-state="armed"]    { background: var(--c-green); color: #000; }
 .cmd-btn[data-state="ptt"]      { background: var(--c-purple); color: #fff; }
+
+/* ============================================================
+   Mode-switcher buttons (topbar, next to drawer toggle)
+   ============================================================ */
+.mode-switcher {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-right: 8px;
+}
+.mode-btn {
+  background: var(--c-bg-panel);
+  color: var(--c-text-dim);
+  border: 1px solid var(--c-border);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+.mode-btn:hover {
+  background: rgba(208, 0, 255, 0.18);
+  color: var(--c-cyan);
+  border-color: var(--c-cyan);
+}
+.mode-btn.is-active {
+  background: rgba(208, 0, 255, 0.22);
+  color: var(--c-cyan);
+  border-color: var(--c-cyan);
+  box-shadow: 0 0 10px rgba(208, 0, 255, 0.35);
+  text-shadow: var(--glow-cyan);
+}
+
+/* ============================================================
+   FULLSCREEN MODE — immersive, hide secondary panels
+   ============================================================ */
+body.mode--fullscreen .topbar__sub {
+  display: none;
+}
+body.mode--fullscreen .topbar__sep {
+  display: none;
+}
+body.mode--fullscreen .links {
+  display: none;
+}
+body.mode--fullscreen .main {
+  grid-template-rows: 1fr auto;
+}
+body.mode--fullscreen .hud {
+  padding: 120px 20px 30px;
+  min-height: 0;
+}
+body.mode--fullscreen .hero__orb {
+  width: 260px;
+  height: 260px;
+}
+body.mode--fullscreen .hero__logo {
+  width: 210px;
+  height: 210px;
+}
+body.mode--fullscreen .wing__apex {
+  top: -140px;
+}
+body.mode--fullscreen .chat-panel {
+  background: rgba(6, 14, 22, 0.72);
+}
+body.mode--fullscreen .swarm {
+  display: none;
+}
+
+/* ============================================================
+   WINDOWED MODE — default layout, no overrides needed
+   (class is applied so the mode-btn highlights correctly)
+   ============================================================ */
+body.mode--windowed {
+  /* intentionally empty — this is the default state */
+}
+
+/* ============================================================
+   SAFETY CATCH — Command approval modal
+   ============================================================ */
+.approval-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+}
+.approval-modal.is-visible {
+  display: flex;
+}
+.approval-modal__box {
+  background: rgba(6, 14, 22, 0.97);
+  border: 1px solid #ff6b35;
+  border-radius: 4px;
+  padding: 28px 32px;
+  max-width: 560px;
+  width: 90%;
+  box-shadow: 0 0 40px rgba(255, 107, 53, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.approval-modal__title {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.9rem;
+  color: #ff6b35;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.approval-modal__meta {
+  font-size: 0.72rem;
+  color: #7aa2c0;
+  font-family: monospace;
+}
+.approval-modal__cmd {
+  font-family: 'Courier New', monospace;
+  font-size: 0.85rem;
+  color: #e0f0ff;
+  background: rgba(255, 107, 53, 0.08);
+  border: 1px solid rgba(255, 107, 53, 0.25);
+  border-radius: 2px;
+  padding: 10px 14px;
+  word-break: break-all;
+}
+.approval-modal__hint {
+  font-size: 0.72rem;
+  color: #5a7a9a;
+}
+.approval-modal__actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.approval-modal__btn--deny {
+  border-color: #ff2d55;
+  color: #ff2d55;
+}
+.approval-modal__btn--deny:hover {
+  background: rgba(255, 45, 85, 0.15);
+}
+.approval-modal__btn--approve {
+  border-color: #39ff14;
+  color: #39ff14;
+}
+.approval-modal__btn--approve:hover {
+  background: rgba(57, 255, 20, 0.12);
+}
+
+/* ============================================================
+   MOBILE TAB — pairing UI
+   ============================================================ */
+.mobile-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.mobile-status__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mobile-status__dot--on      { background: #39ff14; box-shadow: 0 0 6px #39ff14; }
+.mobile-status__dot--standby { background: #ff9500; box-shadow: 0 0 6px #ff9500; }
+.mobile-status__dot--off     { background: #3a4a5a; }
+.mobile-status__label {
+  font-size: 0.72rem;
+  font-family: 'Orbitron', monospace;
+  letter-spacing: 0.1em;
+  color: #7aa2c0;
+}
+.mobile-qr-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  background: rgba(0, 212, 255, 0.04);
+  border: 1px solid rgba(0, 212, 255, 0.15);
+  border-radius: 4px;
+}
+#mobileQrCanvas {
+  border-radius: 4px;
+}
+.mobile-qr-hint {
+  font-size: 0.68rem;
+  color: #5a7a9a;
+  text-align: center;
+  margin: 0;
+}
+.mobile-token-wrap {
+  margin: 12px 0;
+}
+.mobile-token-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.mobile-token-code {
+  font-family: 'Courier New', monospace;
+  font-size: 0.72rem;
+  color: #00d4ff;
+  background: rgba(0, 212, 255, 0.06);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 2px;
+  padding: 4px 8px;
+  flex: 1;
+  word-break: break-all;
+}
+.mobile-token-code--mono {
+  letter-spacing: 0.05em;
+}
+.mobile-copy-btn {
+  background: transparent;
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  color: #00d4ff;
+  border-radius: 2px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.mobile-copy-btn:hover { background: rgba(0, 212, 255, 0.1); }
+.mobile-actions {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 8px;
+}
+.mobile-btn--unpair {
+  border-color: #ff2d55;
+  color: #ff2d55;
+}
+.mobile-btn--unpair:hover { background: rgba(255, 45, 85, 0.12); }
+.mobile-hint {
+  font-size: 0.68rem;
+  color: #4a6a8a;
+  line-height: 1.5;
+  margin: 8px 0 0;
+}
+.mobile-hint strong { color: #7aa2c0; }

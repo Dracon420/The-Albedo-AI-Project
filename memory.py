@@ -182,11 +182,22 @@ def search_memory(query: str, n_results: int = 3) -> list[str]:
     Returns a list of the most relevant text chunks ordered by relevance.
     Returns an empty list on any error (missing index, embedding failure, etc.)
     so callers never have to handle exceptions.
+
+    Auto-indexes the vault on first call if the collection is empty, so RAG
+    works out of the box without requiring a manual REBUILD click.
     """
     try:
         collection = _get_collection()
         if collection.count() == 0:
-            return []
+            vault = _default_vault()
+            if vault:
+                print("[memory] Collection empty — auto-indexing vault on first search...")
+                result = index_obsidian_vault(vault)
+                print(f"[memory] {result}")
+                # Re-fetch collection after indexing
+                collection = _get_collection()
+            if collection.count() == 0:
+                return []
         results = collection.query(
             query_texts=[query],
             n_results=min(n_results, collection.count()),

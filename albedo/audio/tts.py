@@ -1,10 +1,36 @@
 """
-Text-to-speech with Edge-TTS (primary), Piper (offline fallback), and
-Kokoro (optional offline high-quality engine).
+Text-to-speech — tiered waterfall (highest quality → offline fallback).
+
+Engine waterfall (automatic, no config required beyond opt-in keys):
+
+  Tier 0  Azure Neural TTS (en-US-CortanaNeural / en-US-GuyNeural)
+          Requires: AZURE_SPEECH_KEY + AZURE_SPEECH_REGION in .env
+                    pip install azure-cognitiveservices-speech
+          Free tier: 500 000 chars/month (standard neural voices)
+          Quality: highest — the real Cortana voice.
+
+  Tier 1  XTTS-v2 local voice clone (Coqui TTS)
+          Requires: XTTS_VOICE_SAMPLE=<path/to/6s_ref.wav> in .env
+                    pip install TTS
+          Free: 100% local, no API, 1.8 GB one-time model download.
+          Quality: very high — matches the reference speaker.
+
+  Tier 2  Edge-TTS (Microsoft cloud, no key required)
+          Requires: internet connection
+          Free: unlimited, no key.
+          Quality: high.
+
+  Tier 3  Kokoro ONNX (optional local)
+          Enabled when AUDIO_TTS=kokoro and model files present.
+          Quality: high, fully offline.
+
+  Tier 4  Piper (offline subprocess fallback, always available)
+          Zero VRAM, CPU-only.
+          Quality: lower, always works.
 
 Engine selection (AUDIO_TTS env var):
-  - "piper"  (default, v2.x compatibility) — Edge-TTS primary,
-                                              Piper subprocess fallback.
+  - "piper"  (default, v2.x compatibility) — full waterfall above,
+                                              Piper as final fallback.
   - "kokoro" — Kokoro ONNX local engine for synthesize_to_bytes(),
                with Piper as the failure fallback. Streaming speak()
                paths still use Edge+Piper (sentence-level pipelining
@@ -60,6 +86,13 @@ import sounddevice as sd
 import soundfile as sf
 
 from albedo.config import PIPER_BINARY, PIPER_VOICE_MODEL, AUDIO_SAMPLE_RATE
+
+# ---------------------------------------------------------------------------
+# Persona hint resolver — maps active voice model path → "cortana"|"jarvis"
+# ---------------------------------------------------------------------------
+def _persona_from_model(model: str) -> str:
+    stem = Path(model).stem.lower()
+    return "jarvis" if "ryan" in stem or "jarvis" in stem else "cortana"
 
 # ---------------------------------------------------------------------------
 # Markdown + symbol sanitiser
@@ -358,14 +391,36 @@ def _synthesize_sentence(
     edge_voice: str,
 ) -> tuple[np.ndarray, int] | None:
     """
-    Try Edge-TTS first; fall back to Piper if edge-tts fails.
-    Returns (float32 audio, sample_rate) or None if both fail.
+    Full TTS waterfall: Azure Neural → XTTS-v2 → Edge-TTS → Piper.
+    Returns (float32 audio, sample_rate) or None if all tiers fail.
     """
+    # ── Tier 0: Azure Neural TTS ────────────────────────────────────────────
+    try:
+        from albedo.audio.azure_speech import is_available as _az_ok, synthesize_to_numpy as _az_synth
+        if _az_ok():
+            persona = _persona_from_model(piper_model)
+            result  = _az_synth(text, persona=persona)
+            if result is not None:
+                return result
+    except Exception as _exc:
+        print(f"[tts] Azure tier skipped: {_exc}")
+
+    # ── Tier 1: XTTS-v2 local voice clone ───────────────────────────────────
+    try:
+        from albedo.audio.xtts_engine import is_available as _xtts_ok, synthesize_to_numpy as _xtts_synth
+        if _xtts_ok():
+            result = _xtts_synth(text)
+            if result is not None:
+                return result
+    except Exception as _exc:
+        print(f"[tts] XTTS tier skipped: {_exc}")
+
+    # ── Tier 2: Edge-TTS (cloud, no key) ────────────────────────────────────
     result = _edge_synthesize(text, edge_voice)
     if result is not None:
         return result
 
-    # Piper fallback
+    # ── Tier 3/4: Piper (offline) ───────────────────────────────────────────
     if _check_piper_binary() and os.path.isfile(piper_model):
         return _synthesize(text, piper_model)
 
@@ -515,6 +570,30 @@ def synthesize_to_bytes(text: str,
     if not text:
         return None
 
+    voice_model_r = _resolve_voice(voice_model)
+
+    # ── Tier 0: Azure Neural TTS ─────────────────────────────────────────────
+    try:
+        from albedo.audio.azure_speech import is_available as _az_ok, synthesize_to_bytes as _az_bytes
+        if _az_ok():
+            persona = _persona_from_model(voice_model_r)
+            wav = _az_bytes(text, persona=persona)
+            if wav is not None:
+                return wav
+    except Exception as _exc:
+        print(f"[tts] Azure bytes tier skipped: {_exc}")
+
+    # ── Tier 1: XTTS-v2 local voice clone ────────────────────────────────────
+    try:
+        from albedo.audio.xtts_engine import is_available as _xtts_ok, synthesize_to_bytes as _xtts_bytes
+        if _xtts_ok():
+            wav = _xtts_bytes(text)
+            if wav is not None:
+                return wav
+    except Exception as _exc:
+        print(f"[tts] XTTS bytes tier skipped: {_exc}")
+
+    # ── Tier 2/3: Kokoro / Piper (existing logic) ─────────────────────────────
     engine = _active_tts_engine()
     if engine == "kokoro":
         try:

@@ -163,6 +163,11 @@ def load_swarm_keys() -> None:
     groq_key     = os.getenv("GROQ_API_KEY",     "").strip()
     together_key = os.getenv("TOGETHER_API_KEY", "").strip()
 
+    # Azure OpenAI is initialised lazily inside azure_openai_client — just log.
+    az_key = os.getenv("AZURE_OPENAI_KEY", "").strip()
+    if az_key:
+        print("[swarm] Azure OpenAI key detected — will initialise on first call.")
+
     if gemini_key:
         try:
             from google import genai
@@ -398,9 +403,14 @@ def direct_gemini_search(prompt: str) -> str:
 def swarm_chat(message: str, system_prompt: str | None = None,
                history: list[dict] | None = None) -> str | None:
     """
-    Generate a response using cloud LLMs (Gemini → Groq fallback).
+    Generate a response using cloud LLMs.
 
-    This is the primary brain path for all general queries.
+    Provider chain: Azure OpenAI → Gemini → Groq → None (→ Ollama fallback)
+
+    Azure OpenAI is tried first when AZURE_OPENAI_KEY + AZURE_OPENAI_ENDPOINT
+    are set — gives users control of their own Azure credits without depending
+    on shared quotas.  If not configured, falls through to Gemini as before.
+
     Returns None only if offline or every cloud provider fails, so the
     caller can fall back to local Ollama.
 
@@ -411,6 +421,25 @@ def swarm_chat(message: str, system_prompt: str | None = None,
         return None
 
     sys = system_prompt or _DIRECT_ANSWER_INSTRUCTION
+
+    # Azure OpenAI — optional Tier 0 (user's own key/credits)
+    try:
+        from albedo.web.azure_openai_client import is_available as _az_ok, query as _az_query
+        if _az_ok():
+            # Build conversation context
+            full_prompt = message
+            if history:
+                ctx = "\n".join(
+                    f"{'User' if h.get('role')=='user' else 'Assistant'}: {h['content']}"
+                    for h in history[-6:]
+                )
+                full_prompt = f"{ctx}\nUser: {message}"
+            result = _az_query(full_prompt, system_prompt=sys)
+            if result:
+                print("[swarm] Azure OpenAI answered.")
+                return result
+    except Exception as _exc:
+        print(f"[swarm] Azure OpenAI tier skipped: {_exc}")
 
     # Gemini first — best quality, 1500 req/day free
     if _gemini_client is not None:

@@ -607,6 +607,142 @@ def trigger_scan_capture() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Mobile relay — pairing + status endpoints exposed to JS
+# ---------------------------------------------------------------------------
+
+@_expose
+def mobile_pair(relay_host: str = "albedo-relay.fly.dev") -> dict:
+    """
+    Register with the relay server and save the token.
+    Called from the MOBILE tab when the user clicks 'Generate Pairing Code'.
+    Returns {ok, token, relay_url, qr_data} where qr_data is the string
+    the phone app needs (relay_url + "|" + token).
+    """
+    try:
+        from albedo import mobile_relay as _mr
+        result = _mr.pair(relay_host)
+        if not result.get("ok"):
+            return result
+        token     = result["token"]
+        relay_url = result["relay_url"]
+        qr_data   = f"{relay_url}|{token}"
+        # Start relay now that we have a token
+        _mr.start()
+        return {"ok": True, "token": token, "relay_url": relay_url, "qr_data": qr_data}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@_expose
+def mobile_status() -> dict:
+    """Return current relay connection status and pairing info."""
+    try:
+        from albedo import mobile_relay as _mr
+        token     = _mr.get_token()
+        relay_url = _mr.get_relay_url()
+        qr_data   = f"{relay_url}|{token}" if token else ""
+        return {
+            "ok":        True,
+            "connected": _mr.is_connected(),
+            "token":     token,
+            "relay_url": relay_url,
+            "qr_data":   qr_data,
+            "paired":    bool(token),
+        }
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@_expose
+def mobile_unpair() -> dict:
+    """Clear the pairing token and disconnect the relay."""
+    try:
+        from albedo import mobile_relay as _mr
+        import json
+        from pathlib import Path
+        settings_path = Path(__file__).resolve().parent.parent.parent / "settings.json"
+        try:
+            data = json.loads(settings_path.read_text(encoding="utf-8"))
+        except Exception:
+            data = {}
+        data.pop("mobile_token", None)
+        data.pop("relay_host",   None)
+        settings_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        _mr.stop()
+        return {"ok": True}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+# ---------------------------------------------------------------------------
+# Safety catch — Eel approval handler
+#
+# When the LLM swarm wants to run a subprocess command, safety_catch.py
+# calls the registered approval handler (us). We push the request to the
+# JS layer via _albedo_approval_request(), then block on a threading.Event
+# until the user clicks Approve or Deny in the UI modal.
+#
+# The JS side calls eel.approve_command(true/false) which sets the event
+# and stores the result. We return the result to safety_catch.safe_run().
+#
+# Thread-safety: only one approval can be in-flight at a time (the LLM
+# pipeline is single-threaded per query). The lock + event pair ensures
+# no race between handler and approve_command.
+# ---------------------------------------------------------------------------
+
+_approval_lock   = threading.Lock()
+_approval_event: "threading.Event | None"  = None
+_approval_result: bool = False
+
+
+def _eel_approval_handler(req: "Any") -> bool:
+    """
+    Eel-backed approval handler for safety_catch.
+
+    Sends the pending command to the JS modal and blocks until the user
+    responds (or 60 s elapses, defaulting to deny).
+    """
+    global _approval_event, _approval_result
+    evt = threading.Event()
+    with _approval_lock:
+        _approval_event  = evt
+        _approval_result = False   # default: deny on timeout
+
+    # Push to JS — _albedo_approval_request is registered in chat.js
+    try:
+        import eel as _eel
+        _eel._albedo_approval_request(req.as_dict())()
+    except Exception as exc:
+        print(f"[bridge] approval push failed: {exc}")
+        with _approval_lock:
+            _approval_event = None
+        return False
+
+    # Block until JS responds or 60 s timeout
+    evt.wait(timeout=60.0)
+
+    with _approval_lock:
+        result           = _approval_result
+        _approval_event  = None
+    return result
+
+
+@_expose
+def approve_command(approved: bool) -> dict:
+    """
+    Called from JS when the user clicks Approve or Deny on the safety modal.
+    Unblocks the approval handler thread with the user's decision.
+    """
+    global _approval_result, _approval_event
+    with _approval_lock:
+        _approval_result = bool(approved)
+        evt = _approval_event
+    if evt is not None:
+        evt.set()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # Webhook bridge — drained by the JS poller
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,47 @@
+name: albedo_mobile
+description: Albedo AI — Mobile companion app for the Albedo AI assistant.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.3.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # WebSocket relay communication
+  web_socket_channel: ^3.0.3
+
+  # QR code scanning (setup screen)
+  mobile_scanner: ^5.1.0
+
+  # QR code generation (optional — display token as QR in app)
+  qr_flutter: ^4.1.0
+
+  # Persistent storage (relay URL + token)
+  shared_preferences: ^2.3.2
+
+  # Speech-to-text (mic button)
+  speech_to_text: ^7.0.0
+
+  # Local notifications (push alerts from Albedo)
+  flutter_local_notifications: ^17.2.2
+
+  # UUID generation for message IDs
+  uuid: ^4.4.2
+
+  # HTTP (for health checks)
+  http: ^1.2.2
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/

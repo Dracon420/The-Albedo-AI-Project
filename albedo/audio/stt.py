@@ -1,15 +1,26 @@
 """
-Speech-to-text via Vosk (offline, CPU, zero VRAM).
+Speech-to-text — tiered waterfall (highest accuracy → offline fallback).
 
-Default model: vosk-model-small-en-us-0.15 (~40 MB)
+Engine waterfall (controlled by AUDIO_STT in .env):
 
-Auto-acquired: if the model folder is absent, stt.py downloads and
-extracts it automatically from alphacephei.com before initialising.
-Override the install path with VOSK_MODEL_PATH in .env.
+  "azure"    Tier 0 — Azure Speech STT (cloud, 5 h/month free)
+             Requires: AZURE_SPEECH_KEY + AZURE_SPEECH_REGION
+             Falls through to Groq Whisper → Vosk on failure.
 
-The model is loaded once at first call and kept resident, so first MIC
-press has the load latency (~1 s) and every subsequent transcription
-is instant.
+  "groq"     Tier 1 — Groq Whisper API (cloud, free tier generous)
+             Requires: GROQ_API_KEY
+             Falls through to Vosk on failure.
+
+  "deepgram" Tier 2 — Deepgram cloud STT (existing engine)
+             Requires: DEEPGRAM_API_KEY
+
+  "whisper"  Tier 3 — distil-whisper offline (existing engine)
+
+  "vosk"     Tier 4 — Vosk offline Kaldi (default, always works)
+             No key, no internet, ~40 MB model auto-downloaded.
+
+The default is "vosk" for zero-dependency offline operation.
+Set AUDIO_STT=azure or AUDIO_STT=groq to enable cloud tiers.
 """
 from __future__ import annotations
 
@@ -179,6 +190,69 @@ def _active_stt_engine() -> str:
     return (os.environ.get("AUDIO_STT", "vosk") or "vosk").strip().lower()
 
 
+# ---------------------------------------------------------------------------
+# Tier 0: Azure Speech STT
+# ---------------------------------------------------------------------------
+
+def _transcribe_azure(audio: np.ndarray) -> str:
+    """
+    Transcribe via Azure Speech STT.
+    Returns the transcript or "" — never raises.
+    Falls back silently if SDK/key not available.
+    """
+    try:
+        from albedo.audio.azure_speech import is_available as _az_ok, transcribe as _az_tr
+        if not _az_ok():
+            return ""
+        return _az_tr(audio, sample_rate=AUDIO_SAMPLE_RATE)
+    except Exception as exc:
+        print(f"[stt] Azure STT error: {exc}")
+        return ""
+
+
+# ---------------------------------------------------------------------------
+# Tier 1: Groq Whisper STT
+# ---------------------------------------------------------------------------
+
+def _transcribe_groq_whisper(audio: np.ndarray) -> str:
+    """
+    Transcribe via Groq Whisper API (whisper-large-v3-turbo).
+    Returns the transcript or "" — never raises.
+    Requires GROQ_API_KEY in .env.
+    """
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    if not groq_key:
+        return ""
+    if audio is None or len(audio) == 0:
+        return ""
+    try:
+        import io as _io
+        import wave as _wave
+        import numpy as _np
+        from groq import Groq as _Groq
+
+        # Float32 → int16 WAV in memory
+        pcm = (_np.clip(audio, -1.0, 1.0) * 32767).astype(_np.int16)
+        buf = _io.BytesIO()
+        with _wave.open(buf, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(AUDIO_SAMPLE_RATE)
+            wf.writeframes(pcm.tobytes())
+        buf.seek(0)
+
+        client = _Groq(api_key=groq_key)
+        result = client.audio.transcriptions.create(
+            model="whisper-large-v3-turbo",
+            file=("audio.wav", buf, "audio/wav"),
+            language="en",
+        )
+        return (result.text or "").strip()
+    except Exception as exc:
+        print(f"[stt] Groq Whisper error: {exc}")
+        return ""
+
+
 def _transcribe_vosk(audio: np.ndarray) -> str:
     """The original Vosk-based transcribe(). Preserved verbatim under the dispatcher."""
     if not _VOSK_AVAILABLE:
@@ -209,14 +283,38 @@ def transcribe(audio: np.ndarray) -> str:
     Engine selection follows AUDIO_STT (read at every call so .env edits
     apply on the next request without a restart):
 
-      vosk     -> _transcribe_vosk() (the original v2.x path)
+      azure    -> Azure Speech STT → Groq Whisper fallback → Vosk fallback
+      groq     -> Groq Whisper API → Vosk fallback
       deepgram -> stt_router.transcribe() (Deepgram -> whisper failover)
       whisper  -> stt_whisper.transcribe() (offline-only)
+      vosk     -> _transcribe_vosk() (the original v2.x path, default)
 
     Returns the transcript or an empty string. Never raises.
     """
     engine = _active_stt_engine()
 
+    # ── Tier 0: Azure Speech STT ─────────────────────────────────────────────
+    if engine == "azure":
+        result = _transcribe_azure(audio)
+        if result:
+            return result
+        # Cascade: try Groq Whisper then Vosk
+        print("[stt] Azure STT returned empty — cascading to Groq Whisper")
+        result = _transcribe_groq_whisper(audio)
+        if result:
+            return result
+        print("[stt] Groq Whisper returned empty — cascading to Vosk")
+        return _transcribe_vosk(audio)
+
+    # ── Tier 1: Groq Whisper ─────────────────────────────────────────────────
+    if engine == "groq":
+        result = _transcribe_groq_whisper(audio)
+        if result:
+            return result
+        print("[stt] Groq Whisper returned empty — cascading to Vosk")
+        return _transcribe_vosk(audio)
+
+    # ── Existing cloud engines ───────────────────────────────────────────────
     if engine == "deepgram":
         from albedo.audio import stt_router
         return stt_router.transcribe(audio, sample_rate=AUDIO_SAMPLE_RATE)
@@ -225,5 +323,5 @@ def transcribe(audio: np.ndarray) -> str:
         from albedo.audio import stt_whisper
         return stt_whisper.transcribe(audio, sample_rate=AUDIO_SAMPLE_RATE)
 
-    # Default — and explicit "vosk" — uses the original code path
+    # ── Default / Tier 4: Vosk ───────────────────────────────────────────────
     return _transcribe_vosk(audio)

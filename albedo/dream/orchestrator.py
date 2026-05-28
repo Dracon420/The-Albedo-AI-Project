@@ -29,6 +29,7 @@ from __future__ import annotations
 import threading
 import time
 from datetime import datetime
+from pathlib import Path
 from typing import Callable, Optional
 
 # ---------------------------------------------------------------------------
@@ -134,6 +135,49 @@ def _run_phase2(report: dict, forced: bool = False) -> None:
             _status_cb(_STATE_DREAMING, f"[2/3] Error: {exc}")
 
 
+def _run_phase4_brain(report: dict, forced: bool = False) -> None:
+    """Brain growth — Smart Brain auto-linking, mining, synthesis."""
+    if not forced and _is_interrupted():
+        print("[dream] Phase 4 skipped — interrupted.")
+        return
+    _set_state(_STATE_DREAMING, "Phase 4 — Brain Growth")
+    try:
+        from albedo.dream.brain_growth import run_growth_cycle
+
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, "[4/4] Brain growth — reindexing vault…")
+
+        # Alternate depth: every 4th dream is a deep cycle (synthesis + MOC)
+        import time as _t
+        deep_marker = Path(__file__).parent / ".deep_cycle_counter"
+        count = 0
+        if deep_marker.exists():
+            try:
+                count = int(deep_marker.read_text()) + 1
+            except Exception:
+                count = 0
+        deep_marker.write_text(str(count))
+
+        depth = "deep" if count % 4 == 0 else "medium"
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, f"[4/4] Brain growth ({depth} cycle)…")
+
+        result = run_growth_cycle(depth=depth)
+        report["phase4_brain"] = result
+        print(f"[dream] Phase 4 complete — {result}")
+        if _status_cb:
+            mined = result.get("mined_notes", 0)
+            linked = result.get("autolinked", 0)
+            synth  = result.get("synthesised", 0)
+            _status_cb(_STATE_DREAMING,
+                       f"[4/4] Brain: {mined} mined, {linked} linked, {synth} synthesised")
+    except Exception as exc:
+        print(f"[dream] Phase 4 error: {exc}")
+        report["phase4_error"] = str(exc)
+        if _status_cb:
+            _status_cb(_STATE_DREAMING, f"[4/4] Error: {exc}")
+
+
 def _run_phase3(report: dict, forced: bool = False) -> None:
     """Memory consolidation (REM cycle)."""
     if not forced and _is_interrupted():
@@ -206,6 +250,7 @@ def start_dream(status_cb: Optional[Callable[[str, str], None]] = None,
         _run_phase1(report)
         _run_phase2(report, forced=forced)
         _run_phase3(report, forced=forced)
+        _run_phase4_brain(report, forced=forced)
     except Exception as exc:
         print(f"[dream] Unhandled error in dream cycle: {exc}")
         report["fatal_error"] = str(exc)

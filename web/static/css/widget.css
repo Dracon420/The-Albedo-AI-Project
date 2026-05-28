@@ -1,0 +1,259 @@
+/* ============================================================
+   widget.css — Compact floating widget overlay for Albedo.
+   Loaded only by widget.html. Dark, glassmorphic, minimal.
+   ============================================================ */
+
+:root {
+  --c-bg:           #050a0e;
+  --c-bg-panel:     rgba(6, 14, 22, 0.75);
+  --c-bg-panel-2:   rgba(8, 18, 28, 0.88);
+  --c-border:       rgba(208, 0, 255, 0.50);
+  --c-border-bright:rgba(208, 0, 255, 0.85);
+  --c-text:         #f8e8ff;
+  --c-text-dim:     #d68bff;
+  --c-cyan:         #d000ff;
+  --c-cyan-dim:     #b800f0;
+  --c-green:        #39ff14;
+  --c-orange:       #ffae00;
+  --c-red:          #ff2a6d;
+  --glow-cyan:      0 0 6px var(--c-cyan), 0 0 14px rgba(208, 0, 255, 0.55);
+  --glow-green:     0 0 6px var(--c-green), 0 0 14px rgba(57, 255, 20, 0.45);
+  --glass-blur:     20px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 380px;
+  height: 560px;
+  overflow: hidden;
+  background: transparent;
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  color: var(--c-text);
+}
+
+/* Root widget shell */
+.widget {
+  width: 380px;
+  height: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  background: var(--c-bg-panel-2);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--c-border-bright);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow:
+    0 0 30px rgba(208, 0, 255, 0.25),
+    0 8px 32px rgba(0, 0, 0, 0.65);
+}
+
+/* ── Widget header: logo + state ─────────────────────────── */
+.w-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 10px;
+  background: rgba(6, 14, 22, 0.60);
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+
+.w-orb {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.w-logo {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  object-fit: cover;
+  filter:
+    drop-shadow(0 0 12px rgba(208, 0, 255, 0.65))
+    drop-shadow(0 0 28px rgba(208, 0, 255, 0.30));
+  z-index: 2;
+  position: relative;
+}
+
+/* CSS ring for widget orb */
+.w-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--c-cyan);
+  opacity: 0.55;
+  animation: wOrbSpin 18s linear infinite;
+}
+.w-ring--inner {
+  inset: 8px;
+  border-style: dashed;
+  border-color: rgba(208, 0, 255, 0.38);
+  animation: wOrbSpin 11s linear infinite reverse;
+}
+@keyframes wOrbSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.w-identity {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.w-brand {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--c-cyan);
+  text-shadow: var(--glow-cyan);
+}
+.w-state {
+  display: inline-block;
+  padding: 3px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  border: 1px solid var(--c-orange);
+  border-radius: 10px;
+  color: var(--c-orange);
+  background: rgba(255, 174, 0, 0.06);
+  width: fit-content;
+  text-shadow: 0 0 6px var(--c-orange);
+  transition: color 0.2s, border-color 0.2s;
+}
+.w-state[data-state="ACTIVE"]    { color: var(--c-cyan);  border-color: var(--c-cyan);  background: rgba(208, 0, 255, 0.08); animation: wStatePulse 1.4s ease-in-out infinite; }
+.w-state[data-state="LISTENING"] { color: var(--c-green); border-color: var(--c-green); background: rgba(57, 255, 20, 0.08); animation: wStatePulse 1.0s ease-in-out infinite; }
+.w-state[data-state="ERROR"]     { color: var(--c-red);   border-color: var(--c-red);   background: rgba(255, 42, 109, 0.08); animation: wStatePulse 0.7s ease-in-out infinite; }
+@keyframes wStatePulse {
+  0%,100% { box-shadow: none; }
+  50%     { box-shadow: 0 0 10px currentColor; }
+}
+
+/* ── Mini HUD gauges row ──────────────────────────────────── */
+.w-gauges {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  background: rgba(6, 14, 22, 0.55);
+  border-bottom: 1px solid var(--c-border);
+  flex-shrink: 0;
+}
+.w-gauge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 4px;
+  border-right: 1px solid rgba(208, 0, 255, 0.15);
+}
+.w-gauge:last-child { border-right: none; }
+.w-gauge__label {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--c-text-dim);
+  margin-bottom: 3px;
+  font-weight: 700;
+}
+.w-gauge__bar {
+  width: 100%;
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 3px;
+}
+.w-gauge__fill {
+  height: 100%;
+  width: 0%;
+  background: var(--c-cyan);
+  border-radius: 3px;
+  transition: width 0.4s ease, background 0.3s;
+  box-shadow: 0 0 6px var(--c-cyan);
+}
+.w-gauge__val {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--c-cyan);
+  text-shadow: 0 0 6px rgba(208, 0, 255, 0.5);
+}
+
+/* ── Chat feed ────────────────────────────────────────────── */
+.w-chat {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  min-height: 0;
+}
+.w-chat::-webkit-scrollbar { width: 4px; }
+.w-chat::-webkit-scrollbar-track { background: transparent; }
+.w-chat::-webkit-scrollbar-thumb { background: var(--c-cyan-dim); border-radius: 2px; }
+
+.w-line { margin-bottom: 7px; word-break: break-word; }
+.w-line--user   { color: var(--c-green); text-shadow: 0 0 5px rgba(57, 255, 20, 0.4); }
+.w-line--albedo { color: var(--c-cyan);  text-shadow: 0 0 5px rgba(208, 0, 255, 0.4); }
+.w-line--system { color: var(--c-orange); text-shadow: 0 0 4px rgba(255, 174, 0, 0.4); }
+.w-line--error  { color: var(--c-red); }
+
+/* ── Input row ────────────────────────────────────────────── */
+.w-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(6, 14, 22, 0.65);
+  border-top: 1px solid var(--c-border);
+  flex-shrink: 0;
+  align-items: center;
+}
+.w-input {
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  font-family: inherit;
+  font-size: 13px;
+  color: var(--c-cyan);
+  background: rgba(0, 0, 0, 0.50);
+  border: 1px solid var(--c-cyan-dim);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s;
+  text-shadow: 0 0 5px rgba(208, 0, 255, 0.4);
+}
+.w-input:focus { border-color: var(--c-cyan); box-shadow: 0 0 8px rgba(208, 0, 255, 0.25); }
+.w-input::placeholder { color: var(--c-cyan-dim); }
+
+.w-btn {
+  background: var(--c-cyan-dim);
+  color: #000;
+  border: none;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.w-btn:hover { background: var(--c-cyan); }
+.w-btn--mic {
+  background: rgba(208, 0, 255, 0.20);
+  color: var(--c-cyan);
+  border: 1px solid var(--c-cyan-dim);
+}
+.w-btn--mic:hover { background: var(--c-cyan); color: #000; }
+.w-btn--mic.is-recording { background: var(--c-red); color: #fff; box-shadow: 0 0 10px var(--c-red); border-color: var(--c-red); }
