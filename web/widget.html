@@ -211,13 +211,14 @@ eel.expose(function _w_telemetry(data) {
       _w_telemetry(data);
     } catch (_) {}
   }
-  // Wait for eel to be ready
+  // Wait for eel to be ready — Eel proxy objects report as "object" not
+  // "function", so use a truthy check rather than typeof === "function".
   function waitEel() {
-    if (typeof eel !== "undefined" && typeof eel.get_telemetry === "function") {
+    if (window.eel && eel.get_telemetry) {
       poll();
       setInterval(poll, 1000);
     } else {
-      setTimeout(waitEel, 100);
+      setTimeout(waitEel, 200);
     }
   }
   waitEel();

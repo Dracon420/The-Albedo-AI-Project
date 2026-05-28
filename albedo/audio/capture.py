@@ -289,9 +289,18 @@ def record_utterance(stream: AudioStream) -> np.ndarray:
     """
     Collect audio from stream until VAD_SILENCE_DURATION of quiet or
     VAD_MAX_RECORD_SECONDS elapsed. Returns a float32 array at AUDIO_SAMPLE_RATE.
+
+    Pre-roll: we keep the last 3 chunks already buffered (~240 ms) so that any
+    speech the user began immediately after the wake word is NOT discarded.
+    Previously, drain() threw away everything — including the first syllable.
     """
-    stream.drain()
-    frames: list[np.ndarray] = []
+    # Keep the last 3 buffered chunks (~240 ms pre-roll) so we don't lose the
+    # start of speech, then discard anything older (stale audio from wakeword).
+    with stream._lock:
+        q = stream._queue
+        pre_roll = [q[i] for i in range(max(0, len(q) - 3), len(q))]
+        stream._queue.clear()
+    frames: list[np.ndarray] = list(pre_roll)
     silence_samples = 0
     silence_gate = int(VAD_SILENCE_DURATION * AUDIO_SAMPLE_RATE / _CHUNK_SAMPLES)
     max_chunks   = int(VAD_MAX_RECORD_SECONDS * AUDIO_SAMPLE_RATE / _CHUNK_SAMPLES)

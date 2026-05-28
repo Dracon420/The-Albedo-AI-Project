@@ -32,6 +32,16 @@
 
     localStorage.setItem(PREF_KEY, mode);
 
+    // Toggle OS-level fullscreen when entering/leaving FULL mode.
+    if (mode === MODE_FULL) {
+      const el = document.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+      if (req) req.call(el).catch(() => {});
+    } else if (document.fullscreenElement || document.webkitFullscreenElement) {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen;
+      if (exit) exit.call(document).catch(() => {});
+    }
+
     // Notify Eel backend (non-blocking, ignore errors when eel not ready)
     if (window.eel) {
       try { eel.set_window_mode(mode)(); } catch (_) {}
@@ -76,6 +86,14 @@
   } else {
     init();
   }
+
+  // If the user presses Escape to leave OS fullscreen, sync the UI back to WIN
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+      const current = localStorage.getItem(PREF_KEY);
+      if (current === MODE_FULL) applyMode(MODE_WIN);
+    }
+  });
 
   // Public
   window._modes = { applyMode, openWidget };

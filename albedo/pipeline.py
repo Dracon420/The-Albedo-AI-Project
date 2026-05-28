@@ -231,6 +231,10 @@ def _is_audit_query(query: str) -> bool:
     questions like 'how does my RTX handle VRAM under load' don't trigger a
     full live audit dump.
     """
+    # Don't intercept launch commands — "open the Claude app on my computer"
+    # contains "my computer" which is in _AUDIT_EXACT, but it's a launch request.
+    if _LAUNCH_RE.match(query.strip()):
+        return False
     q = query.lower()
     if any(s in q for s in _AUDIT_EXACT):
         return True
@@ -392,15 +396,22 @@ def _handle_launch(query: str) -> str | None:
     first_word = target.split()[0].lower() if target else ""
     if first_word in _LAUNCH_NOT_APP_STARTS:
         return None
-    exe    = _APP_MAP.get(target.lower(), target)
+    exe = _APP_MAP.get(target.lower(), target)
+
+    # Suppress the transient CMD window that otherwise flashes on screen.
+    _si = subprocess.STARTUPINFO()
+    _si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    _si.wShowWindow = 0   # SW_HIDE
+
     try:
         if exe.endswith(".msc"):
-            subprocess.Popen(["mmc", exe], shell=False)
+            subprocess.Popen(["mmc", exe], shell=False,
+                             startupinfo=_si,
+                             creationflags=subprocess.CREATE_NO_WINDOW)
         else:
-            # Use the Windows shell only to resolve bare app names (e.g. "notepad").
-            # Pass as a list where possible to avoid injection; shell=True is
-            # required here only because exe may be a display name with no path.
-            subprocess.Popen(["cmd", "/c", "start", "", exe], shell=False)
+            subprocess.Popen(["cmd", "/c", "start", "", exe], shell=False,
+                             startupinfo=_si,
+                             creationflags=subprocess.CREATE_NO_WINDOW)
         return f"Launching {target}, Chief."
     except Exception as exc:
         return f"Could not launch {target}: {exc}"
@@ -621,9 +632,13 @@ def _handle_optimize(query: str) -> str | None:
 
     # Step 2: Windows built-in Disk Cleanup (silent, system drive)
     try:
+        _si2 = subprocess.STARTUPINFO()
+        _si2.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        _si2.wShowWindow = 0
         subprocess.run(
             ["cleanmgr.exe", "/sagerun:1"],
             timeout=120, capture_output=True,
+            startupinfo=_si2, creationflags=subprocess.CREATE_NO_WINDOW,
         )
         results.append("Disk Cleanup: complete")
     except Exception as exc:
@@ -739,7 +754,13 @@ def run(query: str, use_web: bool = False,
     if _opt_result is not None:
         return _opt_result
 
-    # ── 0d. Tactical Hardware Audit — live sensor data SitRep ───────────────
+    # ── 0d. Launch / open a program (BEFORE audit — "open X on my computer"
+    #        contains "my computer" which would otherwise trigger the audit) ──
+    _launch_result = _handle_launch(query)
+    if _launch_result is not None:
+        return _launch_result
+
+    # ── 0e. Tactical Hardware Audit — live sensor data SitRep ───────────────
     if _is_audit_query(query):
         try:
             import sys as _sys
@@ -755,17 +776,12 @@ def run(query: str, use_web: bool = False,
         except Exception as _exc:
             return f"Audit error: {_exc}"
 
-    # ── 0e. File count — resolve via pathlib, never via LLM ─────────────────
+    # ── 0f. File count — resolve via pathlib, never via LLM ─────────────────
     _ext = _extract_file_ext(query)
     if _ext:
         return _count_files_by_ext(_ext)
 
-    # ── 0f. Launch / open a program ──────────────────────────────────────────
-    _launch_result = _handle_launch(query)
-    if _launch_result is not None:
-        return _launch_result
-
-    # ── 0g. Kill a process ───────────────────────────────────────────────────
+    # ── 0g. Kill a process ─────────────────────────────────────────────────
     _kill_result = _handle_kill_process(query)
     if _kill_result is not None:
         return _kill_result
