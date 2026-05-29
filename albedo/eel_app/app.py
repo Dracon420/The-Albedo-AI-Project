@@ -67,6 +67,8 @@ def _expose_widget_fns() -> None:
                         "--disable-extensions",
                         "--no-first-run",
                         "--no-default-browser-check",
+                        "--disk-cache-size=1",
+                        "--media-cache-size=1",
                     ])
                     print(f"[eel_app] Widget window opened → {url}")
                 except Exception as exc:
@@ -470,7 +472,11 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
             mode=(mode if mode is not None else "chrome"),
             block=True,
             shutdown_delay=0.5,
-            cmdline_args=["--start-maximized"],
+            cmdline_args=[
+                "--start-maximized",
+                "--disk-cache-size=1",      # disable persistent cache so updated
+                "--media-cache-size=1",     # HTML/JS/CSS is always fetched fresh
+            ],
         )
     except (SystemExit, KeyboardInterrupt):
         # eel raises SystemExit when the window closes — treat as clean exit.
