@@ -8,7 +8,7 @@
   <!-- Eel JS bridge (same Eel server serves this page) -->
   <script type="text/javascript" src="/eel.js"></script>
 
-  <link rel="stylesheet" href="static/css/widget.css" />
+  <link rel="stylesheet" href="static/css/widget.css?v=312" />
 </head>
 <body>
 <div class="widget">
@@ -200,18 +200,21 @@ eel.expose(function _w_telemetry(data) {
 (function startTelemetry() {
   async function poll() {
     try {
-      const t = await eel.get_telemetry()();
-      if (!t) return;
+      const r = await eel.get_telemetry()();
+      // get_telemetry() returns {"ok": true, "data": {...}} — same shape
+      // as the main telemetry.js which correctly uses r.data, not r directly.
+      if (!r || !r.ok || !r.data) return;
+      const d = r.data;
       const data = {
-        cpu:  t.cpu  ? t.cpu.percent : null,
-        gpu:  t.gpu  ? t.gpu.load_percent : null,
-        ram:  t.ram  ? t.ram.percent : null,
-        temp: t.gpu  ? t.gpu.temp_c : (t.cpu && t.cpu.temp_c ? t.cpu.temp_c : null),
+        cpu:  d.cpu  ? d.cpu.percent       : null,
+        gpu:  d.gpu  ? d.gpu.load_percent  : null,
+        ram:  d.ram  ? d.ram.percent       : null,
+        temp: d.gpu  ? d.gpu.temp_c        : (d.cpu && d.cpu.temp_c ? d.cpu.temp_c : null),
       };
       _w_telemetry(data);
     } catch (_) {}
   }
-  // Wait for eel to be ready — Eel proxy objects report as "object" not
+  // Wait for eel to be ready — Eel proxy objects are "object" type not
   // "function", so use a truthy check rather than typeof === "function".
   function waitEel() {
     if (window.eel && eel.get_telemetry) {
