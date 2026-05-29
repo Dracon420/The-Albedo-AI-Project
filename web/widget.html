@@ -175,7 +175,9 @@ eel.expose(function _w_set_persona(name) {
 });
 
 /** Python calls this with telemetry { cpu, gpu, ram, temp } (all 0–100). */
-eel.expose(function _w_telemetry(data) {
+// Defined as a declaration so JS polling code can call it directly by name.
+// eel.expose() only stores it in eel._exposed_functions — NOT in global scope.
+function _w_telemetry(data) {
   function set(barId, valId, pct, fmt) {
     const bar = document.getElementById(barId);
     const val = document.getElementById(valId);
@@ -195,7 +197,8 @@ eel.expose(function _w_telemetry(data) {
   if (data.gpu  != null) set("wGpuBar",  "wGpuVal",  data.gpu,  data.gpu.toFixed(0) + "%");
   if (data.ram  != null) set("wRamBar",  "wRamVal",  data.ram,  data.ram.toFixed(0) + "%");
   if (data.temp != null) set("wTempBar", "wTempVal", (data.temp/100)*100, data.temp.toFixed(0) + "°C");
-});
+}
+eel.expose(_w_telemetry);
 
 /* ── Telemetry polling (1 Hz) ───────────────────────────────── */
 (function startTelemetry() {

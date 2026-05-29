@@ -76,14 +76,87 @@ def _expose_widget_fns() -> None:
             else:
                 print("[eel_app] Chrome/Edge not found — cannot open widget.")
 
+        # --- OS-level fullscreen state (win32 approach; requestFullscreen is
+        #     silently rejected in Chrome's --app= mode on some systems) ---
+        _fs_saved: dict = {}   # stores pre-fullscreen HWND style + rect
+
+        def _find_albedo_hwnd() -> int:
+            """
+            Find the Chrome app-mode window for Mission Control by iterating
+            top-level windows with class Chrome_WidgetWin_1 and matching title.
+            Returns 0 if not found.
+            """
+            import ctypes
+            import ctypes.wintypes
+
+            found = ctypes.wintypes.HWND(0)
+
+            @ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
+            def _cb(hwnd, _lparam):
+                buf = ctypes.create_unicode_buffer(256)
+                ctypes.windll.user32.GetWindowTextW(hwnd, buf, 256)
+                title = buf.value
+                if ("ALBEDO" in title or "MISSION CONTROL" in title) and \
+                   ctypes.windll.user32.IsWindowVisible(hwnd):
+                    found.value = hwnd
+                    return False   # stop enumeration
+                return True
+
+            ctypes.windll.user32.EnumWindows(_cb, 0)
+            return found.value
+
         @_eel.expose
         def set_window_mode(mode: str) -> None:
             """
-            Called by modes.js when the user switches between FULL / WINDOW / WIDGET.
-            Currently a no-op stub; can be extended to call ctypes for OS-level
-            window resizing if needed.
+            Called by modes.js when the user switches between FULL / WIN / WIDGET.
+            For FULL: uses Win32 API to go borderless fullscreen (requestFullscreen
+            is silently rejected in Chrome --app= mode on some Windows setups).
+            For WIN/WIDGET: restores the saved window style and position.
             """
+            import ctypes, ctypes.wintypes
+            nonlocal _fs_saved
+
             print(f"[eel_app] View mode → {mode}")
+
+            user32   = ctypes.windll.user32
+            GWL_STYLE     = -16
+            WS_CAPTION    = 0x00C00000
+            WS_THICKFRAME = 0x00040000
+            SWP_FRAMECHANGED = 0x0020
+            SWP_NOZORDER     = 0x0004
+
+            if mode == "fullscreen":
+                hwnd = _find_albedo_hwnd()
+                if not hwnd:
+                    print("[eel_app] fullscreen: Albedo window not found — skipping.")
+                    return
+                # Save current style + rect so we can restore later
+                style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+                rc    = ctypes.wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rc))
+                _fs_saved.update({"hwnd": hwnd, "style": style,
+                                  "rc": (rc.left, rc.top, rc.right, rc.bottom)})
+                # Remove caption / resize border → borderless
+                new_style = style & ~(WS_CAPTION | WS_THICKFRAME)
+                user32.SetWindowLongW(hwnd, GWL_STYLE, new_style)
+                sw = user32.GetSystemMetrics(0)
+                sh = user32.GetSystemMetrics(1)
+                user32.SetWindowPos(hwnd, None, 0, 0, sw, sh,
+                                    SWP_NOZORDER | SWP_FRAMECHANGED)
+                print(f"[eel_app] Borderless fullscreen → {sw}x{sh}")
+
+            elif _fs_saved.get("hwnd"):
+                # Restore saved style + rect
+                hwnd  = _fs_saved["hwnd"]
+                style = _fs_saved["style"]
+                rc    = _fs_saved["rc"]
+                user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+                w = rc[2] - rc[0]
+                h = rc[3] - rc[1]
+                user32.SetWindowPos(hwnd, None, rc[0], rc[1], w, h,
+                                    SWP_NOZORDER | SWP_FRAMECHANGED)
+                _fs_saved.clear()
+                print("[eel_app] Window restored to normal.")
 
         @_eel.expose
         def run_pipeline(query: str) -> str:
