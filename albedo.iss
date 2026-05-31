@@ -1,11 +1,11 @@
-; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
+﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
 ; Output: Output\Albedo-Setup-3.1.0.exe
 ;
 ; What's new in 3.1.0
 ;   - R4 fine-tuned models: albedo-cortana-8b + albedo-jarvis-8b
-;     (QLoRA rank 64, 15 epochs, Azure T4 — replaces R3 baselines)
+;     (QLoRA rank 64, 15 epochs, Azure T4 â€” replaces R3 baselines)
 ;   - Mobile companion app: Albedo.apk bundled in mobile\
 ;   - Fly.io WebSocket relay server bundled in relay\
 ;   - Safety-catch approval modal wired to Eel UI
@@ -13,14 +13,14 @@
 ;   - ChromaDB auto-index fix (auto-populates on first search)
 ;
 ; Upgrade behaviour:
-;   - Detects existing install via AppId GUID — upgrades in-place
+;   - Detects existing install via AppId GUID â€” upgrades in-place
 ;   - Kills running Albedo processes before copying new files
-;   - Fresh install  → runs full setup wizard (post_install.ps1)
-;   - Upgrade        → runs post_upgrade.ps1 (pip only, no wizard)
+;   - Fresh install  â†’ runs full setup wizard (post_install.ps1)
+;   - Upgrade        â†’ runs post_upgrade.ps1 (pip only, no wizard)
 ;   - User data preserved on both upgrade AND uninstall:
 ;       .env, settings.json, chroma_db, albedo_memory_db, hardware_config.json
 
-; ── Build metadata ─────────────────────────────────────────────────────────
+; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
 #define AppVersion   "3.1.0"
@@ -51,7 +51,7 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.1.0
+OutputBaseFilename=Albedo-Setup-3.1.1
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
 
@@ -75,7 +75,7 @@ Name: "desktopicon"; Description: "Create a &Desktop shortcut"; \
   GroupDescription: "Additional icons:"; Flags: checkedonce
 
 [Dirs]
-; Install root — writable by all so setup_utility.py can create .venv and .env
+; Install root â€” writable by all so setup_utility.py can create .venv and .env
 Name: "{app}";                    Permissions: everyone-full
 ; Pre-create runtime dirs with full write access
 Name: "{app}\logs";               Permissions: everyone-full
@@ -88,12 +88,12 @@ Name: "{app}\albedo_memory_db";   Permissions: everyone-full; Flags: uninsneveru
 Name: "{app}\albedo-mobile";      Permissions: everyone-full; Flags: uninsneveruninstall
 
 [Files]
-; ── Python source packages ─────────────────────────────────────────────────
+; â”€â”€ Python source packages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "albedo\*";             DestDir: "{app}\albedo";            Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "training_data\*";      DestDir: "{app}\training_data";     Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 Source: "tests\*";              DestDir: "{app}\tests";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── Root-level Python files ────────────────────────────────────────────────
+; â”€â”€ Root-level Python files â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "main.py";                  DestDir: "{app}"; Flags: ignoreversion
 Source: "gui.py";                   DestDir: "{app}"; Flags: ignoreversion
 Source: "server.py";                DestDir: "{app}"; Flags: ignoreversion
@@ -120,41 +120,41 @@ Source: "Albedo-Nuclear-Reset.ps1";   DestDir: "{app}"; Flags: ignoreversion ski
 Source: "Albedo-Hard-Uninstall.ps1";  DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "Albedo-Hard-Uninstall.bat";  DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
-; ── Docs ───────────────────────────────────────────────────────────────────
+; â”€â”€ Docs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "docs\*";               DestDir: "{app}\docs";              Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── Eel frontend ───────────────────────────────────────────────────────────
+; â”€â”€ Eel frontend â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "web\*";                DestDir: "{app}\web";               Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── Fly.io WebSocket relay server ──────────────────────────────────────────
+; â”€â”€ Fly.io WebSocket relay server â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ; Self-hostable relay for the Albedo mobile app (no Tailscale needed).
 ; Deploy with: cd C:\Albedo\relay && fly deploy
 Source: "relay\*";              DestDir: "{app}\relay";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── Mobile companion APK ───────────────────────────────────────────────────
+; â”€â”€ Mobile companion APK â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 ; Sideload Albedo.apk onto an Android phone to use voice/chat remotely.
 Source: "mobile\Albedo.apk";   DestDir: "{app}\mobile";            Flags: ignoreversion skipifsourcedoesntexist
 
-; ── Background images ──────────────────────────────────────────────────────
+; â”€â”€ Background images â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "Albedo-mission-control-background-1.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "albedo-mission-control-background-2.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "albedo-mission-control-background-3.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "albedo-mission-control-background-4.png"; DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
-; ── Branding ───────────────────────────────────────────────────────────────
+; â”€â”€ Branding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "albedo_logo.png";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 Source: "albedo_icon.ico";      DestDir: "{app}"; Flags: ignoreversion skipifsourcedoesntexist
 
-; ── Piper TTS binary ───────────────────────────────────────────────────────
+; â”€â”€ Piper TTS binary â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "piper\*";              DestDir: "{app}\piper";             Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── Piper voice models ─────────────────────────────────────────────────────
+; â”€â”€ Piper voice models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "voices\*";             DestDir: "{app}\voices";            Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── Vosk STT model ─────────────────────────────────────────────────────────
+; â”€â”€ Vosk STT model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "vosk_models\*";        DestDir: "{app}\vosk_models";       Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
-; ── OpenWakeWord models ────────────────────────────────────────────────────
+; â”€â”€ OpenWakeWord models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 Source: "wakewords\*";          DestDir: "{app}\wakewords";         Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist
 
 [Icons]
@@ -166,7 +166,7 @@ Name: "{group}\{#AppFullName}"; \
   IconFilename: "{app}\albedo_icon.ico"; IconIndex: 0; \
   Comment: "Launch Albedo Spartan-Class AI"
 
-; Desktop shortcut (task-gated) — uses common desktop to avoid per-user warning
+; Desktop shortcut (task-gated) â€” uses common desktop to avoid per-user warning
 Name: "{commondesktop}\{#AppFullName}"; \
   Filename: "{sys}\WindowsPowerShell\v1.0\powershell.exe"; \
   Parameters: "-ExecutionPolicy Bypass -WindowStyle Hidden -File ""{app}\Launch-Albedo.ps1"""; \
@@ -206,7 +206,7 @@ Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM python.exe /T"; \
   Flags: runhidden skipifdoesntexist; RunOnceId: "KillPython"
 
 [UninstallDelete]
-; Wipe generated content only — user data (chroma_db, albedo_memory_db,
+; Wipe generated content only â€” user data (chroma_db, albedo_memory_db,
 ; .env, settings.json, hardware_config.json) is intentionally NOT listed here.
 ; Those dirs have uninsneveruninstall set in [Dirs], or were never tracked.
 Type: filesandordirs; Name: "{app}\.venv"
@@ -218,7 +218,7 @@ Type: dirifempty;     Name: "{app}"
 ; Desktop shortcut cleanup
 Type: files; Name: "{commondesktop}\Albedo*.lnk"
 
-; ── Code section ──────────────────────────────────────────────────────────
+; â”€â”€ Code section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 [Code]
 var
   PythonFound: Boolean;
@@ -240,7 +240,7 @@ begin
 end;
 
 { Returns True when an existing Albedo install is detected (.env present).
-  Safe to call from InitializeSetup — reads registry, no app constant needed. }
+  Safe to call from InitializeSetup â€” reads registry, no app constant needed. }
 function IsUpgrade(): Boolean;
 var
   PrevPath: String;
@@ -322,3 +322,4 @@ begin
 
   Result := True;
 end;
+

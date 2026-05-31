@@ -110,3 +110,9 @@ mobile/
 
 # Fly.io deploy script (local convenience only)
 deploy-relay.ps1
+
+# Flutter / Gradle build artifacts
+albedo_mobile/android/.gradle/
+albedo_mobile/android/local.properties
+albedo_mobile/**/.gradle/
+albedo_mobile/**/local.properties
