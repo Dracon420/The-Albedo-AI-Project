@@ -1,9 +1,18 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.1.0.exe
+; Output: Output\Albedo-Setup-3.1.1.exe
 ;
-; What's new in 3.1.0
+; What's new in 3.1.1 (bug-fix release on top of 3.1.0)
+;   - Widget telemetry fixed (named-function expose, not inline eel.expose)
+;   - FULL screen mode fixed (native Win32 borderless, not requestFullscreen)
+;   - Chrome disk-cache disabled so UI updates load after restart
+;   - STT keeps ~240ms pre-roll so first syllable is not dropped
+;   - "open app" no longer mis-fires the hardware audit
+;   - Phone relay responses now delivered (sync websockets send)
+;   - Ghost terminal flashes removed (CREATE_NO_WINDOW on subprocess)
+;
+; Carried over from 3.1.0
 ;   - R4 fine-tuned models: albedo-cortana-8b + albedo-jarvis-8b
 ;     (QLoRA rank 64, 15 epochs, Azure T4 â€” replaces R3 baselines)
 ;   - Mobile companion app: Albedo.apk bundled in mobile\
@@ -23,7 +32,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.1.0"
+#define AppVersion   "3.1.1"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -54,6 +63,10 @@ OutputDir=Output
 OutputBaseFilename=Albedo-Setup-3.1.1
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
+VersionInfoVersion=3.1.1.0
+VersionInfoCompany={#AppPublisher}
+VersionInfoProductName={#AppFullName}
+VersionInfoProductVersion=3.1.1.0
 
 ; Compression
 Compression=lzma2/max
@@ -301,12 +314,13 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.1.0.' + #13#10 + #13#10 +
-      'What''s new in 3.1.0:' + #13#10 +
-      '  - R4 fine-tuned models (Cortana + JARVIS, rank 64)' + #13#10 +
-      '  - Albedo mobile companion app (Android APK)' + #13#10 +
-      '  - Fly.io relay server for phone pairing' + #13#10 +
-      '  - Command approval modal in Mission Control' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v3.1.1.' + #13#10 + #13#10 +
+      'What''s new in 3.1.1:' + #13#10 +
+      '  - Widget telemetry + FULL screen mode fixed' + #13#10 +
+      '  - UI updates load correctly after restart' + #13#10 +
+      '  - Speech-to-text no longer clips the first word' + #13#10 +
+      '  - Phone relay replies now delivered reliably' + #13#10 +
+      '  - "Open app" voice command routing fixed' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +
