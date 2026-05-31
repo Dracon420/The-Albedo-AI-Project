@@ -1,4 +1,4 @@
-"""
+r"""
 dream/file_organizer.py — Autonomous file organization during dream cycle.
 
 Scans configured directories, categorizes files by extension (fast, deterministic)
