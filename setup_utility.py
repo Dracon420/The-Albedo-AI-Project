@@ -207,6 +207,8 @@ def _write_env(
     piper_bin: str,
     persona: str,
     node_location: str = "",
+    wolfram_key: str = "",
+    tavily_key: str = "",
 ) -> None:
     env_path   = ROOT / ".env"
     example    = ROOT / ".env.example"
@@ -224,6 +226,8 @@ def _write_env(
         "GEMINI_API_KEY":       gemini_key,
         "GROQ_API_KEY":         groq_key,
         "TOGETHER_API_KEY":     together_key,
+        "WOLFRAM_API_KEY":      wolfram_key,
+        "TAVILY_API_KEY":       tavily_key,
         "OBSIDIAN_VAULT_PATH":  vault_path,
         "NODE_LOCATION":        node_location or "an unspecified location",
         # ── Audio / voice ────────────────────────────────────────────────
@@ -442,6 +446,8 @@ class DirectoryPage(Page):
         self._gemini_var   = tk.StringVar(value="")
         self._groq_var     = tk.StringVar(value="")
         self._together_var = tk.StringVar(value="")
+        self._wolfram_var  = tk.StringVar(value="")
+        self._tavily_var   = tk.StringVar(value="")
         self._vault_var    = tk.StringVar(value="")
         self._piper_var    = tk.StringVar(value=str(ROOT / "piper" / "piper.exe"))
         self._persona_var  = tk.StringVar(value="Cortana")
@@ -467,6 +473,12 @@ class DirectoryPage(Page):
         self._api_row(box, "Together API Key",
                       self._together_var,
                       "https://api.together.xyz/settings/api-keys")
+        self._api_row(box, "Wolfram Alpha App ID  (optional - math/units)",
+                      self._wolfram_var,
+                      "https://developer.wolframalpha.com/access")
+        self._api_row(box, "Tavily API Key  (optional - web search)",
+                      self._tavily_var,
+                      "https://app.tavily.com/home")
 
         tk.Frame(box, height=1, bg=C_BORDER).pack(fill="x", padx=16, pady=8)
 
@@ -583,6 +595,8 @@ class DirectoryPage(Page):
             "gemini_key":   self._gemini_var.get().strip(),
             "groq_key":     self._groq_var.get().strip(),
             "together_key": self._together_var.get().strip(),
+            "wolfram_key":  self._wolfram_var.get().strip(),
+            "tavily_key":   self._tavily_var.get().strip(),
             "vault_path":   self._vault_var.get().strip(),
             "piper_bin":    self._piper_var.get().strip(),
             "persona":      self._persona_var.get().strip().lower(),
@@ -866,6 +880,8 @@ class InstallPage(Page):
             piper_bin=dirs.get("piper_bin", ""),
             persona=persona,
             node_location=dirs.get("location", ""),
+            wolfram_key=dirs.get("wolfram_key", ""),
+            tavily_key=dirs.get("tavily_key", ""),
         )
         # Write initial settings.json so the GUI knows the active persona
         settings_path = ROOT / "settings.json"
