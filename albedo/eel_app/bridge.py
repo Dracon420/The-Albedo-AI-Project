@@ -937,6 +937,44 @@ def get_dream_state() -> dict:
 
 
 @_expose
+def get_dream_file_suggestions() -> dict:
+    """
+    Return pending file-move suggestions the dream cycle proposed but did NOT
+    apply. Surfaced at session start so the user decides. Each item:
+    {src, dest, category, timestamp}.
+    """
+    try:
+        from albedo.dream.file_organizer import get_pending_suggestions
+        moves = get_pending_suggestions()
+        return {"ok": True, "count": len(moves), "moves": moves}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def apply_dream_file_suggestions() -> dict:
+    """User approved the dream-cycle move suggestions — execute them now."""
+    try:
+        from albedo.dream.file_organizer import apply_suggestions
+        applied = apply_suggestions()   # loads pending from disk, moves, clears
+        return {"ok": True, "applied": len(applied),
+                "moves": [m.as_dict() for m in applied]}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def discard_dream_file_suggestions() -> dict:
+    """User declined the dream-cycle move suggestions — clear, move nothing."""
+    try:
+        from albedo.dream.file_organizer import discard_suggestions
+        n = discard_suggestions()
+        return {"ok": True, "discarded": n}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
 def force_dream_cycle() -> dict:
     """
     Manually trigger a dream cycle from the UI (debug / on-demand use).

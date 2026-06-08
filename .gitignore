@@ -116,3 +116,6 @@ albedo_mobile/android/.gradle/
 albedo_mobile/android/local.properties
 albedo_mobile/**/.gradle/
 albedo_mobile/**/local.properties
+
+# Dream-cycle pending move suggestions (per-machine, regenerated)
+dream_pending_moves.json

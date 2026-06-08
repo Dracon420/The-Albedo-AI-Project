@@ -26,6 +26,7 @@ Public API
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 from datetime import datetime
@@ -78,8 +79,10 @@ def _is_interrupted() -> bool:
 # ---------------------------------------------------------------------------
 
 def _run_phase1(report: dict) -> None:
-    """File organization."""
-    _set_state(_STATE_DREAMING, "Phase 1 — File Organization")
+    """File organization — SUGGEST-ONLY. Proposes moves; the user approves them
+    at the start of the next session. Nothing is moved during the dream cycle
+    (unless DREAM_AUTO_APPLY=1 is explicitly set)."""
+    _set_state(_STATE_DREAMING, "Phase 1 — File Organization (suggest)")
     try:
         from albedo.dream.file_organizer import organize
 
@@ -87,10 +90,14 @@ def _run_phase1(report: dict) -> None:
             if _status_cb:
                 _status_cb(_STATE_DREAMING, f"[1/3] {msg}")
 
-        moves = organize(interrupt=_is_interrupted, progress_cb=_prog)
-        report["phase1_moves"] = len(moves)
-        report["phase1_manifest"] = [m.as_dict() for m in moves]
-        print(f"[dream] Phase 1 complete — {len(moves)} files organized.")
+        suggestions = organize(interrupt=_is_interrupted, progress_cb=_prog)
+        report["phase1_suggestions"] = len(suggestions)
+        report["phase1_manifest"] = [m.as_dict() for m in suggestions]
+        report["phase1_applied"] = (
+            os.environ.get("DREAM_AUTO_APPLY", "0").strip() == "1"
+        )
+        verb = "applied" if report["phase1_applied"] else "suggested (awaiting approval)"
+        print(f"[dream] Phase 1 complete — {len(suggestions)} move(s) {verb}.")
     except Exception as exc:
         print(f"[dream] Phase 1 error: {exc}")
         report["phase1_error"] = str(exc)
@@ -261,7 +268,7 @@ def start_dream(status_cb: Optional[Callable[[str, str], None]] = None,
 
         if _is_interrupted():
             _set_state(_STATE_INTERRUPTED,
-                       f"Interrupted after {report.get('phase1_moves', 0)} moves.")
+                       f"Interrupted after {report.get('phase1_suggestions', 0)} suggestions.")
         else:
             _set_state(_STATE_COOLDOWN, "Dream complete. Entering cooldown.")
 

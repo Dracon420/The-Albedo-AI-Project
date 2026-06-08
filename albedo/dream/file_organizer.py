@@ -1,14 +1,29 @@
 r"""
-dream/file_organizer.py — Autonomous file organization during dream cycle.
+dream/file_organizer.py — Dream-cycle file organization (SUGGEST-FIRST).
 
-Scans configured directories, categorizes files by extension (fast, deterministic)
-with an optional Ollama AI pass for ambiguous types, then moves them into an
-organized folder structure.  Safety rules:
-  - NEVER deletes anything — only moves
+Scans configured directories and categorizes files by extension (fast,
+deterministic) with an optional Ollama AI pass for ambiguous types.
+
+⚠ BEHAVIOUR CHANGE (Session 9): the dream cycle NO LONGER moves files
+autonomously. Past runs over-organized and relocated files that shouldn't have
+been touched, eroding trust. Now organize() defaults to SUGGEST-ONLY: it
+proposes moves and writes them to a pending-suggestions file. Nothing on disk
+changes until the user explicitly approves at the start of the next session via
+apply_suggestions(). The user decides — not the dream cycle.
+
+  - SUGGEST by default — no filesystem changes during the dream cycle
+  - NEVER deletes anything — moves only happen on explicit user approval
   - NEVER touches system dirs, .git, .venv, or Program Files
-  - Skips files that are already in an organized location
+  - Skips files already in an organized location
   - Handles name collisions by appending _1, _2, etc.
-  - Writes a move manifest so every action is reversible
+  - Every approved move is recorded in a reversible manifest
+
+Workflow
+--------
+    1. Dream cycle calls organize()                  -> writes pending suggestions
+    2. Next session start surfaces get_pending_suggestions() to the user
+    3. User approves -> apply_suggestions()          -> moves happen
+       User declines -> discard_suggestions()        -> nothing moved, cleared
 
 Configuration (.env)
 --------------------
@@ -17,9 +32,12 @@ Configuration (.env)
     DREAM_TARGET_ROOT    Where organized folders are created
                          Default: %USERPROFILE%\Documents\Albedo-Organized
     DREAM_AI_CLASSIFY    1 = use Ollama for ambiguous files, 0 = skip (default 0)
+    DREAM_AUTO_APPLY     1 = legacy behaviour (move during dream, NO approval).
+                         Default 0 (suggest-only). Opt-in escape hatch only.
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import time
@@ -127,6 +145,11 @@ def _default_target_root() -> Path:
     return Path.home() / "Documents" / "Albedo-Organized"
 
 
+# Pending move suggestions live in the project root so the next session can
+# find and surface them. JSON list of {src, dest, category, timestamp}.
+_PENDING_FILE = Path(__file__).resolve().parent.parent.parent / "dream_pending_moves.json"
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -149,23 +172,15 @@ class MoveRecord:
         }
 
 
-def organize(
+def _plan_moves(
     scan_dirs:   Optional[list[str]] = None,
     target_root: Optional[str]       = None,
     interrupt:   Optional[Callable[[], bool]] = None,
     progress_cb: Optional[Callable[[str, float], None]] = None,
 ) -> list[MoveRecord]:
     """
-    Scan directories, categorize, and move files into organized sub-folders.
-
-    Parameters
-    ----------
-    scan_dirs   : directories to scan (reads DREAM_SCAN_DIRS env var, or defaults)
-    target_root : root for organized output (reads DREAM_TARGET_ROOT, or default)
-    interrupt   : callable returning True when the dream cycle should stop early
-    progress_cb : called with (status_message, fraction_0_to_1) during processing
-
-    Returns a list of MoveRecord (the move manifest).
+    Scan + categorize files and build a list of PROPOSED moves. Pure planning —
+    touches nothing on disk (no mkdir, no move). Returns proposed MoveRecords.
     """
     def _prog(msg: str, frac: float) -> None:
         if progress_cb:
@@ -205,14 +220,14 @@ def organize(
         _prog("No files found in scan directories.", 1.0)
         return []
 
-    _prog(f"Located {len(all_files)} file(s). Beginning organization.", 0.05)
+    _prog(f"Located {len(all_files)} file(s). Planning organization.", 0.05)
 
-    moves: list[MoveRecord] = []
+    proposed: list[MoveRecord] = []
     ai_classify = os.environ.get("DREAM_AI_CLASSIFY", "0").strip() == "1"
 
     for i, src in enumerate(all_files):
         if _interrupted():
-            _prog(f"Dream interrupted at {i}/{len(all_files)} files.", i / len(all_files))
+            _prog(f"Planning interrupted at {i}/{len(all_files)} files.", i / len(all_files))
             break
 
         frac = 0.05 + 0.90 * (i / len(all_files))
@@ -220,30 +235,147 @@ def organize(
         cat  = _EXT_MAP.get(ext)
 
         if cat == "_SKIP" or cat is None and not ai_classify:
-            # Unknown extension and AI assist disabled — move to Misc
             cat = "Misc" if cat is None else None
 
         if cat == "_SKIP" or cat is None:
             continue
 
-        # AI classification for truly unknown types
         if cat is None and ai_classify:
             cat = _ai_classify(src) or "Misc"
 
+        # Plan only — do NOT mkdir or move. Note the intended destination dir;
+        # collision-safe naming is resolved at apply time against the live FS.
         dest_dir = target / cat
+        dest = dest_dir / src.name
+        proposed.append(MoveRecord(src, dest, cat))
+
+        if i % 20 == 0:
+            _prog(f"Planning… {i}/{len(all_files)}", frac)
+
+    _prog(f"Planning complete — {len(proposed)} suggestion(s).", 1.0)
+    return proposed
+
+
+def organize(
+    scan_dirs:   Optional[list[str]] = None,
+    target_root: Optional[str]       = None,
+    interrupt:   Optional[Callable[[], bool]] = None,
+    progress_cb: Optional[Callable[[str, float], None]] = None,
+) -> list[MoveRecord]:
+    """
+    Dream-cycle entry point. SUGGEST-ONLY by default.
+
+    Plans proposed moves and writes them to the pending-suggestions file for the
+    user to approve next session. Returns the proposed MoveRecords WITHOUT
+    moving anything.
+
+    Legacy auto-move is gated behind DREAM_AUTO_APPLY=1 (opt-in escape hatch) —
+    when set, it plans then immediately applies, preserving old behaviour for
+    anyone who explicitly wants it.
+    """
+    proposed = _plan_moves(scan_dirs, target_root, interrupt, progress_cb)
+
+    if not proposed:
+        save_suggestions([])
+        return []
+
+    if os.environ.get("DREAM_AUTO_APPLY", "0").strip() == "1":
+        print("[file_organizer] DREAM_AUTO_APPLY=1 — applying moves immediately.")
+        applied = apply_suggestions(proposed)
+        save_suggestions([])
+        return applied
+
+    save_suggestions(proposed)
+    print(f"[file_organizer] {len(proposed)} move(s) SUGGESTED — awaiting user "
+          f"approval next session (nothing moved). See {_PENDING_FILE.name}.")
+    return proposed
+
+
+# ---------------------------------------------------------------------------
+# Suggestion persistence + apply/discard (user-controlled)
+# ---------------------------------------------------------------------------
+
+def save_suggestions(records: list[MoveRecord]) -> None:
+    """Write pending move suggestions to disk for next-session review."""
+    try:
+        payload = {
+            "generated": datetime.now().isoformat(timespec="seconds"),
+            "count": len(records),
+            "moves": [r.as_dict() for r in records],
+        }
+        _PENDING_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except Exception as exc:
+        print(f"[file_organizer] Could not write suggestions: {exc}")
+
+
+def get_pending_suggestions() -> list[dict]:
+    """Return the pending move suggestions (list of dicts), or [] if none."""
+    try:
+        if not _PENDING_FILE.exists():
+            return []
+        data = json.loads(_PENDING_FILE.read_text(encoding="utf-8"))
+        return data.get("moves", [])
+    except Exception:
+        return []
+
+
+def has_pending_suggestions() -> bool:
+    return bool(get_pending_suggestions())
+
+
+def discard_suggestions() -> int:
+    """User declined. Clear pending suggestions without moving anything.
+    Returns how many were discarded."""
+    pending = get_pending_suggestions()
+    try:
+        if _PENDING_FILE.exists():
+            _PENDING_FILE.unlink()
+    except Exception as exc:
+        print(f"[file_organizer] Could not clear suggestions: {exc}")
+    print(f"[file_organizer] Discarded {len(pending)} suggestion(s) — nothing moved.")
+    return len(pending)
+
+
+def apply_suggestions(records: Optional[list] = None) -> list[MoveRecord]:
+    """
+    Execute moves the user approved. Accepts either a list of MoveRecord (from a
+    fresh plan) or, if None, loads the pending suggestions from disk.
+
+    This is the ONLY place files actually move. Collision-safe destination names
+    are resolved here against the live filesystem. Clears the pending file when
+    done. Returns the MoveRecords actually applied.
+    """
+    # Normalize input to (src, dest_dir/category, name) tuples
+    if records is None:
+        raw = get_pending_suggestions()
+        items = [(Path(r["src"]), Path(r["dest"]), r.get("category", "Misc")) for r in raw]
+    else:
+        items = [(r.src, r.dest, r.category) for r in records]
+
+    applied: list[MoveRecord] = []
+    for src, dest, cat in items:
+        if not src.exists():
+            print(f"[file_organizer] Skipped (gone): {src}")
+            continue
+        if _is_protected(src):
+            continue
         try:
+            dest_dir = dest.parent
             dest_dir.mkdir(parents=True, exist_ok=True)
-            dest = _safe_dest(dest_dir, src.name)
-            shutil.move(str(src), str(dest))
-            moves.append(MoveRecord(src, dest, cat))
+            final_dest = _safe_dest(dest_dir, src.name)
+            shutil.move(str(src), str(final_dest))
+            applied.append(MoveRecord(src, final_dest, cat))
         except (PermissionError, OSError) as exc:
             print(f"[file_organizer] Skipped {src.name}: {exc}")
 
-        if i % 20 == 0:
-            _prog(f"Organizing… {i}/{len(all_files)}", frac)
-
-    _prog(f"Organization complete — {len(moves)} file(s) moved.", 1.0)
-    return moves
+    print(f"[file_organizer] Applied {len(applied)} approved move(s).")
+    # Clear pending now that they're handled
+    try:
+        if _PENDING_FILE.exists():
+            _PENDING_FILE.unlink()
+    except Exception:
+        pass
+    return applied
 
 
 def _ai_classify(path: Path) -> Optional[str]:
