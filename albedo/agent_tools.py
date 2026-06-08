@@ -506,21 +506,30 @@ def get_tool_schemas() -> list[dict]:
     return [spec.to_schema() for spec in TOOLS.values()]
 
 
-def run_tool(name: str, **kwargs: Any) -> str:
+def run_tool(_tool_name: str, /, _args: dict[str, Any] | None = None, **kwargs: Any) -> str:
     """
-    Execute a tool by name with keyword args. Never raises — returns a readable
-    string the agent can interpret. Does NOT enforce approval; the agent loop is
-    responsible for routing destructive tools through safety_catch first.
+    Execute a tool by name. Never raises — returns a readable string the agent
+    can interpret. Does NOT enforce approval; the agent loop is responsible for
+    routing destructive tools through safety_catch first.
+
+    Tool arguments may be passed either as a dict (``run_tool("kill_process",
+    {"name": "chrome"})`` — the form the agent loop uses with LLM-provided
+    JSON args) or as keyword args (``run_tool("launch_app", app_name="notepad")``).
+
+    The tool name parameter is positional-only (``/``) so it can never collide
+    with a tool's own parameter named ``name`` (e.g. kill_process(name=...)).
     """
-    spec = TOOLS.get(name)
+    spec = TOOLS.get(_tool_name)
     if spec is None:
-        return f"[tool error] Unknown tool: {name!r}. Available: {', '.join(TOOLS)}"
+        return f"[tool error] Unknown tool: {_tool_name!r}. Available: {', '.join(TOOLS)}"
+    call_args: dict[str, Any] = dict(_args) if _args else {}
+    call_args.update(kwargs)
     try:
-        return spec.fn(**kwargs)
+        return spec.fn(**call_args)
     except TypeError as exc:
-        return f"[tool error] Bad arguments for {name}: {exc}"
+        return f"[tool error] Bad arguments for {_tool_name}: {exc}"
     except Exception as exc:
-        return f"[tool error] {name} failed: {exc}"
+        return f"[tool error] {_tool_name} failed: {exc}"
 
 
 if __name__ == "__main__":
