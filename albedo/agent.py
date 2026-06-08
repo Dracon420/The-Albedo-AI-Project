@@ -1,0 +1,277 @@
+"""
+agent.py — Albedo agentic loop (plan → act → observe).
+
+Drives a user-selected LLM brain (via providers.complete_with_tools) over the
+tool catalog (agent_tools) in an iterative loop:
+
+    1. Send conversation + tool catalog to the brain.
+    2. If the brain returns tool calls:
+         - For each call, gate it through approval policy (safety_catch handler).
+         - Execute approved calls via agent_tools.run_tool; record results.
+         - Append the assistant turn + tool results to the conversation.
+         - Loop.
+       If the brain returns only text: that's the final answer — return it.
+    3. Stop after MAX_ITERATIONS to prevent runaway loops.
+
+Approval policy (user setting, default = "approve everything")
+-------------------------------------------------------------
+settings.json "agent_autonomy" ∈ {
+    "approve_all"        : every tool call needs approval (default — safest)
+    "approve_destructive": only destructive tools need approval
+    "full_auto"          : no approval (fastest, riskiest)
+}
+Approval is requested through the SAME safety_catch handler the rest of the app
+uses (set_approval_handler in app.py wires it to the Eel modal), so agent tool
+approvals appear in the HUD, not the console.
+
+Public API
+----------
+    run_agent(user_message, *, history=None, system_prompt=None,
+              provider=None, model=None, status_cb=None) -> dict
+        {answer, steps:[...], provider, model, iterations, error}
+
+Never raises — failures come back in the result dict.
+"""
+from __future__ import annotations
+
+import json
+import time
+import uuid
+from typing import Any, Callable, Optional
+
+from albedo import agent_tools
+from albedo import providers
+
+MAX_ITERATIONS = 8  # hard cap on plan->act->observe cycles per user message
+
+_DEFAULT_SYSTEM = (
+    "You are Albedo, a Spartan-class AI assistant with real control over the "
+    "user's Windows PC through tools. When the user asks you to do something or "
+    "asks about live system state, USE the provided tools rather than guessing. "
+    "Call tools with explicit arguments. After tools return, give a concise, "
+    "direct answer in plain prose. Do not narrate your tool use or explain your "
+    "reasoning step by step — just act, then answer."
+)
+
+
+# ---------------------------------------------------------------------------
+# Autonomy / approval policy
+# ---------------------------------------------------------------------------
+
+def _autonomy_mode() -> str:
+    """Read agent_autonomy from settings.json. Default 'approve_all'."""
+    try:
+        from pathlib import Path
+        sp = Path(__file__).resolve().parent.parent / "settings.json"
+        if sp.exists():
+            s = json.loads(sp.read_text(encoding="utf-8"))
+            mode = str(s.get("agent_autonomy", "")).strip().lower()
+            if mode in ("approve_all", "approve_destructive", "full_auto"):
+                return mode
+    except Exception:
+        pass
+    return "approve_all"
+
+
+def _needs_approval(tool_name: str, mode: str) -> bool:
+    if mode == "full_auto":
+        return False
+    spec = agent_tools.get_tool(tool_name)
+    destructive = bool(spec and spec.destructive)
+    if mode == "approve_destructive":
+        return destructive
+    # approve_all (default)
+    return True
+
+
+def _request_approval(tool_name: str, arguments: dict) -> bool:
+    """
+    Ask the registered safety_catch handler to approve a tool call. Reuses the
+    same handler the Eel UI wired (set_approval_handler), so it surfaces in the
+    HUD modal. Falls back to deny-closed if anything goes wrong.
+    """
+    try:
+        from albedo import safety_catch
+        # Build a PendingApproval that describes the tool call (not a subprocess).
+        arg_str = ", ".join(f"{k}={v!r}" for k, v in (arguments or {}).items())
+        display = f"{tool_name}({arg_str})"
+        req = safety_catch.PendingApproval(
+            id=uuid.uuid4().hex[:12],
+            argv=[tool_name, json.dumps(arguments or {})],
+            cwd=None,
+            requester="albedo-agent",
+            ts=time.time(),
+            display=display,
+        )
+        handler = getattr(safety_catch, "_handler", None)
+        if handler is None:
+            return False
+        return bool(handler(req))
+    except Exception as exc:
+        print(f"[agent] approval error (deny-closed): {exc}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+def run_agent(
+    user_message: str,
+    *,
+    history: Optional[list[dict]] = None,
+    system_prompt: Optional[str] = None,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
+    status_cb: Optional[Callable[[str], None]] = None,
+) -> dict:
+    """
+    Run the agentic loop for one user message. Returns a result dict:
+        {answer, steps, provider, model, iterations, error}
+    `steps` is a list of {type, ...} entries describing what happened
+    (tool_call, tool_result, denied, final) for UI/debugging.
+    Never raises.
+    """
+    def _status(msg: str) -> None:
+        if status_cb:
+            try:
+                status_cb(msg)
+            except Exception:
+                pass
+        print(f"[agent] {msg}")
+
+    if not user_message or not user_message.strip():
+        return {"answer": "", "steps": [], "provider": None, "model": None,
+                "iterations": 0, "error": "empty message"}
+
+    mode = _autonomy_mode()
+    tools = agent_tools.get_tool_schemas()
+
+    # Build initial conversation
+    messages: list[dict] = [{"role": "system", "content": system_prompt or _DEFAULT_SYSTEM}]
+    if history:
+        for h in history[-10:]:
+            if h.get("role") in ("user", "assistant") and h.get("content"):
+                messages.append({"role": h["role"], "content": h["content"]})
+    messages.append({"role": "user", "content": user_message.strip()})
+
+    steps: list[dict] = []
+    used_provider = providers.resolve_provider(provider)
+    used_model = providers.resolve_model(used_provider, model)
+
+    for iteration in range(1, MAX_ITERATIONS + 1):
+        _status(f"thinking (iteration {iteration}/{MAX_ITERATIONS}) via {used_provider}:{used_model}")
+        result = _complete_with_retry(messages, tools, provider, model, _status)
+        used_provider = result.get("provider") or used_provider
+        used_model = result.get("model") or used_model
+
+        if result.get("error"):
+            return {"answer": "", "steps": steps, "provider": used_provider,
+                    "model": used_model, "iterations": iteration,
+                    "error": result["error"]}
+
+        tool_calls = result.get("tool_calls") or []
+
+        # No tool calls -> final answer.
+        if not tool_calls:
+            answer = result.get("text", "") or ""
+            steps.append({"type": "final", "text": answer})
+            return {"answer": answer, "steps": steps, "provider": used_provider,
+                    "model": used_model, "iterations": iteration, "error": None}
+
+        # Record the assistant turn (with its tool calls) into history.
+        messages.append(_assistant_turn(result))
+
+        # Execute each requested tool call.
+        for tc in tool_calls:
+            steps.append({"type": "tool_call", "name": tc.name, "arguments": tc.arguments})
+            _status(f"tool call: {tc.name}({tc.arguments})")
+
+            if _needs_approval(tc.name, mode):
+                _status(f"awaiting approval for {tc.name}…")
+                approved = _request_approval(tc.name, tc.arguments)
+                if not approved:
+                    denial = f"User denied execution of {tc.name}."
+                    steps.append({"type": "denied", "name": tc.name})
+                    messages.append(_tool_result_turn(tc, denial))
+                    _status(f"denied: {tc.name}")
+                    continue
+
+            output = agent_tools.run_tool(tc.name, tc.arguments)
+            steps.append({"type": "tool_result", "name": tc.name,
+                          "output": output[:500]})
+            messages.append(_tool_result_turn(tc, output))
+
+    # Hit the iteration cap without a final text answer.
+    return {"answer": "I reached my action limit before finishing. Please refine "
+                      "the request or break it into smaller steps.",
+            "steps": steps, "provider": used_provider, "model": used_model,
+            "iterations": MAX_ITERATIONS, "error": "max_iterations"}
+
+
+# ---------------------------------------------------------------------------
+# Provider call with transient-error retry (rate limits, 429, timeouts)
+# ---------------------------------------------------------------------------
+
+_TRANSIENT_MARKERS = ("rate", "429", "timeout", "timed out", "503",
+                      "overloaded", "temporarily", "try again")
+
+
+def _is_transient(error: str) -> bool:
+    e = (error or "").lower()
+    return any(m in e for m in _TRANSIENT_MARKERS)
+
+
+def _complete_with_retry(messages, tools, provider, model, status,
+                         max_retries: int = 2) -> dict:
+    """Call the provider; retry briefly on transient errors with backoff."""
+    delay = 3.0
+    result = providers.complete_with_tools(messages, tools=tools,
+                                           provider=provider, model=model)
+    attempt = 0
+    while result.get("error") and _is_transient(result["error"]) and attempt < max_retries:
+        attempt += 1
+        status(f"transient error ({result['error'][:50]}…) — retry {attempt}/{max_retries} in {delay:.0f}s")
+        time.sleep(delay)
+        delay *= 2
+        result = providers.complete_with_tools(messages, tools=tools,
+                                               provider=provider, model=model)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Conversation-turn builders (neutral shape consumed by providers.py)
+# ---------------------------------------------------------------------------
+
+def _assistant_turn(result: dict) -> dict:
+    """Build the neutral assistant message (text + tool_calls) for history."""
+    return {
+        "role": "assistant",
+        "content": result.get("text", "") or "",
+        "tool_calls": result.get("tool_calls", []),
+    }
+
+
+def _tool_result_turn(tool_call, output: str) -> dict:
+    """Build the neutral tool-result message for history."""
+    return {
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "name": tool_call.name,
+        "content": output,
+    }
+
+
+if __name__ == "__main__":
+    # Manual smoke test (requires a configured provider with a key).
+    import sys
+    msg = " ".join(sys.argv[1:]) or "What is my current CPU and RAM usage?"
+    print(f"USER: {msg}\n")
+    res = run_agent(msg)
+    print("\n--- RESULT ---")
+    print("provider :", res["provider"], "| model:", res["model"])
+    print("iterations:", res["iterations"], "| error:", res["error"])
+    print("steps:")
+    for s in res["steps"]:
+        print("  ", s.get("type"), s.get("name", ""), str(s.get("arguments", ""))[:60])
+    print("\nANSWER:", res["answer"])

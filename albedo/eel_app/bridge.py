@@ -560,6 +560,83 @@ def send_query(text: str, use_web: bool = False) -> dict:
 
 
 @_expose
+def run_agent_query(text: str, history: list | None = None) -> dict:
+    """
+    Run a query through the AGENTIC loop (plan→act→observe over the tool
+    catalog), using the user-selected brain provider. Destructive tool calls
+    are gated through the safety_catch approval modal per the agent_autonomy
+    setting. Returns {ok, answer, steps, provider, model, iterations, error}.
+
+    Runs on a background thread so the Eel websocket isn't blocked; the loop
+    can take a while (multiple LLM round-trips + tool execution).
+    """
+    if not text or not text.strip():
+        return {"ok": False, "error": "empty query"}
+
+    set_swarm_state("ALBEDO_CORE", "active")
+    out: dict = {}
+
+    def _run() -> None:
+        try:
+            from albedo.agent import run_agent
+            res = run_agent(text.strip(), history=history)
+            out.update(res)
+            out["ok"] = res.get("error") is None
+            set_swarm_state("ALBEDO_CORE",
+                            "standby" if out["ok"] else "error")
+        except Exception as exc:                                    # noqa: BLE001
+            out["ok"] = False
+            out["error"] = f"{type(exc).__name__}: {exc}"
+            set_swarm_state("ALBEDO_CORE", "error")
+
+    t = threading.Thread(target=_run, daemon=True, name="agent-query")
+    t.start()
+    t.join(timeout=300)   # agent loops can be long; generous cap
+
+    if t.is_alive():
+        set_swarm_state("ALBEDO_CORE", "error")
+        return {"ok": False, "error": "agent timeout (300 s)"}
+    return out
+
+
+@_expose
+def get_brain_config() -> dict:
+    """Return current brain provider/model selection + which providers have keys.
+    Powers the BRAIN tab in Mission Control."""
+    try:
+        from albedo import providers
+        return {
+            "ok": True,
+            "active_provider": providers.resolve_provider(),
+            "active_model": providers.resolve_model(providers.resolve_provider()),
+            "available": providers.available_providers(),
+            "default_models": providers.DEFAULT_MODELS,
+            "autonomy": _read_settings_dict().get("agent_autonomy", "approve_all"),
+        }
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def set_brain_config(provider: str = "", model: str = "", autonomy: str = "") -> dict:
+    """Persist brain provider/model/autonomy to settings.json (BRAIN tab)."""
+    try:
+        data = _read_settings_dict()
+        if provider:
+            data["brain_provider"] = provider.strip().lower()
+        if model:
+            data["brain_model"] = model.strip()
+        if autonomy in ("approve_all", "approve_destructive", "full_auto"):
+            data["agent_autonomy"] = autonomy
+        _write_settings_dict(data)
+        return {"ok": True, "brain_provider": data.get("brain_provider", ""),
+                "brain_model": data.get("brain_model", ""),
+                "agent_autonomy": data.get("agent_autonomy", "approve_all")}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
 def trigger_mic_capture() -> dict:
     """
     One-shot voice capture for the MIC button in the Eel UI.
