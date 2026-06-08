@@ -688,6 +688,83 @@ body.mode--windowed {
 }
 
 /* ============================================================
+   DREAM CYCLE — file-move suggestions modal (session start)
+   ============================================================ */
+.dream-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  align-items: center;
+  justify-content: center;
+}
+.dream-modal.is-visible {
+  display: flex;
+}
+.dream-modal__box {
+  background: rgba(6, 14, 22, 0.97);
+  border: 1px solid #00d9ff;
+  border-radius: 4px;
+  padding: 28px 32px;
+  max-width: 640px;
+  width: 92%;
+  box-shadow: 0 0 40px rgba(0, 217, 255, 0.30);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.dream-modal__title {
+  font-family: 'Orbitron', monospace;
+  font-size: 0.9rem;
+  color: #00d9ff;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+}
+.dream-modal__meta {
+  font-size: 0.74rem;
+  color: #7aa2c0;
+  font-family: monospace;
+  line-height: 1.4;
+}
+.dream-modal__list {
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  color: #e0f0ff;
+  background: rgba(0, 217, 255, 0.06);
+  border: 1px solid rgba(0, 217, 255, 0.22);
+  border-radius: 2px;
+  padding: 10px 14px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+.dream-modal__row {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0, 217, 255, 0.08);
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.dream-modal__row:last-child { border-bottom: none; }
+.dream-modal__cat {
+  color: #39ff14;
+  min-width: 130px;
+  display: inline-block;
+}
+.dream-modal__fname { color: #e0f0ff; word-break: break-all; }
+.dream-modal__hint {
+  font-size: 0.72rem;
+  color: #5a7a9a;
+}
+.dream-modal__actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+/* ============================================================
    MOBILE TAB — pairing UI
    ============================================================ */
 .mobile-status {

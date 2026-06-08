@@ -349,6 +349,7 @@
   <script src="static/js/drawer.js?v=312"></script>
   <script src="static/js/settings.js?v=312"></script>
   <script src="static/js/mobile.js?v=312"></script>
+  <script src="static/js/dream_suggestions.js?v=313"></script>
   <script src="static/js/chat.js?v=312"></script>
   <script src="static/js/app.js?v=312"></script>
   <!-- Holographic orb animator (Canvas 2D, no deps) -->
@@ -366,6 +367,25 @@
       <div class="approval-modal__actions">
         <button id="approvalDeny"    class="cmd-btn approval-modal__btn--deny">DENY</button>
         <button id="approvalApprove" class="cmd-btn approval-modal__btn--approve">APPROVE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Dream-cycle file-move suggestions (shown at session start) ─────── -->
+  <div id="dreamSuggestModal" class="dream-modal" aria-hidden="true">
+    <div class="dream-modal__box">
+      <div class="dream-modal__title">◇ DREAM CYCLE — FILE ORGANIZATION SUGGESTIONS</div>
+      <div class="dream-modal__meta" id="dreamSuggestMeta">
+        Albedo proposed the following file moves while idle. Nothing has been moved.
+        Review and choose.
+      </div>
+      <div class="dream-modal__list" id="dreamSuggestList"></div>
+      <div class="dream-modal__hint">
+        Approve to move all listed files into organized folders, or decline to leave everything as-is.
+      </div>
+      <div class="dream-modal__actions">
+        <button id="dreamSuggestDecline" class="cmd-btn approval-modal__btn--deny">DECLINE</button>
+        <button id="dreamSuggestApprove" class="cmd-btn approval-modal__btn--approve">APPROVE ALL</button>
       </div>
     </div>
   </div>
