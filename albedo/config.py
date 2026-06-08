@@ -35,7 +35,22 @@ AZURE_STT_LANGUAGE      = os.getenv("AZURE_STT_LANGUAGE",      "en-US")
 AZURE_OPENAI_KEY        = os.getenv("AZURE_OPENAI_KEY",        "")
 AZURE_OPENAI_ENDPOINT   = os.getenv("AZURE_OPENAI_ENDPOINT",   "")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-35-turbo")
+# 2024-06-01+ required for stable tool-calling (agent uses this; 2024-02-01 default
+# is fine for plain chat via azure_openai_client but too old for tool_calls).
 AZURE_OPENAI_API_VERSION= os.getenv("AZURE_OPENAI_API_VERSION","2024-02-01")
+
+# --- Agent brain providers (user-choosable reasoning core) ---
+# The agent (albedo/agent.py via albedo/providers.py) routes to whichever
+# provider the user selects in Mission Control. Each user supplies their own key.
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY",    "")
+# GEMINI_API_KEY / GROQ_API_KEY are loaded by swarm.py; re-read here for providers.
+GEMINI_API_KEY    = os.getenv("GEMINI_API_KEY",    "")
+GROQ_API_KEY      = os.getenv("GROQ_API_KEY",      "")
+# Active brain selection (overridden at runtime by settings.json "brain_provider"
+# / "brain_model"). Falls back to first provider with a configured key.
+BRAIN_PROVIDER    = os.getenv("BRAIN_PROVIDER",    "")   # anthropic|openai|azure|gemini|groq|ollama
+BRAIN_MODEL       = os.getenv("BRAIN_MODEL",       "")   # provider-specific model/deployment name
 
 # --- XTTS-v2 local voice clone (Tier 1 TTS) ---
 # Free, local, no API. Clone any voice from a 6-second WAV reference clip.
