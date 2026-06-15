@@ -12,6 +12,10 @@ changes until the user explicitly approves at the start of the next session via
 apply_suggestions(). The user decides — not the dream cycle.
 
   - SUGGEST by default — no filesystem changes during the dream cycle
+  - IN-PLACE by default — a loose file is foldered into a category subfolder
+    WITHIN its own area (Downloads/photo.jpg -> Downloads/Images/photo.jpg).
+    Files never leave their top-level area. (Past versions relocated everything
+    into one central tree, which over-organized and was painful to undo.)
   - NEVER deletes anything — moves only happen on explicit user approval
   - NEVER touches system dirs, .git, .venv, or Program Files
   - Skips files already in an organized location
@@ -142,7 +146,38 @@ def _default_scan_dirs() -> list[Path]:
 
 
 def _default_target_root() -> Path:
+    # Opt-in central-tree mode only (set DREAM_TARGET_ROOT). The DEFAULT behaviour
+    # is in-place foldering — files stay inside their own scan area.
     return Path.home() / "Documents" / "Albedo-Organized"
+
+
+def _category_subpath(category: str, scan_dir: Path) -> str:
+    """
+    Strip a leading category segment that duplicates the scan area's own name so
+    in-place foldering doesn't produce ugly doubled nesting.
+
+    e.g. a loose .pdf inside 'Documents' has category 'Documents/PDFs'. In-place,
+    the destination would be 'Documents/Documents/PDFs/...'. We strip the leading
+    'Documents' so it becomes 'Documents/PDFs/...'. A .pdf in 'Downloads' keeps the
+    full 'Documents/PDFs' (-> 'Downloads/Documents/PDFs/...'), which reads sensibly.
+    """
+    parts = category.split("/")
+    if parts and parts[0].lower() == scan_dir.name.lower():
+        parts = parts[1:]
+    return "/".join(parts)
+
+
+def _in_place_dest(src: Path, category: str, scan_dir: Path) -> Path:
+    """
+    Compute an IN-PLACE destination: a category subfolder WITHIN the file's own
+    scan area. The file never leaves its top-level area (Downloads stays in
+    Downloads, Documents in Documents). If stripping leaves an empty subpath
+    (file already belongs at the area root), keep it where it is by returning the
+    same parent (caller treats src==dest.parent as a no-op skip).
+    """
+    sub = _category_subpath(category, scan_dir)
+    base = scan_dir / sub if sub else scan_dir
+    return base / src.name
 
 
 # Pending move suggestions live in the project root so the next session can
@@ -199,12 +234,20 @@ def _plan_moves(
     )
     resolved_scan = [p for p in resolved_scan if p.exists() and not _is_protected(p)]
 
+    # Destination mode:
+    #   - DEFAULT (in-place): files are foldered into a category subfolder WITHIN
+    #     their own scan area. Nothing leaves Downloads/Documents/etc.
+    #   - OPT-IN (central tree): if DREAM_TARGET_ROOT env or target_root arg is set,
+    #     fall back to the legacy behaviour of moving everything under one root.
     raw_target = os.environ.get("DREAM_TARGET_ROOT", "")
-    target = Path(raw_target) if raw_target else (
-        Path(target_root) if target_root else _default_target_root()
+    central_target: Optional[Path] = (
+        Path(raw_target) if raw_target
+        else (Path(target_root) if target_root else None)
     )
+    in_place = central_target is None
 
-    _prog(f"Recon pass — scanning {len(resolved_scan)} director(ies)", 0.0)
+    mode_label = "in-place" if in_place else f"central -> {central_target}"
+    _prog(f"Recon pass - scanning {len(resolved_scan)} director(ies) [{mode_label}]", 0.0)
 
     # Collect all files
     all_files: list[Path] = []
@@ -243,10 +286,20 @@ def _plan_moves(
         if cat is None and ai_classify:
             cat = _ai_classify(src) or "Misc"
 
-        # Plan only — do NOT mkdir or move. Note the intended destination dir;
+        # Plan only — do NOT mkdir or move. Note the intended destination;
         # collision-safe naming is resolved at apply time against the live FS.
-        dest_dir = target / cat
-        dest = dest_dir / src.name
+        if in_place:
+            # src.parent IS the scan area (scan is non-recursive via iterdir()).
+            dest = _in_place_dest(src, cat, src.parent)
+            # Already at the right place (no category subpath) — skip, no move.
+            if dest.parent == src.parent:
+                continue
+            # Already inside its own category subfolder — skip defensively.
+            if src.parent == dest.parent and src.parent.name.lower() == cat.split("/")[-1].lower():
+                continue
+        else:
+            dest = (central_target / cat) / src.name
+
         proposed.append(MoveRecord(src, dest, cat))
 
         if i % 20 == 0:
