@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Cache-Control" content="no-store" />
+  <title>ALBEDO // BRAIN</title>
+  <script type="text/javascript" src="/eel.js"></script>
+  <link rel="stylesheet" href="static/css/cyberdeck.css?v=313" />
+  <link rel="stylesheet" href="static/css/panels.css?v=313" />
+</head>
+<body class="popout">
+  <div id="panelRoot"></div>
+  <div id="snapRoot"></div>
+
+  <script src="static/js/panels/brain_panel.js?v=313"></script>
+  <script src="static/js/snap.js?v=313"></script>
+  <script>
+    (function () {
+      function whenReady() {
+        if (typeof eel === "undefined" || !eel.get_brain_config) {
+          return setTimeout(whenReady, 100);
+        }
+        BrainPanel.mount(document.getElementById("panelRoot"));
+        Snap.attach(document.getElementById("snapRoot"));
+      }
+      document.addEventListener("DOMContentLoaded", whenReady);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,264 @@
+/* ============================================================
+   panels.css — Shared styling for the Chat / Brain / Team panels.
+   Used by both the standalone *_window.html pop-outs AND the
+   embedded drawer panes in Mission Control.
+   Cyberdeck aesthetic — mirrors widget.css palette + cyberdeck.css tokens.
+   ============================================================ */
+
+:root {
+  --pp-cyan:        #00d9ff;
+  --pp-cyan-dim:    rgba(0, 217, 255, 0.55);
+  --pp-cyan-faint:  rgba(0, 217, 255, 0.18);
+  --pp-cyan-glow:   rgba(0, 217, 255, 0.30);
+  --pp-bg:          #060e16;
+  --pp-bg-soft:     rgba(6, 14, 22, 0.92);
+  --pp-fg:          #e0f0ff;
+  --pp-fg-muted:    #7aa2c0;
+  --pp-fg-dim:      #5a7a9a;
+  --pp-amber:       #ffae00;
+  --pp-green:       #39ff14;
+  --pp-red:         #ff2a6d;
+  --pp-border:      rgba(0, 217, 255, 0.30);
+}
+
+/* ── Pop-out body baseline ─────────────────────────────────── */
+body.popout {
+  margin: 0;
+  padding: 12px;
+  background:
+    radial-gradient(ellipse at top, rgba(0, 217, 255, 0.06), transparent 60%),
+    #03070b;
+  color: var(--pp-fg);
+  font-family: 'Courier New', monospace;
+  min-height: 100vh;
+  box-sizing: border-box;
+}
+
+/* ── Panel container (works in pop-out OR inside a drawer pane) ── */
+.panel {
+  background: var(--pp-bg-soft);
+  border: 1px solid var(--pp-border);
+  border-radius: 4px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 0 24px var(--pp-cyan-glow);
+}
+
+.panel__title {
+  font-family: 'Orbitron', 'Courier New', monospace;
+  font-size: 0.9rem;
+  color: var(--pp-cyan);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--pp-cyan-faint);
+  padding-bottom: 6px;
+}
+
+.panel__status {
+  font-size: 0.72rem;
+  color: var(--pp-fg-muted);
+  font-style: italic;
+}
+
+.panel__divider {
+  height: 1px;
+  background: var(--pp-cyan-faint);
+  margin: 6px 0;
+}
+
+/* ── Form fields ───────────────────────────────────────────── */
+.panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.panel__label {
+  font-size: 0.7rem;
+  color: var(--pp-cyan);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.panel__input,
+.panel__select {
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--pp-fg);
+  border: 1px solid var(--pp-cyan-faint);
+  border-radius: 2px;
+  padding: 6px 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.82rem;
+  outline: none;
+}
+.panel__input:focus,
+.panel__select:focus {
+  border-color: var(--pp-cyan);
+  box-shadow: 0 0 4px var(--pp-cyan-glow);
+}
+
+.panel__input--multi {
+  resize: vertical;
+  min-height: 60px;
+  line-height: 1.4;
+}
+
+.panel__select--inline {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 0.78rem;
+}
+
+/* ── Radio group ───────────────────────────────────────────── */
+.panel__radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.panel__radio {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--pp-fg);
+  cursor: pointer;
+}
+.panel__radio input { accent-color: var(--pp-cyan); }
+
+/* ── Buttons ───────────────────────────────────────────────── */
+.cmd-btn {
+  background: rgba(0, 217, 255, 0.06);
+  color: var(--pp-cyan);
+  border: 1px solid var(--pp-cyan);
+  padding: 8px 14px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.cmd-btn:hover  { background: rgba(0, 217, 255, 0.16); box-shadow: 0 0 6px var(--pp-cyan-glow); }
+.cmd-btn:disabled { opacity: 0.45; cursor: wait; }
+
+.cmd-btn--accent {
+  background: rgba(57, 255, 20, 0.08);
+  color: var(--pp-green);
+  border-color: var(--pp-green);
+}
+.cmd-btn--accent:hover { background: rgba(57, 255, 20, 0.18); }
+
+.panel__save,
+.panel__run {
+  align-self: flex-end;
+  margin-top: 4px;
+}
+
+/* ── Team roster table ─────────────────────────────────────── */
+.panel__roster {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--pp-cyan-faint);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.panel__roster-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 160px;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 0.75rem;
+  align-items: center;
+  border-bottom: 1px solid rgba(0, 217, 255, 0.08);
+}
+.panel__roster-row:last-child { border-bottom: none; }
+.panel__roster-row--head {
+  background: rgba(0, 217, 255, 0.08);
+  color: var(--pp-cyan);
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+}
+.panel__roster-cell { overflow: hidden; text-overflow: ellipsis; }
+.panel__roster-cell--role { color: var(--pp-amber); font-weight: bold; }
+.panel__roster-cell--tools {
+  color: var(--pp-fg-muted);
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+/* ── Output / pre block (team results) ─────────────────────── */
+.panel__output {
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--pp-cyan-faint);
+  border-radius: 2px;
+  color: var(--pp-fg);
+  font-family: 'Courier New', monospace;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  padding: 10px 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+/* ── Chat feed (panel mode) ────────────────────────────────── */
+.panel__chat-feed {
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid var(--pp-cyan-faint);
+  border-radius: 2px;
+  padding: 8px 10px;
+  min-height: 220px;
+  max-height: 440px;
+  overflow-y: auto;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.panel__chat-line { padding: 2px 0; word-wrap: break-word; }
+.panel__chat-line--user   { color: var(--pp-amber); }
+.panel__chat-line--albedo { color: var(--pp-cyan); }
+.panel__chat-line--system { color: var(--pp-fg-dim); font-style: italic; }
+.panel__chat-line--error  { color: var(--pp-red); }
+
+.panel__chat-input-row {
+  display: flex;
+  gap: 8px;
+}
+.panel__chat-input-row .panel__input { flex: 1; }
+
+/* ── Mode toggle (Agent / Team) ────────────────────────────── */
+.panel__mode { display: flex; gap: 6px; }
+.panel__mode-btn { flex: 1; padding: 6px 8px; font-size: 0.72rem; }
+.panel__mode-btn.is-active {
+  background: rgba(0, 217, 255, 0.22);
+  box-shadow: 0 0 6px var(--pp-cyan-glow);
+}
+
+/* ── Snap toolbar ──────────────────────────────────────────── */
+.snap-bar {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.snap-bar__btn {
+  font-size: 0.68rem;
+  padding: 5px 10px;
+}
+
+/* ── Pop-out button on embedded drawer panes ───────────────── */
+.panel__popout-btn {
+  align-self: flex-end;
+  font-size: 0.68rem;
+  padding: 4px 8px;
+}

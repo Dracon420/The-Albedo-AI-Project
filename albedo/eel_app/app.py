@@ -41,40 +41,157 @@ def _expose_widget_fns() -> None:
     try:
         import eel as _eel
 
-        @_eel.expose
-        def open_widget_window() -> None:
-            """
-            Launch the compact widget overlay in a separate frameless Chrome window.
-            Finds Chrome/Edge on Windows and opens widget.html via --app= mode.
-            """
-            port = _active_port
-            url  = f"http://127.0.0.1:{port}/widget.html"
-
-            chrome_candidates = [
+        def _find_chrome() -> "str | None":
+            for p in (
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                 r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
                 r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
                 r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            ]
-            exe = next((p for p in chrome_candidates if Path(p).exists()), None)
-            if exe:
-                try:
-                    subprocess.Popen([
-                        exe,
-                        f"--app={url}",
-                        "--window-size=380,560",
-                        "--window-position=30,80",
-                        "--disable-extensions",
-                        "--no-first-run",
-                        "--no-default-browser-check",
-                        "--disk-cache-size=1",
-                        "--media-cache-size=1",
-                    ])
-                    print(f"[eel_app] Widget window opened → {url}")
-                except Exception as exc:
-                    print(f"[eel_app] Widget launch failed: {exc}")
-            else:
-                print("[eel_app] Chrome/Edge not found — cannot open widget.")
+            ):
+                if Path(p).exists():
+                    return p
+            return None
+
+        # Per-panel default size + spawn position (x, y, w, h).
+        _PANEL_GEOMETRY = {
+            "widget": (30, 80, 380, 560),
+            "chat":   (40, 60, 520, 720),
+            "brain":  (580, 60, 440, 560),
+            "team":   (580, 60, 560, 720),
+        }
+        _PANEL_PAGES = {
+            "widget": "widget.html",
+            "chat":   "chat_window.html",
+            "brain":  "brain_window.html",
+            "team":   "team_window.html",
+        }
+
+        @_eel.expose
+        def open_panel_window(panel: str = "widget") -> None:
+            """
+            Launch a detachable panel (chat / brain / team / widget) in its own
+            frameless Chrome --app= window. Generalizes the old widget launcher.
+            """
+            panel = (panel or "widget").lower().strip()
+            page = _PANEL_PAGES.get(panel)
+            if page is None:
+                print(f"[eel_app] Unknown panel: {panel!r}")
+                return
+            port = _active_port
+            url  = f"http://127.0.0.1:{port}/{page}"
+            exe  = _find_chrome()
+            if not exe:
+                print("[eel_app] Chrome/Edge not found — cannot open panel.")
+                return
+            x, y, w, h = _PANEL_GEOMETRY.get(panel, _PANEL_GEOMETRY["widget"])
+            try:
+                subprocess.Popen([
+                    exe,
+                    f"--app={url}",
+                    f"--window-size={w},{h}",
+                    f"--window-position={x},{y}",
+                    "--disable-extensions",
+                    "--no-first-run",
+                    "--no-default-browser-check",
+                    "--disk-cache-size=1",
+                    "--media-cache-size=1",
+                ])
+                print(f"[eel_app] Panel '{panel}' window opened -> {url}")
+            except Exception as exc:
+                print(f"[eel_app] Panel '{panel}' launch failed: {exc}")
+
+        @_eel.expose
+        def open_widget_window() -> None:
+            """Back-compat alias — opens the compact widget overlay."""
+            open_panel_window("widget")
+
+        @_eel.expose
+        def snap_windows(preset: str = "left-stack") -> dict:
+            """
+            Arrange Albedo's own windows into a preset layout using win32. Finds
+            windows by their <title> (Chat/Brain/Team/Mission Control), so only
+            open ones are moved; missing panels are skipped.
+
+            Presets: 'left-stack' (Chat left half; Brain top-right; Team
+            bottom-right), 'thirds' (three columns), 'focus-chat' (Chat ~60% left,
+            Brain+Team stacked right).
+            """
+            try:
+                import win32gui, win32api, win32con
+            except Exception as exc:
+                return {"ok": False, "error": f"win32 unavailable: {exc}"}
+
+            # Work area (excludes taskbar) via SPI_GETWORKAREA. win32gui's
+            # SystemParametersInfo doesn't support action 48 in this build, so use
+            # ctypes directly (reliable across pywin32 versions).
+            try:
+                import ctypes
+                from ctypes import wintypes
+                _r = wintypes.RECT()
+                if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(_r), 0):
+                    wx, wy, wr, wb = _r.left, _r.top, _r.right, _r.bottom
+                    W, H = wr - wx, wb - wy
+                else:
+                    raise OSError("SystemParametersInfoW failed")
+            except Exception:
+                wx, wy = 0, 0
+                W = win32api.GetSystemMetrics(0)
+                H = win32api.GetSystemMetrics(1)
+
+            # Title substrings that identify each panel window.
+            title_map = {
+                "chat":   ("ALBEDO // CHAT", "CHAT"),
+                "brain":  ("ALBEDO // BRAIN", "BRAIN"),
+                "team":   ("ALBEDO // TEAM", "TEAM"),
+                "main":   ("MISSION CONTROL",),
+            }
+
+            def _find(substrs):
+                found = []
+                def _cb(hwnd, _):
+                    if not win32gui.IsWindowVisible(hwnd):
+                        return True
+                    t = win32gui.GetWindowText(hwnd) or ""
+                    tu = t.upper()
+                    if any(s.upper() in tu for s in substrs):
+                        found.append(hwnd)
+                    return True
+                win32gui.EnumWindows(_cb, None)
+                return found[0] if found else None
+
+            hwnds = {k: _find(v) for k, v in title_map.items()}
+
+            def _place(hwnd, x, y, w, h):
+                if not hwnd:
+                    return False
+                win32gui.SetWindowPos(hwnd, win32con.HWND_TOP,
+                                      int(x), int(y), int(w), int(h),
+                                      win32con.SWP_SHOWWINDOW)
+                return True
+
+            moved = []
+            if preset == "thirds":
+                cw = W // 3
+                for i, key in enumerate(("chat", "brain", "team")):
+                    if _place(hwnds[key], wx + i * cw, wy, cw, H):
+                        moved.append(key)
+            elif preset == "focus-chat":
+                if _place(hwnds["chat"], wx, wy, int(W * 0.6), H):
+                    moved.append("chat")
+                if _place(hwnds["brain"], wx + int(W * 0.6), wy, int(W * 0.4), H // 2):
+                    moved.append("brain")
+                if _place(hwnds["team"], wx + int(W * 0.6), wy + H // 2, int(W * 0.4), H // 2):
+                    moved.append("team")
+            else:  # left-stack (default)
+                if _place(hwnds["chat"], wx, wy, W // 2, H):
+                    moved.append("chat")
+                if _place(hwnds["brain"], wx + W // 2, wy, W // 2, H // 2):
+                    moved.append("brain")
+                if _place(hwnds["team"], wx + W // 2, wy + H // 2, W // 2, H // 2):
+                    moved.append("team")
+
+            print(f"[eel_app] snap '{preset}' arranged: {moved}")
+            return {"ok": True, "preset": preset, "arranged": moved}
 
         # --- OS-level fullscreen state ---
         _fs_saved = {}   # {"hwnd": int, "style": int, "placement": tuple}
