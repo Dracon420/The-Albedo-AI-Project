@@ -44,6 +44,19 @@ from typing import Any, Callable
 
 _ROOT = Path(__file__).resolve().parent.parent
 
+# Path segments that must never be written to via write_text_file. Mirrors the
+# dream file_organizer's _PROTECTED set so the agent can't clobber system files.
+_PROTECTED_SEGMENTS = {
+    "windows", "program files", "program files (x86)", "programdata",
+    "system32", ".venv", "venv", ".git", "node_modules", "__pycache__",
+}
+
+
+def _is_protected(path: Path) -> bool:
+    """True if any path segment is a protected system location."""
+    parts = {p.lower() for p in path.parts}
+    return bool(parts & _PROTECTED_SEGMENTS)
+
 
 # ---------------------------------------------------------------------------
 # ToolSpec
@@ -363,6 +376,25 @@ def read_text_file(path: str, max_chars: int = 4000) -> str:
         return f"[tool error] read_text_file failed: {exc}"
 
 
+def write_text_file(path: str, content: str) -> str:
+    """Write/overwrite a UTF-8 text file. Destructive — gated by the agent loop's
+    approval modal. Creates parent dirs; refuses protected system paths."""
+    if not path or not path.strip():
+        return "[tool error] write_text_file needs a path."
+    try:
+        p = Path(path.strip()).expanduser()
+        if _is_protected(p):
+            return f"[tool error] Refused — protected system path: {p}"
+        existed = p.exists()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        data = content if isinstance(content, str) else str(content)
+        p.write_text(data, encoding="utf-8")
+        verb = "Overwrote" if existed else "Wrote"
+        return f"{verb} {len(data)} chars to {p}."
+    except Exception as exc:
+        return f"[tool error] write_text_file failed: {exc}"
+
+
 # ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
@@ -492,6 +524,19 @@ _register(ToolSpec(
     destructive=False,
 ))
 
+_register(ToolSpec(
+    name="write_text_file",
+    description="Create or overwrite a UTF-8 text/code file at the given path. "
+                "Destructive — every write requires user approval. Creates parent "
+                "folders as needed; refuses protected system locations.",
+    parameters={"properties": {
+        "path": {"type": "string", "description": "Absolute or ~ file path to write."},
+        "content": {"type": "string", "description": "Full text content to write."}
+    }, "required": ["path", "content"]},
+    fn=write_text_file,
+    destructive=True,
+))
+
 
 # ---------------------------------------------------------------------------
 # Public accessors
@@ -501,9 +546,19 @@ def get_tool(name: str) -> ToolSpec | None:
     return TOOLS.get(name)
 
 
-def get_tool_schemas() -> list[dict]:
-    """Return all tool schemas in provider-neutral form for function-calling."""
-    return [spec.to_schema() for spec in TOOLS.values()]
+def get_tool_schemas(names: "list[str] | None" = None) -> list[dict]:
+    """
+    Return tool schemas in provider-neutral form for function-calling.
+
+    names=None  -> ALL tools (default, back-compat).
+    names=[...] -> only the named tools, in catalog order (specialist subset).
+                   Unknown names are silently ignored.
+    names=[]    -> empty list (a pure-reasoning agent with no tools).
+    """
+    if names is None:
+        return [spec.to_schema() for spec in TOOLS.values()]
+    wanted = set(names)
+    return [spec.to_schema() for n, spec in TOOLS.items() if n in wanted]
 
 
 def run_tool(_tool_name: str, /, _args: dict[str, Any] | None = None, **kwargs: Any) -> str:

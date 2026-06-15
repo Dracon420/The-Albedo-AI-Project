@@ -123,6 +123,7 @@ def run_agent(
     system_prompt: Optional[str] = None,
     provider: Optional[str] = None,
     model: Optional[str] = None,
+    tool_names: Optional[list[str]] = None,
     status_cb: Optional[Callable[[str], None]] = None,
 ) -> dict:
     """
@@ -130,6 +131,11 @@ def run_agent(
         {answer, steps, provider, model, iterations, error}
     `steps` is a list of {type, ...} entries describing what happened
     (tool_call, tool_result, denied, final) for UI/debugging.
+
+    tool_names: restrict the tool catalog this agent sees to just these tools
+    (specialist focus — fewer tokens, faster, less mis-selection). When None,
+    the agent sees ALL tools (backward compatible). An empty list [] means the
+    agent gets NO tools (pure reasoning role, e.g. Orchestrator/Critic).
     Never raises.
     """
     def _status(msg: str) -> None:
@@ -145,7 +151,8 @@ def run_agent(
                 "iterations": 0, "error": "empty message"}
 
     mode = _autonomy_mode()
-    tools = agent_tools.get_tool_schemas()
+    # None -> all tools (back-compat); [] -> no tools; [names] -> just those.
+    tools = agent_tools.get_tool_schemas(tool_names)
 
     # Build initial conversation
     messages: list[dict] = [{"role": "system", "content": system_prompt or _DEFAULT_SYSTEM}]

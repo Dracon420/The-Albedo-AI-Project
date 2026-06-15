@@ -600,6 +600,83 @@ def run_agent_query(text: str, history: list | None = None) -> dict:
 
 
 @_expose
+def run_team_query(goal: str) -> dict:
+    """
+    Run a goal through the SPECIALIST TEAM (Orchestrator plans -> specialists
+    execute sequentially -> Critic reviews). The plan and every tool call are
+    gated through the safety_catch approval modal. Returns
+    {ok, goal, plan, results, critique, revised, error}.
+
+    Background thread + generous timeout — the team runs several agents.
+    """
+    if not goal or not goal.strip():
+        return {"ok": False, "error": "empty goal"}
+
+    set_swarm_state("ALBEDO_CORE", "active")
+    out: dict = {}
+
+    def _run() -> None:
+        try:
+            from albedo.agent_team import run_team
+            res = run_team(goal.strip())
+            out.update(res)
+            out["ok"] = res.get("error") is None
+            set_swarm_state("ALBEDO_CORE",
+                            "standby" if out["ok"] else "error")
+        except Exception as exc:                                    # noqa: BLE001
+            out["ok"] = False
+            out["error"] = f"{type(exc).__name__}: {exc}"
+            set_swarm_state("ALBEDO_CORE", "error")
+
+    t = threading.Thread(target=_run, daemon=True, name="team-query")
+    t.start()
+    t.join(timeout=600)   # team runs multiple agents — generous cap
+
+    if t.is_alive():
+        set_swarm_state("ALBEDO_CORE", "error")
+        return {"ok": False, "error": "team timeout (600 s)"}
+    return out
+
+
+@_expose
+def get_team_roles() -> dict:
+    """Return the team roster + each role's tools + current provider mapping.
+    Powers a future TEAM tab in Mission Control."""
+    try:
+        from albedo import agent_team, providers
+        roles = {
+            name: {
+                "tools": spec.tool_names,
+                "provider": (_read_settings_dict().get("agent_roles", {}).get(name)
+                             or spec.default_provider or "(global)"),
+            }
+            for name, spec in agent_team.ROLES.items()
+        }
+        return {"ok": True, "roles": roles,
+                "available": providers.available_providers()}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def set_team_roles(mapping: dict) -> dict:
+    """Persist a {role: provider} map to settings.json agent_roles (TEAM tab)."""
+    try:
+        from albedo import agent_team
+        if not isinstance(mapping, dict):
+            return {"ok": False, "error": "mapping must be an object"}
+        valid = set(agent_team.ROLES.keys())
+        clean = {k: str(v).lower().strip() for k, v in mapping.items()
+                 if k in valid and str(v).strip()}
+        data = _read_settings_dict()
+        data["agent_roles"] = {**data.get("agent_roles", {}), **clean}
+        _write_settings_dict(data)
+        return {"ok": True, "agent_roles": data["agent_roles"]}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
 def get_brain_config() -> dict:
     """Return current brain provider/model selection + which providers have keys.
     Powers the BRAIN tab in Mission Control."""
