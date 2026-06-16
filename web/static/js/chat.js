@@ -39,9 +39,14 @@ const Chat = (() => {
     _sendBtn.textContent = "...";
     appendLine("user", "> " + raw);
     try {
-      const r = await eel.send_query(raw, false)();
+      // Auto-router path: Albedo decides direct-answer vs. spin-up-team.
+      // Live team/RAG activity shows in the Team + Brain visualization windows.
+      const r = await eel.send_chat(raw, null)();
       if (r && r.ok) {
-        appendLine("albedo", _personaName + "  " + (r.reply || "(no response)"));
+        if (r.mode === "team") {
+          appendLine("system", "[TEAM activated — see Team window for live progress]");
+        }
+        appendLine("albedo", _personaName + "  " + (r.answer || "(no response)"));
       } else {
         appendLine("error", "[SYS] " + (r && r.error ? r.error : "no response"));
       }
@@ -224,9 +229,12 @@ const Chat = (() => {
           _sendBtn.disabled = true;
           _sendBtn.textContent = "...";
           try {
-            const qr = await eel.send_query(r.text, false)();
+            const qr = await eel.send_chat(r.text, null)();
             if (qr && qr.ok) {
-              appendLine("albedo", _personaName + "  " + (qr.reply || "(no response)"));
+              if (qr.mode === "team") {
+                appendLine("system", "[TEAM activated — see Team window]");
+              }
+              appendLine("albedo", _personaName + "  " + (qr.answer || "(no response)"));
             } else {
               appendLine("error", "[SYS] " + (qr && qr.error ? qr.error : "no response"));
             }

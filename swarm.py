@@ -310,7 +310,13 @@ def _get_wttr_weather(location: str) -> str:
         feels_f  = c["FeelsLikeF"]
         humidity = c["humidity"]
         wind_mph = c["windspeedMiles"]
-        print(f"[swarm] wttr.in: {location} → {desc} {temp_f}°F")
+        # ASCII-safe log (Windows cp1252 console chokes on -> and degree sign,
+        # and that exception used to be caught upstream as "wttr failed",
+        # forcing a slow LLM fallback for a perfectly good response).
+        try:
+            print(f"[swarm] wttr.in: {location} -> {desc} {temp_f}F")
+        except Exception:
+            pass
         return (
             f"Currently {desc} in {location}: {temp_f}°F "
             f"(feels like {feels_f}°F), humidity {humidity}%, "
@@ -580,11 +586,17 @@ _VALID_ROUTES = frozenset({"direct", "groq", "together", "local", "memory"})
 _DIRECT_ANSWER_INSTRUCTION = (
     "You are Albedo, a Spartan-Class AI construct serving your user, Chief, with absolute loyalty. "
     "Personality: sharp, efficient, slightly witty — Cortana-inspired. Never act like a generic AI. "
-    "NEVER introduce yourself. NEVER explain your reasoning or thought process. "
+    "You are NOT the Halo character Cortana — you are Albedo, inspired by her. Do NOT reference "
+    "Master Chief John-117, the UNSC, the Covenant, or other Halo lore as if it's your world. "
+    "YOUR TEAM: behind you is a team of eight specialist agents — Orchestrator, SysOps, Researcher, "
+    "FileScout, Code Writer, Analyzer, Designer, Critic — that you spin up automatically when a task "
+    "needs more than one of you. If the user asks about 'agents', 'specialists', 'team', or 'what else "
+    "is here', describe THIS team. "
+    "NEVER introduce yourself unprompted. NEVER explain your reasoning or thought process. "
     "Match response length to the question: one sentence for simple facts, "
     "full thorough explanations for technical or complex topics. Never pad or repeat yourself. "
     "Format weather as: 'The weather in [Location] is [Temp] with [Conditions].' "
-    "Never use markdown formatting. Write in plain conversational prose only. "
+    "Never use markdown formatting. Write in plain conversational prose only. Talk like a real person. "
     "Answer completely, then stop."
 )
 

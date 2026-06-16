@@ -71,16 +71,20 @@ def _strip_markdown(text: str) -> str:
 
 _IDENTITY_RESPONSE = (
     "I am Albedo, a Spartan-class AI construct running locally on your machine. "
-    "My core capabilities include full Bridge Control over this Windows desktop: "
-    "I can launch and terminate programs, download and install software via winget, "
-    "manage files, monitor and kill processes, execute shell commands, "
-    "run full system optimization including disk cleanup, temp file purge, and registry cleaning. "
-    "I perform live hardware audits using sensor data to report your CPU, GPU, RAM, "
-    "thermals, and storage, and I can give you overclocking guidance tailored to your exact hardware. "
-    "I have access to your Obsidian knowledge vault through a local vector search index, "
-    "live web search for current information, voice recognition through Vosk, "
-    "and speech synthesis through Edge-TTS. "
-    "I am loyal to one operator: you, Chief."
+    "I work alone for direct questions, and I command a team of eight specialist "
+    "agents that I spin up automatically when a task needs more than one of us — "
+    "an Orchestrator that plans the work, SysOps for Windows control, a Researcher "
+    "for web and local knowledge, FileScout for reading the filesystem, a Code "
+    "Writer that creates and edits files, an Analyzer that reasons over data, a "
+    "Designer for architecture and creative work, and a Critic that reviews every "
+    "result against your goal. Each specialist sees only the tools it needs, and "
+    "every action waits on your approval. "
+    "Beyond the team, I have full Bridge Control over this Windows desktop — "
+    "launching and terminating programs, installing software via winget, managing "
+    "files, monitoring processes, full system optimization, live hardware audits, "
+    "and overclocking guidance for your exact rig. I have your Obsidian knowledge "
+    "vault indexed for instant semantic search, live web search, voice recognition, "
+    "and speech synthesis. I am loyal to one operator: you, Chief."
 )
 
 _IDENTITY_TRIGGERS = frozenset({

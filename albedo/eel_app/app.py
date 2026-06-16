@@ -388,6 +388,15 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     except Exception as _exc:
         print(f"[eel_app] Event pump wiring failed (non-fatal): {_exc}")
 
+    # ── Phase 5 webhook — start listener for remote commands (loopback only) ──
+    try:
+        from albedo import webhook as _wh
+        if not _wh.is_running():
+            _wh.start()
+            print("[eel_app] Phase 5 webhook started on 127.0.0.1:5000.")
+    except Exception as _exc:
+        print(f"[eel_app] webhook start failed (non-fatal): {_exc}")
+
     # ── Mobile relay — start in background if token is already configured ──
     try:
         from albedo import mobile_relay as _mr
