@@ -61,7 +61,8 @@ ROLES: dict[str, RoleSpec] = {
         "to exactly one specialist by name. Available specialists: SysOps (Windows "
         "system control), Researcher (web + local knowledge), FileScout (read files/"
         "dirs), Code Writer (write code/text files), Analyzer (reason over data), "
-        "Designer (UI/architecture design). Respond ONLY with JSON: "
+        "Designer (UI/architecture design), Math (exact math/units via Wolfram), "
+        "FactChecker (verify claims via web + RAG). Respond ONLY with JSON: "
         '{"tasks": [{"role": "SpecialistName", "task": "what to do"}]}. '
         "Keep it minimal — do not invent work. No prose.",
         tool_names=[],
@@ -79,10 +80,30 @@ ROLES: dict[str, RoleSpec] = {
     ),
     "Researcher": RoleSpec(
         "Researcher",
-        "You gather and synthesize information. Use web search for current facts and "
-        "local RAG search for the user's own knowledge. Cite what you found. Answer "
-        "concisely with the facts the task needs.",
-        tool_names=["search_web", "rag_search"],
+        "You gather and synthesize information. Use web search for current facts, "
+        "local RAG search for the user's own knowledge, and recall notes from working "
+        "memory if relevant. Cite what you found. Answer concisely with the facts the "
+        "task needs.",
+        tool_names=["search_web", "rag_search", "recall_notes"],
+        default_provider="groq",
+    ),
+    "Math": RoleSpec(
+        "Math",
+        "You handle math, unit conversions, physics, and any quantitative computation. "
+        "ALWAYS use query_wolfram for exact answers — never estimate numbers. If Wolfram "
+        "returns nothing, say so plainly; do not invent values. Give the result clearly "
+        "with units.",
+        tool_names=["query_wolfram"],
+        default_provider="groq",
+    ),
+    "FactChecker": RoleSpec(
+        "FactChecker",
+        "You verify claims for accuracy. Given a statement or set of claims, check each "
+        "against the web (search_web) and the user's local knowledge (rag_search). "
+        "Report per claim: TRUE / FALSE / UNVERIFIED, with the source you used. Do not "
+        "judge whether a goal is complete — that is the Critic's job; you only judge "
+        "whether stated facts are accurate.",
+        tool_names=["search_web", "rag_search", "query_wolfram"],
         default_provider="groq",
     ),
     "FileScout": RoleSpec(
@@ -98,16 +119,20 @@ ROLES: dict[str, RoleSpec] = {
         "You write and modify code and text files. Read existing files first when "
         "editing. Use write_text_file to save your work (every write is approved by "
         "the user). Produce complete, correct, idiomatic code. Briefly state what "
-        "you wrote and where.",
-        tool_names=["read_text_file", "list_directory", "write_text_file"],
+        "you wrote and where. Use recall_notes to check for past decisions or "
+        "conventions the team has saved.",
+        tool_names=["read_text_file", "list_directory", "write_text_file",
+                    "recall_notes", "remember"],
         default_provider="",   # prefer a strong coding model if globally set
     ),
     "Analyzer": RoleSpec(
         "Analyzer",
         "You analyze data, files, and system state and produce clear findings. Use "
-        "your tools to gather the inputs you need, then reason carefully and report "
-        "conclusions with the evidence behind them.",
-        tool_names=["rag_search", "read_text_file", "get_system_telemetry"],
+        "query_wolfram for any exact math/units, your other tools to gather inputs, "
+        "then reason carefully and report conclusions with the evidence. Use "
+        "remember to save insights worth keeping for future runs.",
+        tool_names=["rag_search", "read_text_file", "get_system_telemetry",
+                    "query_wolfram", "remember", "recall_notes"],
         default_provider="",
     ),
     "Designer": RoleSpec(

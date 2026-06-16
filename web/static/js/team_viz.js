@@ -16,6 +16,7 @@
   const ROLES = [
     "Orchestrator", "SysOps", "Researcher", "FileScout",
     "Code Writer", "Analyzer", "Designer", "Critic",
+    "Math", "FactChecker",
   ];
 
   function _el(tag, cls, txt) {

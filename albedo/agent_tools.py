@@ -376,6 +376,55 @@ def read_text_file(path: str, max_chars: int = 4000) -> str:
         return f"[tool error] read_text_file failed: {exc}"
 
 
+def query_wolfram(expression: str) -> str:
+    """Exact math/units/computation answer via Wolfram Alpha."""
+    if not expression or not expression.strip():
+        return "[tool error] query_wolfram needs an expression."
+    try:
+        from albedo.web.wolfram import wolfram_short_answer, wolfram_full
+        short = wolfram_short_answer(expression.strip())
+        if short:
+            return short
+        full = wolfram_full(expression.strip())
+        if full:
+            return full
+        return "Wolfram has no result for that query."
+    except Exception as exc:
+        return f"[tool error] query_wolfram failed: {exc}"
+
+
+def remember(text: str, tags: str = "") -> str:
+    """Save a short note to working memory so future runs can recall it."""
+    if not text or not text.strip():
+        return "[tool error] remember needs text."
+    try:
+        from albedo import scratchpad
+        tag_list = [t.strip() for t in (tags or "").split(",") if t.strip()]
+        entry = scratchpad.note(text.strip(), tags=tag_list, source="agent")
+        return f"Noted (id={entry['id']}, tags={','.join(entry['tags']) or '-'})."
+    except Exception as exc:
+        return f"[tool error] remember failed: {exc}"
+
+
+def recall_notes(query: str = "", tag: str = "", limit: int = 5) -> str:
+    """Recall recent notes from working memory by substring or tag."""
+    try:
+        from albedo import scratchpad
+        notes = scratchpad.recall(query=query or None, tag=tag or None,
+                                  limit=max(1, min(int(limit or 5), 20)))
+        if not notes:
+            return "No matching notes."
+        lines = []
+        from datetime import datetime
+        for n in notes:
+            when = datetime.fromtimestamp(n.get("ts", 0)).strftime("%Y-%m-%d %H:%M")
+            tg = ",".join(n.get("tags") or []) or "-"
+            lines.append(f"[{when}] ({tg}) {n.get('text','')}")
+        return "\n".join(lines)
+    except Exception as exc:
+        return f"[tool error] recall_notes failed: {exc}"
+
+
 def write_text_file(path: str, content: str) -> str:
     """Write/overwrite a UTF-8 text file. Destructive — gated by the agent loop's
     approval modal. Creates parent dirs; refuses protected system paths."""
@@ -521,6 +570,45 @@ _register(ToolSpec(
         "max_chars": {"type": "integer", "description": "Max chars to return (default 4000)."}
     }, "required": ["path"]},
     fn=read_text_file,
+    destructive=False,
+))
+
+_register(ToolSpec(
+    name="query_wolfram",
+    description="Get an EXACT answer from Wolfram Alpha for math, units, physics, "
+                "conversions, or computation (e.g. 'integral of sin(x)^2', '5 mi in km', "
+                "'speed of light in mph'). Use this for anything quantitative — "
+                "Wolfram is exact, LLMs are not.",
+    parameters={"properties": {
+        "expression": {"type": "string",
+                       "description": "Natural-language math/units/computation query."}
+    }, "required": ["expression"]},
+    fn=query_wolfram,
+    destructive=False,
+))
+
+_register(ToolSpec(
+    name="remember",
+    description="Save a short note to working memory so YOU (or other agents) can "
+                "recall it later — persistent across runs and sessions. Use for facts "
+                "the user told you, decisions made, or context worth keeping.",
+    parameters={"properties": {
+        "text": {"type": "string", "description": "What to remember (one short note)."},
+        "tags": {"type": "string", "description": "Optional comma-separated tags."}
+    }, "required": ["text"]},
+    fn=remember,
+    destructive=False,
+))
+
+_register(ToolSpec(
+    name="recall_notes",
+    description="Recall notes from working memory. Filter by substring or tag.",
+    parameters={"properties": {
+        "query": {"type": "string", "description": "Substring to match (optional)."},
+        "tag":   {"type": "string", "description": "Exact tag to filter by (optional)."},
+        "limit": {"type": "integer", "description": "Max notes to return (default 5)."}
+    }, "required": []},
+    fn=recall_notes,
     destructive=False,
 ))
 
