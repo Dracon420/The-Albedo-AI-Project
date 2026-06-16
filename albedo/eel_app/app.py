@@ -371,6 +371,23 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     # Register widget + mode functions
     _expose_widget_fns()
 
+    # ── Event-bus pump — fan backend events out to all open Eel windows so the
+    #    Brain + Team visualizations can subscribe via _albedo_event(evt). ──
+    try:
+        import eel as _eel_pump
+        from albedo import event_bus as _bus
+
+        def _pump_to_js(evt: dict) -> None:
+            try:
+                _eel_pump._albedo_event(evt)()  # noqa: SLF001
+            except Exception:
+                pass
+
+        _bus.subscribe(_pump_to_js)
+        print("[eel_app] Event-bus pump wired (Brain/Team viz subscribers).")
+    except Exception as _exc:
+        print(f"[eel_app] Event pump wiring failed (non-fatal): {_exc}")
+
     # ── Mobile relay — start in background if token is already configured ──
     try:
         from albedo import mobile_relay as _mr

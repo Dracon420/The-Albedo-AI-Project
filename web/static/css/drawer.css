@@ -293,3 +293,92 @@
   opacity: 1;
   pointer-events: auto;
 }
+
+/* ============================================================
+   Window launcher rail (Chat / Brain / Team pop-out buttons)
+   Sits at the top of the drawer, above the tabs.
+   ============================================================ */
+.drawer__windowbar {
+  position: sticky;
+  top: 65px;
+  z-index: 3;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  padding: 10px 18px 4px;
+  background: var(--c-bg-panel-2);
+  border-bottom: 1px solid var(--c-border);
+}
+.drawer__winbtn {
+  padding: 10px 6px;
+  font-size: 14px;
+  letter-spacing: 0.10em;
+  font-weight: 700;
+  border: 1px solid var(--c-cyan-dim);
+  background: rgba(0, 217, 255, 0.05);
+  color: var(--c-cyan);
+  border-radius: 4px;
+  cursor: pointer;
+  text-shadow: var(--glow-cyan);
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.drawer__winbtn:hover {
+  background: rgba(0, 217, 255, 0.18);
+  box-shadow: 0 0 10px rgba(0, 217, 255, 0.35);
+}
+
+/* When the window-launcher rail is present, push the tab strip down so it
+   doesn't sit on top of it. (The rail is the new sticky element below head.) */
+.drawer__windowbar ~ .drawer__tabs {
+  top: 130px;
+}
+
+/* ============================================================
+   Dockable / pinned drawer
+   Add class .is-pinned on <body> (toggled by drawer.js pin button) to keep
+   the drawer permanently visible as a right-side sidebar.
+   ============================================================ */
+body.is-pinned .drawer {
+  transform: translateX(0);
+  box-shadow: none;
+  border-left: 1px solid var(--c-cyan-dim);
+}
+body.is-pinned .main,
+body.is-pinned .topbar,
+body.is-pinned .chat-panel {
+  /* push core layout left so the pinned drawer doesn't overlap it */
+  padding-right: var(--drawer-w);
+  transition: padding-right 0.25s ease;
+}
+body.is-pinned .drawer__scrim { display: none !important; }
+body.is-pinned .drawer__close { display: none; }
+
+.drawer__pinbtn {
+  background: transparent;
+  color: var(--c-cyan);
+  border: 1px solid var(--c-cyan-dim);
+  width: 42px; height: 42px;
+  border-radius: 4px;
+  font-size: 22px;
+  cursor: pointer;
+  text-shadow: var(--glow-cyan);
+  margin-right: 6px;
+}
+.drawer__pinbtn:hover { background: var(--c-cyan); color: #000; }
+body.is-pinned .drawer__pinbtn { background: var(--c-cyan); color: #000; }
+
+/* ============================================================
+   Bigger touch targets across drawer controls
+   ============================================================ */
+.drawer__action {
+  min-height: 44px;
+  padding: 12px 16px !important;
+  font-size: 15px;
+}
+.setting__select,
+.setting__input {
+  min-height: 38px;
+  font-size: 15px;
+}
+.setting__label { font-size: 14px; }
+.drawer__section { padding: 22px 18px; }

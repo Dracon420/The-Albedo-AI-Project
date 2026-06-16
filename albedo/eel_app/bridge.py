@@ -600,6 +600,133 @@ def run_agent_query(text: str, history: list | None = None) -> dict:
 
 
 @_expose
+def send_chat(text: str, history: list | None = None) -> dict:
+    """
+    User-facing chat entry point. Albedo decides automatically whether to answer
+    directly (single agent) or spin up the specialist team. The Brain + Team
+    visualizations pick up live events via the event bus. Returns
+    {ok, mode, reason, answer, error} — `mode` is "direct" or "team".
+    """
+    if not text or not text.strip():
+        return {"ok": False, "error": "empty message"}
+
+    set_swarm_state("ALBEDO_CORE", "active")
+    out: dict = {}
+
+    def _run() -> None:
+        try:
+            from albedo.agent_team import classify_and_run
+            res = classify_and_run(text.strip(), history=history)
+            mode = res.get("mode", "direct")
+            inner = res.get("result", {}) or {}
+            answer = inner.get("answer", "")
+            if not answer and mode == "team":
+                # Synthesize a one-line summary from team results when present
+                rs = inner.get("results", []) or []
+                if rs:
+                    answer = "\n".join(f"[{r['role']}] {(r.get('answer') or '').strip()}"
+                                       for r in rs if r.get("answer"))
+            out["ok"]     = inner.get("error") is None
+            out["mode"]   = mode
+            out["reason"] = res.get("reason", "")
+            out["answer"] = answer
+            out["error"]  = inner.get("error")
+            set_swarm_state("ALBEDO_CORE",
+                            "standby" if out["ok"] else "error")
+        except Exception as exc:                                    # noqa: BLE001
+            out["ok"] = False
+            out["error"] = f"{type(exc).__name__}: {exc}"
+            set_swarm_state("ALBEDO_CORE", "error")
+
+    t = threading.Thread(target=_run, daemon=True, name="chat-router")
+    t.start()
+    t.join(timeout=600)
+    if t.is_alive():
+        set_swarm_state("ALBEDO_CORE", "error")
+        return {"ok": False, "error": "chat timeout (600 s)"}
+    return out
+
+
+@_expose
+def get_event_history(limit: int = 200) -> dict:
+    """Return recent events from the event bus (for windows that open mid-run)."""
+    try:
+        from albedo import event_bus
+        return {"ok": True, "events": event_bus.history(limit=int(limit or 200))}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+# --- Obsidian vault graph (for the Brain visualization) -----------------------
+
+_WIKILINK_RE = None
+_vault_graph_cache: dict | None = None
+
+
+@_expose
+def get_vault_graph(refresh: bool = False) -> dict:
+    """
+    Walk OBSIDIAN_VAULT_PATH and return a graph of notes + wikilinks for the
+    Brain viz. Cached in memory; pass refresh=True to rebuild.
+    Returns {ok, nodes:[{id,title,path}], edges:[{src,dst}], count}.
+    """
+    global _WIKILINK_RE, _vault_graph_cache
+    if _vault_graph_cache is not None and not refresh:
+        return _vault_graph_cache
+    try:
+        import os as _os, re as _re
+        from pathlib import Path as _Path
+        if _WIKILINK_RE is None:
+            _WIKILINK_RE = _re.compile(r"\[\[([^\]\|#]+)(?:[#\|][^\]]*)?\]\]")
+        vault = _os.environ.get("OBSIDIAN_VAULT_PATH", "").strip()
+        if not vault:
+            return {"ok": False, "error": "OBSIDIAN_VAULT_PATH not set",
+                    "nodes": [], "edges": []}
+        root = _Path(vault)
+        if not root.exists():
+            return {"ok": False, "error": f"vault not found: {vault}",
+                    "nodes": [], "edges": []}
+
+        # Build node table keyed by lowercase title (Obsidian wikilinks are
+        # title-based; multiple files with the same stem collide — first wins).
+        nodes: dict[str, dict] = {}
+        for md in root.rglob("*.md"):
+            try:
+                rel = str(md.relative_to(root)).replace("\\", "/")
+                title = md.stem
+                key = title.lower()
+                if key not in nodes:
+                    nodes[key] = {"id": key, "title": title, "path": rel}
+            except Exception:
+                continue
+        # Edges: parse [[wikilinks]] -> existing nodes only
+        edges: list[dict] = []
+        for md in root.rglob("*.md"):
+            try:
+                src_key = md.stem.lower()
+                if src_key not in nodes:
+                    continue
+                txt = md.read_text(encoding="utf-8", errors="ignore")
+                for m in _WIKILINK_RE.finditer(txt):
+                    dst_key = m.group(1).strip().lower()
+                    if dst_key in nodes and dst_key != src_key:
+                        edges.append({"src": src_key, "dst": dst_key})
+            except Exception:
+                continue
+
+        _vault_graph_cache = {
+            "ok": True,
+            "nodes": list(nodes.values()),
+            "edges": edges,
+            "count": len(nodes),
+        }
+        return _vault_graph_cache
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}",
+                "nodes": [], "edges": []}
+
+
+@_expose
 def run_team_query(goal: str) -> dict:
     """
     Run a goal through the SPECIALIST TEAM (Orchestrator plans -> specialists

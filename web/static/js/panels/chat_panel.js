@@ -1,14 +1,13 @@
 /**
- * chat_panel.js — CHAT surface: text in, agent or team response out.
+ * chat_panel.js — CHAT surface: you talk, Albedo decides automatically whether
+ * to answer directly or spin up the specialist team (router in agent_team.py).
+ * Live team/RAG activity shows up in the Brain + Team visualization windows.
  *
  * Host-agnostic: ChatPanel.mount(rootEl) renders into any container.
- * Lightweight by design — the main Mission Control chat (chat.js) keeps its
- * voice/MIC/wake-word features; this panel is the focused text-driven entry
- * point that can route to the single-agent loop OR the multi-agent team.
  *
  * Backend:
- *   run_agent_query(text)  -> {ok, answer, steps, error}
- *   run_team_query(goal)   -> {ok, plan, results, critique, error}
+ *   send_chat(text, history)  -> {ok, mode, reason, answer, error}
+ *     mode = "direct" | "team"
  */
 (function () {
   "use strict";
@@ -27,25 +26,6 @@
 
     root.appendChild(_el("div", "panel__title", "▶ CHAT"));
 
-    // Mode toggle: Agent (single) vs Team (multi)
-    const modeWrap = _el("div", "panel__mode");
-    const agentBtn = _el("button", "cmd-btn panel__mode-btn is-active", "AGENT");
-    const teamBtn  = _el("button", "cmd-btn panel__mode-btn", "TEAM");
-    modeWrap.appendChild(agentBtn);
-    modeWrap.appendChild(teamBtn);
-    root.appendChild(modeWrap);
-    let mode = "agent";
-    agentBtn.addEventListener("click", () => {
-      mode = "agent";
-      agentBtn.classList.add("is-active");
-      teamBtn.classList.remove("is-active");
-    });
-    teamBtn.addEventListener("click", () => {
-      mode = "team";
-      teamBtn.classList.add("is-active");
-      agentBtn.classList.remove("is-active");
-    });
-
     // Feed
     const feed = _el("div", "panel__chat-feed");
     root.appendChild(feed);
@@ -55,13 +35,25 @@
       feed.appendChild(line);
       feed.scrollTop = feed.scrollHeight;
     }
-    append("system", "Ready. AGENT = one tool-using agent; TEAM = the 8-specialist team.");
+    append("system", "Ready. Just talk — Albedo will route to a direct answer or the team automatically.");
+
+    // History (last N exchanges sent back as context)
+    const history = [];
+
+    // Subscribe to router decisions so the chat shows when team kicks in
+    if (window.EventBus) {
+      EventBus.on("router.decision", (e) => {
+        if (e.mode === "team") {
+          append("system", "[TEAM activated — live progress in Team window]");
+        }
+      });
+    }
 
     // Input row
     const row = _el("div", "panel__chat-input-row");
     const input = _el("input", "panel__input");
     input.type = "text";
-    input.placeholder = "Type a message or a goal…";
+    input.placeholder = "Say anything…";
     const sendBtn = _el("button", "cmd-btn cmd-btn--accent", "SEND");
     row.appendChild(input);
     row.appendChild(sendBtn);
@@ -74,26 +66,13 @@
       append("user", "> " + text);
       sendBtn.disabled = true;
       try {
-        if (mode === "agent") {
-          const r = await eel.run_agent_query(text)();
-          if (!r || !r.ok) {
-            append("error", "[ERR] " + (r && r.error || "no response"));
-          } else {
-            append("albedo", r.answer || "(no answer)");
-          }
+        const r = await eel.send_chat(text, history.slice(-10))();
+        if (!r || !r.ok) {
+          append("error", "[ERR] " + (r && r.error || "no response"));
         } else {
-          append("system", "[TEAM] orchestrating… (you'll be asked to approve the plan)");
-          const r = await eel.run_team_query(text)();
-          if (!r || !r.ok) {
-            append("error", "[ERR] " + (r && r.error || "no response"));
-          } else {
-            (r.results || []).forEach((res) => {
-              append("albedo", `[${res.role}] ${(res.answer || "").trim()}`);
-            });
-            const c = r.critique || {};
-            append("system",
-              `[CRITIC] ${c.complete ? "complete" : "incomplete"} — ${c.summary || ""}`);
-          }
+          append("albedo", r.answer || "(no answer)");
+          history.push({ role: "user", content: text });
+          history.push({ role: "assistant", content: r.answer || "" });
         }
       } catch (e) {
         append("error", "[EXC] " + e);

@@ -204,6 +204,27 @@ def search_memory(query: str, n_results: int = 3) -> list[str]:
             include=["documents", "metadatas"],
         )
         chunks = results.get("documents", [[]])[0]
+        # Emit a rag.hit event so the Brain visualization can light up the
+        # matched notes ("synapse firing"). Best-effort — bus is optional.
+        try:
+            metas = results.get("metadatas", [[]])[0] or []
+            notes = []
+            seen = set()
+            for m in metas:
+                if not isinstance(m, dict):
+                    continue
+                p = str(m.get("path") or m.get("source") or "")
+                t = str(m.get("title") or m.get("filename") or
+                        (p.rsplit("/", 1)[-1].rsplit("\\", 1)[-1] if p else ""))
+                key = p or t
+                if key and key not in seen:
+                    seen.add(key)
+                    notes.append({"title": t, "path": p})
+            if notes:
+                from albedo import event_bus
+                event_bus.publish("rag.hit", query=query, notes=notes)
+        except Exception:
+            pass
         return [c for c in chunks if c]
     except Exception as exc:
         print(f"[memory] Search error: {exc}")

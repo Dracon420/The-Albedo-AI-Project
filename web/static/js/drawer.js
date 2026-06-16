@@ -139,6 +139,26 @@ const Drawer = (() => {
     _closeBtn .addEventListener("click", close);
     _scrim    .addEventListener("click", close);
 
+    // Pin / unpin — turns the drawer into a permanent right-side sidebar
+    // (toggled via body.is-pinned in drawer.css). State persists across reloads.
+    const _pinBtn = document.getElementById("drawerPinBtn");
+    if (_pinBtn) {
+      function _applyPin(pinned) {
+        document.body.classList.toggle("is-pinned", !!pinned);
+        _pinBtn.setAttribute("aria-pressed", pinned ? "true" : "false");
+        _pinBtn.title = pinned ? "Unpin drawer" : "Pin / unpin as right-side sidebar";
+        if (pinned) open();  // make sure it's visible when pinned
+      }
+      let _pinned = false;
+      try { _pinned = localStorage.getItem("albedo-drawer-pinned") === "1"; } catch (_) {}
+      _applyPin(_pinned);
+      _pinBtn.addEventListener("click", () => {
+        _pinned = !_pinned;
+        try { localStorage.setItem("albedo-drawer-pinned", _pinned ? "1" : "0"); } catch (_) {}
+        _applyPin(_pinned);
+      });
+    }
+
     // Tab switcher
     document.querySelectorAll(".drawer__tab").forEach((t) => {
       t.addEventListener("click", () => _switchTab(t.dataset.tab));

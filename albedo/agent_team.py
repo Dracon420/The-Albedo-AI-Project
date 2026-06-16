@@ -275,6 +275,7 @@ def _run_tasks(tasks: list[dict], status) -> list[dict]:
             tool_names=spec.tool_names,
             provider=_role_provider(role),
             status_cb=status,
+            role=role,
         )
         results.append({
             "role": role, "task": task,
@@ -284,6 +285,78 @@ def _run_tasks(tasks: list[dict], status) -> list[dict]:
             "error": res.get("error"),
         })
     return results
+
+
+# ---------------------------------------------------------------------------
+# Event-bus emit helper (best-effort)
+# ---------------------------------------------------------------------------
+
+def _emit(etype: str, **payload) -> None:
+    try:
+        from albedo import event_bus
+        event_bus.publish(etype, **payload)
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Auto-routing: decide if a chat message needs the full team or a direct answer
+# ---------------------------------------------------------------------------
+
+_ROUTER_PROMPT = (
+    "You decide if a user message needs a multi-step specialist TEAM or a DIRECT "
+    "single-agent answer. Reply ONLY with JSON: "
+    '{"mode":"direct"|"team","reason":"<one short sentence>"}. '
+    "Use 'team' for multi-step work, multi-tool work, or anything requiring more "
+    "than one specialist (e.g. system audit + cleanup, research + write file). "
+    "Use 'direct' for simple Q&A, single tool calls, greetings, definitions, "
+    "single-system queries."
+)
+
+
+def classify_and_run(message: str, *, status_cb=None, history=None) -> dict:
+    """
+    The 'just talk to Albedo' entry point. Quick classifier decides:
+      mode='direct' -> agent.run_agent (single agent, full tool catalog)
+      mode='team'   -> run_team        (the 8-specialist team, approved plan)
+    Returns {mode, reason, result} where result is the underlying call's dict.
+    Never raises.
+    """
+    if not message or not message.strip():
+        return {"mode": "direct", "reason": "empty",
+                "result": {"answer": "", "error": "empty message"}}
+
+    def _status(msg):
+        if status_cb:
+            try: status_cb(msg)
+            except Exception: pass
+        print(f"[router] {msg}")
+
+    # 1. Classify with the Orchestrator's brain (no tools, cheap)
+    _status("classifying message…")
+    res = agent.run_agent(
+        message,
+        system_prompt=_ROUTER_PROMPT,
+        tool_names=[],
+        provider=_role_provider("Orchestrator"),
+        role="Router",
+    )
+    data = _extract_json(res.get("answer", "")) or {}
+    mode = str(data.get("mode", "direct")).lower().strip()
+    if mode not in ("direct", "team"):
+        mode = "direct"
+    reason = str(data.get("reason", ""))[:160]
+    _status(f"route -> {mode} ({reason})")
+    _emit("router.decision", mode=mode, reason=reason, message=message[:200])
+
+    # 2. Run the chosen path
+    if mode == "team":
+        team_res = run_team(message, status_cb=status_cb)
+        return {"mode": "team", "reason": reason, "result": team_res}
+    else:
+        agent_res = agent.run_agent(message, status_cb=status_cb, history=history,
+                                    role="Albedo")
+        return {"mode": "direct", "reason": reason, "result": agent_res}
 
 
 # ---------------------------------------------------------------------------
@@ -317,18 +390,22 @@ def run_team(
         return {"goal": "", "plan": [], "results": [], "critique": None,
                 "revised": False, "error": "empty goal"}
     goal = goal.strip()
+    _emit("team.start", goal=goal)
 
     # 1. Plan
     _status("Orchestrator planning…")
     tasks = _plan(goal, max_tasks, _status)
     if not tasks:
+        _emit("team.done", ok=False)
         return {"goal": goal, "plan": [], "results": [], "critique": None,
                 "revised": False, "error": "planning produced no tasks"}
+    _emit("team.plan", tasks=tasks)
 
     # 2. Approve plan
     if require_plan_approval:
         _status(f"Awaiting plan approval ({len(tasks)} tasks)…")
         if not _approve_plan(tasks):
+            _emit("team.done", ok=False)
             return {"goal": goal, "plan": tasks, "results": [], "critique": None,
                     "revised": False, "error": "plan denied by user"}
 
@@ -338,6 +415,8 @@ def run_team(
     # 4. Critique
     _status("Critic reviewing…")
     critique = _critique(goal, results, _status)
+    _emit("team.critique", complete=critique.get("complete"),
+          summary=critique.get("summary",""), gaps=critique.get("gaps", []))
 
     # 5. One optional revision round
     revised = False
@@ -348,10 +427,15 @@ def run_team(
         _status("Re-planning to close gaps…")
         gap_tasks = _plan(gap_goal, max_tasks, _status)
         if gap_tasks:
+            _emit("team.plan", tasks=gap_tasks, revision=True)
             if not require_plan_approval or _approve_plan(gap_tasks):
                 results.extend(_run_tasks(gap_tasks, _status))
                 critique = _critique(goal, results, _status)
+                _emit("team.critique", complete=critique.get("complete"),
+                      summary=critique.get("summary",""),
+                      gaps=critique.get("gaps", []))
 
+    _emit("team.done", ok=True)
     return {
         "goal": goal,
         "plan": tasks,

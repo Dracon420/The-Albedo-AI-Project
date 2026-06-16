@@ -125,6 +125,7 @@ def run_agent(
     model: Optional[str] = None,
     tool_names: Optional[list[str]] = None,
     status_cb: Optional[Callable[[str], None]] = None,
+    role: str = "agent",
 ) -> dict:
     """
     Run the agentic loop for one user message. Returns a result dict:
@@ -154,6 +155,16 @@ def run_agent(
     # None -> all tools (back-compat); [] -> no tools; [names] -> just those.
     tools = agent_tools.get_tool_schemas(tool_names)
 
+    # Best-effort live event emission to the Brain/Team visualizations.
+    def _emit(etype: str, **payload) -> None:
+        try:
+            from albedo import event_bus
+            event_bus.publish(etype, **payload)
+        except Exception:
+            pass
+
+    _emit("agent.state", role=role, state="thinking", task=user_message.strip())
+
     # Build initial conversation
     messages: list[dict] = [{"role": "system", "content": system_prompt or _DEFAULT_SYSTEM}]
     if history:
@@ -173,6 +184,7 @@ def run_agent(
         used_model = result.get("model") or used_model
 
         if result.get("error"):
+            _emit("agent.state", role=role, state="error", task=user_message.strip())
             return {"answer": "", "steps": steps, "provider": used_provider,
                     "model": used_model, "iterations": iteration,
                     "error": result["error"]}
@@ -183,6 +195,7 @@ def run_agent(
         if not tool_calls:
             answer = result.get("text", "") or ""
             steps.append({"type": "final", "text": answer})
+            _emit("agent.state", role=role, state="done", task=user_message.strip())
             return {"answer": answer, "steps": steps, "provider": used_provider,
                     "model": used_model, "iterations": iteration, "error": None}
 
@@ -193,6 +206,8 @@ def run_agent(
         for tc in tool_calls:
             steps.append({"type": "tool_call", "name": tc.name, "arguments": tc.arguments})
             _status(f"tool call: {tc.name}({tc.arguments})")
+            _emit("agent.state", role=role, state="tool", task=tc.name)
+            _emit("tool.call", role=role, name=tc.name, args=dict(tc.arguments or {}))
 
             if _needs_approval(tc.name, mode):
                 _status(f"awaiting approval for {tc.name}…")
@@ -202,11 +217,16 @@ def run_agent(
                     steps.append({"type": "denied", "name": tc.name})
                     messages.append(_tool_result_turn(tc, denial))
                     _status(f"denied: {tc.name}")
+                    _emit("tool.result", role=role, name=tc.name, ok=False,
+                          summary="denied by user")
                     continue
 
             output = agent_tools.run_tool(tc.name, tc.arguments)
             steps.append({"type": "tool_result", "name": tc.name,
                           "output": output[:500]})
+            _emit("tool.result", role=role, name=tc.name,
+                  ok=not output.startswith("[tool error]"),
+                  summary=output[:160].splitlines()[0] if output else "")
             messages.append(_tool_result_turn(tc, output))
 
     # Hit the iteration cap without a final text answer.
