@@ -384,27 +384,119 @@ body.popout {
   overflow: hidden;
 }
 
-/* ── Brain graph nodes/edges (D3) ───────────────────────────── */
+/* ── Brain graph nodes/edges (D3, colored by folder) ──────── */
 .brain-node {
-  fill: var(--pp-cyan);
-  stroke: rgba(0,217,255,0.6);
-  stroke-width: 0.5px;
   cursor: pointer;
-  transition: r 0.2s, fill 0.2s;
+  transition: r 0.2s ease, stroke-width 0.2s ease;
 }
-.brain-node--match { fill: var(--pp-green); r: 6; }
+.brain-node:hover {
+  stroke-width: 2px !important;
+  stroke-opacity: 1 !important;
+}
+/* SEARCH match: cyan halo (overrides folder color stroke) */
+.brain-node--match {
+  stroke: var(--pp-cyan) !important;
+  stroke-width: 2.5px !important;
+  filter: drop-shadow(0 0 8px var(--pp-cyan)) !important;
+}
+/* RAG firing: dramatic glow that keeps the node's own folder color */
 .brain-node--fire {
-  fill: var(--pp-amber);
-  filter: drop-shadow(0 0 6px var(--pp-amber));
+  filter: drop-shadow(0 0 10px currentColor) drop-shadow(0 0 4px white) !important;
+  stroke: #fff !important;
+  stroke-width: 2px !important;
 }
 .brain-edges line {
-  stroke: rgba(0,217,255,0.10);
-  stroke-width: 0.5;
+  /* base color set inline per-edge via stroke=; this is just structural */
+  pointer-events: none;
 }
-.brain-edge--fire {
-  stroke: var(--pp-amber) !important;
-  stroke-width: 1.2 !important;
-  filter: drop-shadow(0 0 4px var(--pp-amber));
+.brain-sparks circle {
+  pointer-events: none;
+}
+
+/* ── Brain hover tooltip ────────────────────────────────────── */
+.brain-tip {
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  background: rgba(6, 14, 22, 0.96);
+  border: 1px solid var(--pp-cyan-faint);
+  border-left: 3px solid var(--pp-cyan);
+  border-radius: 3px;
+  padding: 10px 12px;
+  min-width: 200px;
+  max-width: 360px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.55);
+  font-family: 'Courier New', monospace;
+  font-size: 0.78rem;
+  color: var(--pp-fg);
+  line-height: 1.4;
+}
+.brain-tip__title {
+  font-family: 'Orbitron', 'Courier New', monospace;
+  font-size: 0.86rem;
+  color: var(--pp-cyan);
+  letter-spacing: 0.06em;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+.brain-tip__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--pp-fg-muted);
+  margin-bottom: 4px;
+}
+.brain-tip__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  display: inline-block;
+}
+.brain-tip__path {
+  font-size: 0.68rem;
+  color: var(--pp-fg-dim);
+  word-break: break-all;
+  border-top: 1px solid var(--pp-cyan-faint);
+  padding-top: 4px;
+  margin-top: 4px;
+}
+.brain-tip__stats {
+  display: flex;
+  gap: 6px;
+  font-size: 0.68rem;
+  color: var(--pp-cyan-dim);
+  margin-top: 6px;
+}
+
+/* ── Brain legend (folder color key, bottom of window) ──────── */
+.brain-legend {
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px;
+  flex-wrap: wrap;
+  border-top: 1px solid var(--pp-cyan-faint);
+  font-family: 'Courier New', monospace;
+  font-size: 0.66rem;
+  max-height: 60px;
+  overflow-y: auto;
+}
+.brain-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.brain-legend__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.brain-legend__label {
+  color: var(--pp-fg-muted);
+  text-transform: lowercase;
 }
 
 /* ── Team card grid ─────────────────────────────────────────── */

@@ -660,6 +660,9 @@ def get_event_history(limit: int = 200) -> dict:
 # --- Obsidian vault graph (for the Brain visualization) -----------------------
 
 _WIKILINK_RE = None
+# Bump this token if the graph schema changes — the cached dict from an older
+# version (e.g. without "folder" on nodes) won't satisfy the new viz.
+_VAULT_GRAPH_SCHEMA = "v2-folder"
 _vault_graph_cache: dict | None = None
 
 
@@ -671,7 +674,8 @@ def get_vault_graph(refresh: bool = False) -> dict:
     Returns {ok, nodes:[{id,title,path}], edges:[{src,dst}], count}.
     """
     global _WIKILINK_RE, _vault_graph_cache
-    if _vault_graph_cache is not None and not refresh:
+    if (_vault_graph_cache is not None and not refresh
+            and _vault_graph_cache.get("schema") == _VAULT_GRAPH_SCHEMA):
         return _vault_graph_cache
     try:
         import os as _os, re as _re
@@ -695,8 +699,17 @@ def get_vault_graph(refresh: bool = False) -> dict:
                 rel = str(md.relative_to(root)).replace("\\", "/")
                 title = md.stem
                 key = title.lower()
+                # Top-level folder = the "category" for color grouping in the viz.
+                # Notes at vault root get folder "_root_".
+                parts = rel.split("/")
+                folder = parts[0] if len(parts) > 1 else "_root_"
                 if key not in nodes:
-                    nodes[key] = {"id": key, "title": title, "path": rel}
+                    nodes[key] = {
+                        "id":     key,
+                        "title":  title,
+                        "path":   rel,
+                        "folder": folder,
+                    }
             except Exception:
                 continue
         # Edges: parse [[wikilinks]] -> existing nodes only
@@ -716,6 +729,7 @@ def get_vault_graph(refresh: bool = False) -> dict:
 
         _vault_graph_cache = {
             "ok": True,
+            "schema": _VAULT_GRAPH_SCHEMA,
             "nodes": list(nodes.values()),
             "edges": edges,
             "count": len(nodes),

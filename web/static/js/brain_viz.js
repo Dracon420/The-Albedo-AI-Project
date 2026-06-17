@@ -1,26 +1,49 @@
 /**
  * brain_viz.js — LIVE visualization of the Obsidian "second brain".
  *
- * Renders a force-directed graph of the vault: nodes = notes, edges = wikilinks.
- * When the backend RAG fires (event "rag.hit"), the matched nodes pulse and
- * any edges between them briefly light up — the "synapse firing" effect.
+ * Force-directed graph of the vault (nodes = notes, edges = wikilinks),
+ * colored by top-level folder so each cluster is visually distinct.
  *
- * Uses D3.js force layout (CDN with offline fallback). The fallback is a
- * lightweight built-in canvas renderer that still shows nodes/edges and
- * highlights firing nodes, just without smooth physics.
+ * Neuron firing:
+ *   - When the backend RAG fires (rag.hit), matched nodes pulse + their edges
+ *     emit a TRAVELING SPARK along the link (source -> target), like a signal
+ *     down an axon. Neighbor nodes briefly receive a soft secondary pulse.
+ *   - Ambient idle firing: a low-rate random spark every few seconds so the
+ *     brain feels alive even when nothing is happening.
  *
- * Usage: BrainViz.mount(rootEl)
+ * Hover: rich HTML tooltip with title, folder (color-swatch), path, connection
+ * count, and last-RAG-hit timestamp.
+ *
+ * Uses D3.js v7 force layout (CDN with offline canvas fallback).
  */
 (function () {
   "use strict";
 
   const D3_CDN = "https://d3js.org/d3.v7.min.js";
+  // Ambient spark cadence (ms between random firings) when D3 is available.
+  const AMBIENT_INTERVAL_MS = 1800;
 
   function _el(tag, cls, txt) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (txt != null) e.textContent = txt;
     return e;
+  }
+
+  // Deterministic folder -> HSL color (stable across reloads, no clashes).
+  function _folderColor(folder) {
+    let h = 0;
+    const s = String(folder || "_root_");
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    const hue = Math.abs(h) % 360;
+    return `hsl(${hue}, 80%, 62%)`;
+  }
+  function _folderColorDim(folder) {
+    let h = 0;
+    const s = String(folder || "_root_");
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    const hue = Math.abs(h) % 360;
+    return `hsla(${hue}, 60%, 50%, 0.22)`;
   }
 
   function _loadD3() {
@@ -31,7 +54,6 @@
       s.onload = () => resolve(!!window.d3);
       s.onerror = () => resolve(false);
       document.head.appendChild(s);
-      // Hard timeout: if it doesn't load in 4s, give up and use fallback.
       setTimeout(() => resolve(!!window.d3), 4000);
     });
   }
@@ -41,7 +63,7 @@
     root.innerHTML = "";
     root.classList.add("viz", "viz--brain");
 
-    // Top bar: title + status + controls
+    // Top bar
     const bar = _el("div", "viz__toolbar");
     bar.appendChild(_el("div", "viz__title", "◈ OBSIDIAN BRAIN"));
     const status = _el("div", "viz__status", "loading vault…");
@@ -57,11 +79,16 @@
     bar.appendChild(refreshBtn);
     root.appendChild(bar);
 
-    // Stage
+    // Stage + tooltip
     const stage = _el("div", "viz__stage");
     root.appendChild(stage);
+    const legend = _el("div", "brain-legend");
+    root.appendChild(legend);
 
-    // Fetch the vault graph
+    const tooltip = _el("div", "brain-tip");
+    tooltip.style.display = "none";
+    document.body.appendChild(tooltip);
+
     async function load(refresh) {
       status.textContent = refresh ? "rebuilding vault graph…" : "loading vault…";
       try {
@@ -70,7 +97,18 @@
           status.textContent = "vault unavailable: " + (g && g.error || "unknown");
           return null;
         }
-        status.textContent = `${g.nodes.length} notes · ${g.edges.length} links`;
+        const folders = new Set((g.nodes || []).map(n => n.folder || "_root_"));
+        status.textContent = `${g.nodes.length} notes · ${g.edges.length} links · ${folders.size} clusters`;
+        // Legend swatches
+        legend.innerHTML = "";
+        Array.from(folders).sort().forEach((f) => {
+          const item = _el("span", "brain-legend__item");
+          const sw   = _el("span", "brain-legend__swatch");
+          sw.style.background = _folderColor(f);
+          item.appendChild(sw);
+          item.appendChild(_el("span", "brain-legend__label", f === "_root_" ? "(root)" : f));
+          legend.appendChild(item);
+        });
         return g;
       } catch (e) {
         status.textContent = "bridge error: " + e;
@@ -79,28 +117,30 @@
     }
 
     const graph = await load(false);
-    if (!graph || !graph.nodes.length) return;
-
-    // Try D3; fall back to a minimal canvas renderer.
-    const haveD3 = await _loadD3();
-
-    if (haveD3) {
-      _renderD3(stage, graph, search);
-    } else {
-      _renderCanvas(stage, graph, search);
+    if (!graph || !graph.nodes.length) {
+      tooltip.remove();
+      return;
     }
+    const haveD3 = await _loadD3();
+    const ctx = { tooltip, lastHit: {}, search };
+    if (haveD3) _renderD3(stage, graph, ctx);
+    else        _renderCanvas(stage, graph, ctx);
 
     refreshBtn.addEventListener("click", async () => {
       const g2 = await load(true);
       if (!g2) return;
       stage.innerHTML = "";
-      if (window.d3) _renderD3(stage, g2, search);
-      else _renderCanvas(stage, g2, search);
+      const ctx2 = { tooltip, lastHit: ctx.lastHit, search };
+      if (window.d3) _renderD3(stage, g2, ctx2);
+      else           _renderCanvas(stage, g2, ctx2);
     });
+
+    // Clean up tooltip when window closes
+    window.addEventListener("beforeunload", () => tooltip.remove());
   }
 
-  // ─── D3 force-directed renderer ──────────────────────────────────────
-  function _renderD3(stage, graph, search) {
+  // ─── D3 renderer with traveling-spark firings ───────────────────────
+  function _renderD3(stage, graph, ctx) {
     const d3 = window.d3;
     const W = stage.clientWidth  || 800;
     const H = stage.clientHeight || 560;
@@ -110,73 +150,188 @@
       .filter((e) => nodes.some(n => n.id === e.source) &&
                      nodes.some(n => n.id === e.target));
 
+    // Pre-compute degree for tooltip
+    const degree = {};
+    links.forEach((l) => {
+      degree[l.source] = (degree[l.source] || 0) + 1;
+      degree[l.target] = (degree[l.target] || 0) + 1;
+    });
+
+    // Neighbor index for secondary pulses
+    const neighbors = {};
+    links.forEach((l) => {
+      (neighbors[l.source] = neighbors[l.source] || new Set()).add(l.target);
+      (neighbors[l.target] = neighbors[l.target] || new Set()).add(l.source);
+    });
+
     const svg = d3.select(stage).append("svg")
       .attr("viewBox", `0 0 ${W} ${H}`)
       .style("width", "100%").style("height", "100%");
 
-    const sim = d3.forceSimulation(nodes)
-      .force("link", d3.forceLink(links).id(d => d.id).distance(50).strength(0.25))
-      .force("charge", d3.forceManyBody().strength(-110))
-      .force("center", d3.forceCenter(W / 2, H / 2))
-      .force("collide", d3.forceCollide().radius(8));
+    // <defs> for the glow filter (gives the spark its halo)
+    const defs = svg.append("defs");
+    const filter = defs.append("filter")
+      .attr("id", "brain-glow")
+      .attr("x", "-50%").attr("y", "-50%")
+      .attr("width", "200%").attr("height", "200%");
+    filter.append("feGaussianBlur").attr("stdDeviation", "2.5").attr("result", "b");
+    const merge = filter.append("feMerge");
+    merge.append("feMergeNode").attr("in", "b");
+    merge.append("feMergeNode").attr("in", "SourceGraphic");
 
-    const link = svg.append("g").attr("class", "brain-edges")
-      .selectAll("line").data(links).enter().append("line");
-    const node = svg.append("g").attr("class", "brain-nodes")
+    const sim = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id(d => d.id).distance(55).strength(0.22))
+      .force("charge", d3.forceManyBody().strength(-130))
+      .force("center", d3.forceCenter(W / 2, H / 2))
+      .force("collide", d3.forceCollide().radius(9));
+
+    const linkSel = svg.append("g").attr("class", "brain-edges")
+      .selectAll("line").data(links).enter().append("line")
+      .attr("stroke", (d) => _folderColorDim((nodes.find(n => n.id === d.source.id || n.id === d.source) || {}).folder))
+      .attr("stroke-width", 0.6);
+
+    // Layer for traveling sparks (drawn above edges, below nodes)
+    const sparkLayer = svg.append("g").attr("class", "brain-sparks");
+
+    const nodeSel = svg.append("g").attr("class", "brain-nodes")
       .selectAll("circle").data(nodes).enter().append("circle")
-      .attr("r", 4)
+      .attr("r", (d) => 3 + Math.min(5, (degree[d.id] || 0) * 0.4))
+      .attr("fill", (d) => _folderColor(d.folder))
+      .attr("stroke", (d) => _folderColor(d.folder))
+      .attr("stroke-opacity", 0.7)
+      .attr("stroke-width", 0.5)
       .attr("class", "brain-node")
+      .style("filter", "url(#brain-glow)")
       .call(d3.drag()
         .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
         .on("drag",  (e, d) => { d.fx = e.x; d.fy = e.y; })
         .on("end",   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }));
-    node.append("title").text((d) => d.title);
 
     sim.on("tick", () => {
-      link.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y)
-          .attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
-      node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+      linkSel.attr("x1", (d) => d.source.x).attr("y1", (d) => d.source.y)
+             .attr("x2", (d) => d.target.x).attr("y2", (d) => d.target.y);
+      nodeSel.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
     });
 
-    // RAG firing: pulse matched nodes + connecting edges
-    function pulse(noteList) {
-      const ids = new Set();
-      noteList.forEach((n) => {
-        const key = (n.title || "").toLowerCase();
-        if (nodes.find(x => x.id === key)) ids.add(key);
-      });
-      if (!ids.size) return;
-      node.filter((d) => ids.has(d.id))
-        .classed("brain-node--fire", true)
-        .transition().duration(1600)
-        .on("end", function () { d3.select(this).classed("brain-node--fire", false); });
-      link.filter((d) => ids.has(d.source.id) && ids.has(d.target.id))
-        .classed("brain-edge--fire", true)
-        .transition().duration(1600)
-        .on("end", function () { d3.select(this).classed("brain-edge--fire", false); });
+    // ── Tooltip ──────────────────────────────────────────────────────
+    function showTip(evt, d) {
+      const lastHit = ctx.lastHit[d.id];
+      const when = lastHit
+        ? new Date(lastHit).toLocaleTimeString([], { hour12: false })
+        : "—";
+      ctx.tooltip.innerHTML = `
+        <div class="brain-tip__title">${escapeHtml(d.title)}</div>
+        <div class="brain-tip__row">
+          <span class="brain-tip__swatch" style="background:${_folderColor(d.folder)}"></span>
+          <span>${escapeHtml(d.folder === "_root_" ? "(vault root)" : d.folder)}</span>
+        </div>
+        <div class="brain-tip__path">${escapeHtml(d.path || "")}</div>
+        <div class="brain-tip__stats">
+          <span>${degree[d.id] || 0} links</span>
+          <span>·</span>
+          <span>last fired: ${when}</span>
+        </div>
+      `;
+      ctx.tooltip.style.display = "block";
+      moveTip(evt);
     }
+    function moveTip(evt) {
+      const x = evt.clientX + 14;
+      const y = evt.clientY + 14;
+      // Keep on-screen
+      const t = ctx.tooltip;
+      const r = t.getBoundingClientRect();
+      const maxX = window.innerWidth  - r.width  - 8;
+      const maxY = window.innerHeight - r.height - 8;
+      t.style.left = Math.min(x, maxX) + "px";
+      t.style.top  = Math.min(y, maxY) + "px";
+    }
+    function hideTip() { ctx.tooltip.style.display = "none"; }
+    nodeSel.on("mouseenter", showTip)
+           .on("mousemove",  moveTip)
+           .on("mouseleave", hideTip);
+
+    // ── Firing: send a traveling spark along an edge ─────────────────
+    function fireEdge(srcNode, dstNode, color) {
+      if (!srcNode || !dstNode) return;
+      const spark = sparkLayer.append("circle")
+        .attr("r", 2.6)
+        .attr("fill", color)
+        .attr("opacity", 1)
+        .attr("cx", srcNode.x).attr("cy", srcNode.y)
+        .style("filter", "url(#brain-glow)");
+      spark.transition()
+        .duration(700)
+        .ease(d3.easeQuadIn)
+        .attr("cx", dstNode.x).attr("cy", dstNode.y)
+        .attr("r", 4)
+        .attr("opacity", 0)
+        .on("end", function () { d3.select(this).remove(); });
+    }
+
+    function pulseNode(node, big) {
+      if (!node) return;
+      const sel = nodeSel.filter((d) => d.id === node.id);
+      sel.classed("brain-node--fire", true)
+        .transition().duration(big ? 1100 : 700)
+        .on("end", function () { d3.select(this).classed("brain-node--fire", false); });
+    }
+
+    // ── RAG hit subscription: primary node pulses + sparks to neighbors ──
     if (window.EventBus) {
-      EventBus.on("rag.hit", (e) => pulse(e.notes || []));
+      EventBus.on("rag.hit", (e) => {
+        const hits = new Set();
+        (e.notes || []).forEach((n) => {
+          const key = (n.title || "").toLowerCase();
+          if (nodes.find(x => x.id === key)) hits.add(key);
+        });
+        const now = Date.now();
+        hits.forEach((id) => {
+          const node = nodes.find(n => n.id === id);
+          if (!node) return;
+          ctx.lastHit[id] = now;
+          pulseNode(node, true);
+          // Fan out a spark to each neighbor (cap at 6 so it stays readable)
+          const neigh = Array.from(neighbors[id] || []).slice(0, 6);
+          neigh.forEach((nid) => {
+            const dst = nodes.find(n => n.id === nid);
+            fireEdge(node, dst, _folderColor(node.folder));
+            // Soft secondary pulse on the receiving end (delayed)
+            setTimeout(() => pulseNode(dst, false), 600);
+          });
+        });
+      });
       EventBus.replayHistory(50);
     }
 
-    // Search filter
-    search.addEventListener("input", () => {
-      const q = search.value.trim().toLowerCase();
-      node.classed("brain-node--match", (d) => q && d.title.toLowerCase().includes(q));
+    // ── Ambient idle firing — a quiet "brain at rest" twinkle ────────
+    const ambient = setInterval(() => {
+      if (!links.length) return;
+      const l = links[(Math.random() * links.length) | 0];
+      fireEdge(l.source, l.target, _folderColor(l.source.folder || "_root_"));
+    }, AMBIENT_INTERVAL_MS);
+    window.addEventListener("beforeunload", () => clearInterval(ambient));
+
+    // ── Search filter ────────────────────────────────────────────────
+    ctx.search.addEventListener("input", () => {
+      const q = ctx.search.value.trim().toLowerCase();
+      nodeSel
+        .classed("brain-node--match", (d) => q && d.title.toLowerCase().includes(q))
+        .attr("r", (d) => {
+          const base = 3 + Math.min(5, (degree[d.id] || 0) * 0.4);
+          return (q && d.title.toLowerCase().includes(q)) ? base + 3 : base;
+        });
     });
   }
 
-  // ─── Minimal canvas fallback (no physics; static circle pack) ────────
-  function _renderCanvas(stage, graph, search) {
+  // ─── Canvas fallback (offline, no D3) ────────────────────────────────
+  function _renderCanvas(stage, graph, ctx) {
     const W = stage.clientWidth  || 800;
     const H = stage.clientHeight || 560;
     const cv = document.createElement("canvas");
     cv.width = W; cv.height = H;
     stage.appendChild(cv);
-    const ctx = cv.getContext("2d");
-
-    // Lay nodes on a phyllotaxis spiral — simple, dense, deterministic.
+    const c2 = cv.getContext("2d");
     const golden = Math.PI * (3 - Math.sqrt(5));
     const cx = W / 2, cy = H / 2;
     const nodes = graph.nodes.map((n, i) => {
@@ -188,20 +343,18 @@
     const edges = graph.edges.filter(e => byId[e.src] && byId[e.dst]);
 
     function draw() {
-      ctx.clearRect(0, 0, W, H);
-      ctx.strokeStyle = "rgba(0,217,255,0.08)";
-      ctx.lineWidth = 0.5;
+      c2.clearRect(0, 0, W, H);
       edges.forEach((e) => {
         const a = byId[e.src], b = byId[e.dst];
-        const fire = (a.fire > 0 && b.fire > 0);
-        ctx.strokeStyle = fire ? "rgba(255,174,0,0.9)" : "rgba(0,217,255,0.10)";
-        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+        c2.strokeStyle = (a.fire && b.fire) ? _folderColor(a.folder) : _folderColorDim(a.folder);
+        c2.lineWidth = (a.fire && b.fire) ? 1.2 : 0.4;
+        c2.beginPath(); c2.moveTo(a.x, a.y); c2.lineTo(b.x, b.y); c2.stroke();
       });
       nodes.forEach((n) => {
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.fire > 0 ? 6 : 3, 0, Math.PI * 2);
-        ctx.fillStyle = n.fire > 0 ? "rgba(255,174,0,0.95)" : "rgba(0,217,255,0.75)";
-        ctx.fill();
+        c2.beginPath();
+        c2.arc(n.x, n.y, n.fire > 0 ? 6 : 3, 0, Math.PI * 2);
+        c2.fillStyle = _folderColor(n.folder);
+        c2.fill();
         if (n.fire > 0) n.fire -= 1;
       });
       requestAnimationFrame(draw);
@@ -212,16 +365,20 @@
       EventBus.on("rag.hit", (e) => {
         (e.notes || []).forEach((nt) => {
           const k = (nt.title || "").toLowerCase();
-          if (byId[k]) byId[k].fire = 60;   // ~1s @ 60fps
+          if (byId[k]) {
+            byId[k].fire = 60;
+            ctx.lastHit[k] = Date.now();
+          }
         });
       });
       EventBus.replayHistory(50);
     }
+  }
 
-    search.addEventListener("input", () => {
-      const q = search.value.trim().toLowerCase();
-      nodes.forEach((n) => { n.fire = q && n.title.toLowerCase().includes(q) ? 30 : n.fire; });
-    });
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => (
+      { "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]
+    ));
   }
 
   window.BrainViz = { mount };
