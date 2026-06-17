@@ -263,6 +263,58 @@ body.popout {
   padding: 4px 8px;
 }
 
+/* ── API keys + role assignment panels ─────────────────────── */
+.panel__keyrow-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.panel__key-badge {
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  font-family: monospace;
+}
+.panel__key-badge--set {
+  background: rgba(57, 255, 20, 0.16);
+  color: var(--pp-green);
+  border: 1px solid rgba(57, 255, 20, 0.45);
+}
+.panel__key-badge--unset {
+  background: rgba(122, 162, 192, 0.10);
+  color: var(--pp-fg-dim);
+  border: 1px solid rgba(122, 162, 192, 0.30);
+}
+.panel__keylink {
+  font-size: 0.66rem;
+  color: var(--pp-cyan-dim);
+  text-decoration: none;
+  margin-left: auto;
+}
+.panel__keylink:hover { color: var(--pp-cyan); }
+.panel__keyrow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.panel__keyrow .panel__keyinput { flex: 1; }
+.panel__keyshow {
+  font-size: 0.66rem;
+  padding: 4px 8px;
+  min-width: 60px;
+}
+.panel__role-tools {
+  font-size: 0.66rem;
+  color: var(--pp-fg-dim);
+  font-family: monospace;
+  margin-left: auto;
+  text-align: right;
+}
+
 /* ============================================================
    Visualizations (Brain + Team)
    ============================================================ */

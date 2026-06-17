@@ -803,6 +803,124 @@ def set_team_roles(mapping: dict) -> dict:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
+# ---------------------------------------------------------------------------
+# API key management — surfaces .env values so users can add/edit/clear them
+# from the SETTINGS UI instead of editing .env by hand.
+# Keys live in <project>/.env, gitignored. Values never returned to JS (only
+# the SET/NOT-SET status), so a chat capture wouldn't leak them.
+# ---------------------------------------------------------------------------
+
+# (provider key, friendly label, where-to-get URL)
+_API_KEY_SPECS = [
+    ("ANTHROPIC_API_KEY",   "Anthropic (Claude)",        "https://console.anthropic.com/settings/keys"),
+    ("OPENAI_API_KEY",      "OpenAI (GPT)",              "https://platform.openai.com/api-keys"),
+    ("GEMINI_API_KEY",      "Google Gemini",             "https://aistudio.google.com/app/apikey"),
+    ("GROQ_API_KEY",        "Groq",                      "https://console.groq.com/keys"),
+    ("TOGETHER_API_KEY",    "Together AI",               "https://api.together.xyz/settings/api-keys"),
+    ("AZURE_OPENAI_KEY",    "Azure OpenAI (key)",        "https://portal.azure.com"),
+    ("AZURE_OPENAI_ENDPOINT","Azure OpenAI (endpoint)",  "https://portal.azure.com"),
+    ("AZURE_OPENAI_DEPLOYMENT","Azure OpenAI (deployment name)", "https://portal.azure.com"),
+    ("WOLFRAM_API_KEY",     "Wolfram Alpha (math)",      "https://developer.wolframalpha.com/access"),
+    ("TAVILY_API_KEY",      "Tavily (web search)",       "https://app.tavily.com/home"),
+    ("DEEPGRAM_API_KEY",    "Deepgram (STT)",            "https://console.deepgram.com/"),
+]
+
+
+def _env_path():
+    from pathlib import Path
+    return Path(__file__).resolve().parent.parent.parent / ".env"
+
+
+def _merge_env(updates: dict) -> bool:
+    """Read .env, merge {KEY: value} updates, write back atomically.
+    Removes keys whose value is empty string. Preserves comments + unrelated lines."""
+    path = _env_path()
+    lines = []
+    if path.exists():
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except Exception:
+            return False
+    seen = set()
+    out = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            out.append(line); continue
+        key = stripped.split("=", 1)[0].strip()
+        if key in updates:
+            val = updates[key]
+            if val:                       # rewrite
+                out.append(f"{key}={val}")
+            # empty val -> drop the line
+            seen.add(key)
+        else:
+            out.append(line)
+    for key, val in updates.items():
+        if key not in seen and val:
+            out.append(f"{key}={val}")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(out) + "\n", encoding="utf-8")
+        return True
+    except Exception:
+        return False
+
+
+def _reload_env_into_process() -> None:
+    """Re-load .env with override so the running process sees the new keys.
+    Also reset providers' lazy clients so they pick up the new keys."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(_env_path(), override=True)
+    except Exception:
+        pass
+    # swarm caches Gemini/Groq/Together clients — flush them
+    try:
+        from swarm import reinit_swarm_clients
+        reinit_swarm_clients()
+    except Exception:
+        pass
+
+
+@_expose
+def get_api_keys_status() -> dict:
+    """Return per-provider SET/NOT-SET status (never values).
+    Powers the API KEYS section in Settings."""
+    import os as _os
+    out = []
+    for env_key, label, url in _API_KEY_SPECS:
+        v = (_os.environ.get(env_key, "") or "").strip()
+        out.append({
+            "key":   env_key,
+            "label": label,
+            "url":   url,
+            "set":   bool(v),
+            "preview": (v[:4] + "…") if v and not env_key.endswith("ENDPOINT") and not env_key.endswith("DEPLOYMENT") else (v if v else ""),
+        })
+    return {"ok": True, "items": out}
+
+
+@_expose
+def set_api_keys(updates: dict) -> dict:
+    """
+    Persist API keys to .env and hot-reload the process so providers/swarm see
+    them immediately. Empty string clears a key.
+    `updates` shape: {ENV_KEY: "value", ...}
+    """
+    if not isinstance(updates, dict) or not updates:
+        return {"ok": False, "error": "no updates"}
+    # Whitelist — only allow known keys to be written
+    allowed = {spec[0] for spec in _API_KEY_SPECS}
+    clean = {k: (v or "").strip() for k, v in updates.items() if k in allowed}
+    if not clean:
+        return {"ok": False, "error": "no recognized keys in update"}
+    if not _merge_env(clean):
+        return {"ok": False, "error": "failed to write .env"}
+    _reload_env_into_process()
+    return {"ok": True, "updated": list(clean.keys())}
+
+
 @_expose
 def get_brain_config() -> dict:
     """Return current brain provider/model selection + which providers have keys.

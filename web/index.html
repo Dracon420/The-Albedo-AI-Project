@@ -12,7 +12,7 @@
   <link rel="stylesheet" href="static/css/cyberdeck.css?v=314" />
   <link rel="stylesheet" href="static/css/gauges.css?v=312" />
   <link rel="stylesheet" href="static/css/drawer.css?v=314" />
-  <link rel="stylesheet" href="static/css/panels.css?v=314" />
+  <link rel="stylesheet" href="static/css/panels.css?v=315" />
 </head>
 <body data-background="bg2">
   <!-- ── Top bar ──────────────────────────────────────────────────────── -->
@@ -225,9 +225,28 @@
         <h3>REASONING CORE</h3>
         <div class="setting__hint" style="margin-bottom:8px">
           Pick the brain Albedo uses for reasoning (any provider with a key
-          configured). Per-specialist routing lives in the Team window.
+          configured). Per-specialist routing is below under AGENT BRAINS.
         </div>
         <div id="brainPanelRoot"></div>
+      </section>
+
+      <section class="drawer__section">
+        <h3>API KEYS</h3>
+        <div class="setting__hint" style="margin-bottom:8px">
+          Add or update provider API keys. Saved to your local .env (gitignored).
+          Type <strong>CLEAR</strong> in a field and save to remove a key.
+        </div>
+        <div id="apiKeysPanelRoot"></div>
+      </section>
+
+      <section class="drawer__section">
+        <h3>AGENT BRAINS</h3>
+        <div class="setting__hint" style="margin-bottom:8px">
+          Assign a brain to each specialist. "Use global" follows the Reasoning
+          Core setting above; pick a provider to override that role specifically
+          (e.g. Critic on Claude, SysOps on Groq).
+        </div>
+        <div id="teamRolesPanelRoot"></div>
       </section>
 
       <section class="drawer__section">
@@ -384,21 +403,24 @@
        to router decisions so chat can flag when the team kicks in) -->
   <script src="static/js/event_bus_client.js?v=314"></script>
 
-  <!-- Reasoning-core (provider/model/autonomy) settings sub-section -->
+  <!-- Settings sub-section panels: reasoning core + API keys + per-role brains -->
   <script src="static/js/panels/brain_panel.js?v=314"></script>
+  <script src="static/js/panels/api_keys_panel.js?v=315"></script>
+  <script src="static/js/panels/team_roles_panel.js?v=315"></script>
   <script src="static/js/snap.js?v=314"></script>
   <script>
     (function () {
       function whenReady() {
-        if (typeof eel === "undefined" || !eel.get_brain_config) {
+        if (typeof eel === "undefined" || !eel.get_brain_config ||
+            !eel.get_api_keys_status || !eel.get_team_roles) {
           return setTimeout(whenReady, 200);
         }
         try {
-          if (window.BrainPanel) {
-            BrainPanel.mount(document.getElementById("brainPanelRoot"));
-          }
+          if (window.BrainPanel)     BrainPanel.mount(document.getElementById("brainPanelRoot"));
+          if (window.ApiKeysPanel)   ApiKeysPanel.mount(document.getElementById("apiKeysPanelRoot"));
+          if (window.TeamRolesPanel) TeamRolesPanel.mount(document.getElementById("teamRolesPanelRoot"));
         } catch (e) {
-          console.error("[settings] reasoning-core mount failed:", e);
+          console.error("[settings] panel mount failed:", e);
         }
       }
       document.addEventListener("DOMContentLoaded", whenReady);
