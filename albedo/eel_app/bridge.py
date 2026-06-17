@@ -602,13 +602,30 @@ def run_agent_query(text: str, history: list | None = None) -> dict:
 @_expose
 def send_chat(text: str, history: list | None = None) -> dict:
     """
-    User-facing chat entry point. Albedo decides automatically whether to answer
-    directly (single agent) or spin up the specialist team. The Brain + Team
-    visualizations pick up live events via the event bus. Returns
-    {ok, mode, reason, answer, error} — `mode` is "direct" or "team".
+    User-facing chat entry point.
+
+    Routing order (cheapest first — prevents the chat from "freezing" on a
+    rate-limited or slow provider for trivial questions):
+      1. INSTANT fast-path: identity / greeting / acknowledgement -> canned
+         reply in <1 ms, no LLM, no network.
+      2. LLM auto-router: Albedo classifies the message as 'direct' (single
+         agent) or 'team' (8-specialist team) and runs the chosen path.
+
+    Returns {ok, mode, reason, answer, error} —
+        mode = "instant" | "direct" | "team"
     """
     if not text or not text.strip():
         return {"ok": False, "error": "empty message"}
+
+    # ── 1. Instant intercept (no LLM) ────────────────────────────────
+    try:
+        from albedo.pipeline import try_fast_answer
+        canned = try_fast_answer(text.strip())
+        if canned:
+            return {"ok": True, "mode": "instant", "reason": "fast-path",
+                    "answer": canned, "error": None}
+    except Exception:
+        pass   # fall through to the LLM path on any unexpected failure
 
     set_swarm_state("ALBEDO_CORE", "active")
     out: dict = {}

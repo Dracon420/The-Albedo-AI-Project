@@ -101,6 +101,50 @@ def _is_identity_query(query: str) -> bool:
     return q in _IDENTITY_TRIGGERS
 
 
+# Pure greetings / acknowledgements: instant canned reply, no LLM, no network.
+# Anything not in here falls through to the agent layer.
+_INSTANT_GREETINGS = {
+    "hi": "Hi, Chief.",
+    "hello": "Hello, Chief.",
+    "hey": "Hey.",
+    "yo": "Yo.",
+    "howdy": "Howdy, Chief.",
+    "sup": "Standing by.",
+    "thanks": "Anytime.",
+    "thank you": "Anytime, Chief.",
+    "ty": "Anytime.",
+    "thx": "Anytime.",
+    "good morning": "Morning, Chief.",
+    "good afternoon": "Afternoon, Chief.",
+    "good evening": "Evening, Chief.",
+    "good night": "Rest up, Chief.",
+    "bye": "Standing by until next time, Chief.",
+    "goodbye": "Standing by until next time, Chief.",
+    "ok": "Acknowledged.",
+    "okay": "Acknowledged.",
+    "got it": "Acknowledged.",
+    "understood": "Acknowledged.",
+}
+
+
+def try_fast_answer(query: str) -> str | None:
+    """
+    Return an INSTANT canned answer (no LLM, no network) for messages that
+    don't need the agent/team layer. Used by bridge.send_chat as a fast-path
+    so trivial questions ('who are you', 'hi') never wait on a provider call.
+
+    Returns None when the message needs real processing.
+    """
+    if not query or not query.strip():
+        return None
+    q = query.lower().strip().rstrip("?!., ")
+    if q in _IDENTITY_TRIGGERS:
+        return _IDENTITY_RESPONSE
+    if q in _INSTANT_GREETINGS:
+        return _INSTANT_GREETINGS[q]
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Conversational bypass
 # ---------------------------------------------------------------------------
