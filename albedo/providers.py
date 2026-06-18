@@ -136,14 +136,20 @@ def resolve_provider(provider: str | None = None) -> str:
 def resolve_model(provider: str, model: str | None = None) -> str:
     if model:
         return model
-    # settings.json brain_model
+    # settings.json `brain_model` is ONLY valid for the provider it was set for
+    # (`brain_provider`). When the active provider differs (e.g. user picks
+    # Azure but brain_model was last saved for Gemini), use the target provider's
+    # own default instead — otherwise we'd ship a model name that doesn't exist
+    # on the target (-> DeploymentNotFound on Azure, model_not_found on OpenAI).
     try:
         from pathlib import Path
         sp = Path(__file__).resolve().parent.parent / "settings.json"
         if sp.exists():
             s = json.loads(sp.read_text(encoding="utf-8"))
-            if s.get("brain_model"):
-                return str(s["brain_model"])
+            bp = str(s.get("brain_provider", "")).lower().strip()
+            bm = str(s.get("brain_model", "")).strip()
+            if bm and (not bp or bp == provider):
+                return bm
     except Exception:
         pass
     if provider == "azure":
