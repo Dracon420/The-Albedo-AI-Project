@@ -40,13 +40,7 @@
     </nav>
 
     <!-- View mode switcher -->
-    <div class="mode-switcher" role="group" aria-label="View mode">
-      <button class="mode-btn" data-mode="fullscreen" title="Fullscreen â€” immersive HUD">FULL</button>
-      <button class="mode-btn" data-mode="windowed"   title="Windowed â€” standard cyberdeck">WIN</button>
-      <button class="mode-btn" data-mode="widget"     title="Widget â€” compact floating overlay">WIDGET</button>
-    </div>
-
-    <button class="drawer__toggle" id="drawerToggle" aria-label="Open tactical drawer">â‰¡</button>
+    <button class=”drawer__toggle” id=”drawerToggle” aria-label=”Open tactical drawer”>&#9776;</button>
   </header>
 
   <!-- â”€â”€ Main: full-width vertical stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
@@ -186,11 +180,11 @@
     <!-- Window launcher rail: pop out Chat / Brain / Team as standalone windows -->
     <div class="drawer__windowbar">
       <button class="cmd-btn drawer__winbtn"
-              onclick="eel.open_panel_window('chat')()" title="Open Chat in its own window">&#9654; CHAT</button>
+              onclick="eel.open_panel_window('chat')()" title="Open Chat in its own window">CHAT &#8599;</button>
       <button class="cmd-btn drawer__winbtn"
-              onclick="eel.open_panel_window('brain')()" title="Open the Obsidian Brain visualization">&#9670; BRAIN</button>
+              onclick="eel.open_panel_window('brain')()" title="Open the Obsidian Brain visualization">BRAIN &#8599;</button>
       <button class="cmd-btn drawer__winbtn"
-              onclick="eel.open_panel_window('team')()" title="Open the live Team visualization">&#9650; TEAM</button>
+              onclick="eel.open_panel_window('team')()" title="Open the live Team visualization">TEAM &#8599;</button>
     </div>
 
     <!-- Tabs across the top of the drawer -->
