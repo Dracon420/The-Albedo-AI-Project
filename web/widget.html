@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -9,12 +9,12 @@
   <!-- Eel JS bridge (same Eel server serves this page) -->
   <script type="text/javascript" src="/eel.js"></script>
 
-  <link rel="stylesheet" href="static/css/widget.css?v=312" />
+  <link rel="stylesheet" href="static/css/widget.css?v=318" />
 </head>
 <body>
 <div class="widget">
 
-  <!-- ── Header: orb + identity + state ───────────────────── -->
+  <!-- â”€â”€ Header: orb + identity + state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <header class="w-header">
     <div class="w-orb" id="wOrb">
       <canvas id="wOrbCanvas" style="position:absolute;inset:0;width:100%;height:100%;z-index:1;pointer-events:none;"></canvas>
@@ -28,7 +28,7 @@
     </div>
   </header>
 
-  <!-- ── Mini gauge row: CPU / GPU / RAM / VRAM ────────────── -->
+  <!-- â”€â”€ Mini gauge row: CPU / GPU / RAM / VRAM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div class="w-gauges">
     <div class="w-gauge">
       <div class="w-gauge__label">CPU</div>
@@ -48,27 +48,27 @@
     <div class="w-gauge">
       <div class="w-gauge__label">TEMP</div>
       <div class="w-gauge__bar"><div class="w-gauge__fill" id="wTempBar" style="background:var(--c-orange);box-shadow:0 0 6px var(--c-orange);"></div></div>
-      <div class="w-gauge__val" id="wTempVal">--°C</div>
+      <div class="w-gauge__val" id="wTempVal">--Â°C</div>
     </div>
   </div>
 
-  <!-- ── Chat feed ─────────────────────────────────────────── -->
+  <!-- â”€â”€ Chat feed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div class="w-chat" id="wChat">
     <div class="w-line w-line--system">[SYS] Widget online.</div>
   </div>
 
-  <!-- ── Input row ─────────────────────────────────────────── -->
+  <!-- â”€â”€ Input row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div class="w-input-row">
     <button class="w-btn w-btn--mic" id="wMicBtn">MIC</button>
     <input class="w-input" id="wInput" type="text"
-           placeholder="Ask Albedo…" autocomplete="off" />
+           placeholder="Ask Albedoâ€¦" autocomplete="off" />
     <button class="w-btn" id="wSendBtn">SEND</button>
   </div>
 
 </div>
 
 <script>
-/* ── Widget mini-orb canvas animator ─────────────────────── */
+/* â”€â”€ Widget mini-orb canvas animator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 (function () {
   const STATE_COLORS = {
     standby:  [255, 174,   0],
@@ -150,7 +150,7 @@
   }).observe(stateEl, { attributes: true, attributeFilter: ["data-state"] });
 })();
 
-/* ── Eel bridge functions exposed to Python ───────────────── */
+/* â”€â”€ Eel bridge functions exposed to Python â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 /** Python calls this to push a chat line to the widget feed. */
 eel.expose(function _w_chat_push(kind, text) {
   const chat = document.getElementById("wChat");
@@ -174,9 +174,9 @@ eel.expose(function _w_set_persona(name) {
   if (el) el.textContent = name.toUpperCase();
 });
 
-/** Python calls this with telemetry { cpu, gpu, ram, temp } (all 0–100). */
+/** Python calls this with telemetry { cpu, gpu, ram, temp } (all 0â€“100). */
 // Defined as a declaration so JS polling code can call it directly by name.
-// eel.expose() only stores it in eel._exposed_functions — NOT in global scope.
+// eel.expose() only stores it in eel._exposed_functions â€” NOT in global scope.
 function _w_telemetry(data) {
   function set(barId, valId, pct, fmt) {
     const bar = document.getElementById(barId);
@@ -196,16 +196,16 @@ function _w_telemetry(data) {
   if (data.cpu  != null) set("wCpuBar",  "wCpuVal",  data.cpu,  data.cpu.toFixed(0) + "%");
   if (data.gpu  != null) set("wGpuBar",  "wGpuVal",  data.gpu,  data.gpu.toFixed(0) + "%");
   if (data.ram  != null) set("wRamBar",  "wRamVal",  data.ram,  data.ram.toFixed(0) + "%");
-  if (data.temp != null) set("wTempBar", "wTempVal", (data.temp/100)*100, data.temp.toFixed(0) + "°C");
+  if (data.temp != null) set("wTempBar", "wTempVal", (data.temp/100)*100, data.temp.toFixed(0) + "Â°C");
 }
 eel.expose(_w_telemetry);
 
-/* ── Telemetry polling (1 Hz) ───────────────────────────────── */
+/* â”€â”€ Telemetry polling (1 Hz) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 (function startTelemetry() {
   async function poll() {
     try {
       const r = await eel.get_telemetry()();
-      // get_telemetry() returns {"ok": true, "data": {...}} — same shape
+      // get_telemetry() returns {"ok": true, "data": {...}} â€” same shape
       // as the main telemetry.js which correctly uses r.data, not r directly.
       if (!r || !r.ok || !r.data) return;
       const d = r.data;
@@ -218,7 +218,7 @@ eel.expose(_w_telemetry);
       _w_telemetry(data);
     } catch (_) {}
   }
-  // Wait for eel to be ready — Eel proxy objects are "object" type not
+  // Wait for eel to be ready â€” Eel proxy objects are "object" type not
   // "function", so use a truthy check rather than typeof === "function".
   function waitEel() {
     if (window.eel && eel.get_telemetry) {
@@ -231,7 +231,7 @@ eel.expose(_w_telemetry);
   waitEel();
 })();
 
-/* ── Input handling ─────────────────────────────────────────── */
+/* â”€â”€ Input handling â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 const wInput   = document.getElementById("wInput");
 const wSendBtn = document.getElementById("wSendBtn");
 const wMicBtn  = document.getElementById("wMicBtn");
@@ -266,7 +266,7 @@ async function sendQuery() {
 wSendBtn.addEventListener("click", sendQuery);
 wInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendQuery(); });
 
-// MIC button — calls Eel mic recording
+// MIC button â€” calls Eel mic recording
 wMicBtn.addEventListener("click", () => {
   if (window.eel) {
     try { eel.widget_mic_press()(); } catch(_) {}

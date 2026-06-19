@@ -203,7 +203,7 @@ html, body {
 
 .w-line { margin-bottom: 7px; word-break: break-word; }
 .w-line--user   { color: var(--c-green); text-shadow: 0 0 5px rgba(57, 255, 20, 0.4); }
-.w-line--albedo { color: var(--c-cyan);  text-shadow: 0 0 5px rgba(208, 0, 255, 0.4); }
+.w-line--albedo { color: var(--c-orange); text-shadow: 0 0 5px rgba(255, 174, 0, 0.4); }
 .w-line--system { color: var(--c-orange); text-shadow: 0 0 4px rgba(255, 174, 0, 0.4); }
 .w-line--error  { color: var(--c-red); }
 

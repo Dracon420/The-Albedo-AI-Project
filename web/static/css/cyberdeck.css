@@ -441,7 +441,7 @@ body::before {
 }
 .chat__line { margin-bottom: 8px; }
 .chat__line--user   { color: var(--c-green);  text-shadow: var(--glow-green); }
-.chat__line--albedo { color: var(--c-cyan);   text-shadow: var(--glow-cyan);  }
+.chat__line--albedo { color: var(--c-orange); text-shadow: var(--glow-orange); }
 .chat__line--system { color: var(--c-orange); text-shadow: var(--glow-orange);}
 .chat__line--error  { color: var(--c-red);    text-shadow: var(--glow-red);   }
 .chat__line code    {

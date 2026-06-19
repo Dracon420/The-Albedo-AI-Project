@@ -226,7 +226,7 @@ body.popout {
 }
 .panel__chat-line { padding: 2px 0; word-wrap: break-word; }
 .panel__chat-line--user   { color: var(--pp-amber); }
-.panel__chat-line--albedo { color: var(--pp-cyan); }
+.panel__chat-line--albedo { color: var(--pp-amber); }
 .panel__chat-line--system { color: var(--pp-fg-dim); font-style: italic; }
 .panel__chat-line--error  { color: var(--pp-red); }
 
