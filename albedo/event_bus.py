@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import threading
 import time
+import uuid
 from collections import deque
 from typing import Any, Callable
 
@@ -57,7 +58,7 @@ def publish(event_type: str, **payload: Any) -> dict:
     Each subscriber is called in a try/except so one bad subscriber doesn't
     break the others or the producer.
     """
-    evt = {"type": event_type, "ts": time.time(), **payload}
+    evt = {"type": event_type, "ts": time.time(), "id": uuid.uuid4().hex[:16], **payload}
     with _lock:
         _history.append(evt)
         subs = list(_subscribers)

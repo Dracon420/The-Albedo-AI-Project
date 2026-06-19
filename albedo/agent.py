@@ -35,6 +35,7 @@ Never raises — failures come back in the result dict.
 from __future__ import annotations
 
 import json
+import threading
 import time
 import uuid
 from typing import Any, Callable, Optional
@@ -249,20 +250,36 @@ def _is_transient(error: str) -> bool:
     return any(m in e for m in _TRANSIENT_MARKERS)
 
 
+def _call_with_timeout(messages, tools, provider, model, secs: int = 50) -> dict:
+    """Run providers.complete_with_tools in a thread; return error dict on timeout."""
+    bucket: dict = {}
+
+    def _go():
+        bucket["v"] = providers.complete_with_tools(
+            messages, tools=tools, provider=provider, model=model
+        )
+
+    t = threading.Thread(target=_go, daemon=True)
+    t.start()
+    t.join(secs)
+    if t.is_alive():
+        return {"error": f"provider call timed out after {secs}s",
+                "text": "", "tool_calls": []}
+    return bucket.get("v") or {"error": "no result", "text": "", "tool_calls": []}
+
+
 def _complete_with_retry(messages, tools, provider, model, status,
-                         max_retries: int = 2) -> dict:
+                         max_retries: int = 2, call_timeout: int = 50) -> dict:
     """Call the provider; retry briefly on transient errors with backoff."""
     delay = 3.0
-    result = providers.complete_with_tools(messages, tools=tools,
-                                           provider=provider, model=model)
+    result = _call_with_timeout(messages, tools, provider, model, call_timeout)
     attempt = 0
     while result.get("error") and _is_transient(result["error"]) and attempt < max_retries:
         attempt += 1
         status(f"transient error ({result['error'][:50]}…) — retry {attempt}/{max_retries} in {delay:.0f}s")
         time.sleep(delay)
         delay *= 2
-        result = providers.complete_with_tools(messages, tools=tools,
-                                               provider=provider, model=model)
+        result = _call_with_timeout(messages, tools, provider, model, call_timeout)
     return result
 
 

@@ -16,7 +16,8 @@
 (function () {
   "use strict";
 
-  const subs = {};   // type -> [cb, cb, ...]; "*" matches all
+  const subs = {};          // type -> [cb, cb, ...]; "*" matches all
+  const _seen = new Set(); // dedup by event id — prevents live+replay double-fire
 
   function on(type, cb) {
     if (typeof cb !== "function") return;
@@ -25,6 +26,14 @@
 
   function _dispatch(evt) {
     if (!evt || !evt.type) return;
+    if (evt.id) {
+      if (_seen.has(evt.id)) return;
+      _seen.add(evt.id);
+      if (_seen.size > 2000) {
+        const iter = _seen.values();
+        for (let i = 0; i < 500; i++) _seen.delete(iter.next().value);
+      }
+    }
     (subs[evt.type] || []).forEach((cb) => { try { cb(evt); } catch (_) {} });
     (subs["*"]      || []).forEach((cb) => { try { cb(evt); } catch (_) {} });
   }

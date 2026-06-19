@@ -604,12 +604,13 @@ def send_chat(text: str, history: list | None = None) -> dict:
     """
     User-facing chat entry point.
 
-    Routing order (cheapest first — prevents the chat from "freezing" on a
-    rate-limited or slow provider for trivial questions):
-      1. INSTANT fast-path: identity / greeting / acknowledgement -> canned
-         reply in <1 ms, no LLM, no network.
-      2. LLM auto-router: Albedo classifies the message as 'direct' (single
-         agent) or 'team' (8-specialist team) and runs the chosen path.
+    Routing order:
+      1. INSTANT fast-path: identity / greeting -> canned reply, <1 ms.
+      2. Router LLM (20s max): classifies message as "direct" or "team".
+      3a. DIRECT: single agent, 90s max, returns answer inline.
+      3b. TEAM: returns immediately with acknowledgement; team runs in a
+          background thread and pushes the final answer to the chat via
+          _albedo_chat_push when complete.
 
     Returns {ok, mode, reason, answer, error} —
         mode = "instant" | "direct" | "team"
@@ -625,43 +626,99 @@ def send_chat(text: str, history: list | None = None) -> dict:
             return {"ok": True, "mode": "instant", "reason": "fast-path",
                     "answer": canned, "error": None}
     except Exception:
-        pass   # fall through to the LLM path on any unexpected failure
+        pass
 
     set_swarm_state("ALBEDO_CORE", "active")
-    out: dict = {}
 
-    def _run() -> None:
+    # ── 2. Quick classify (20s max; defaults to "direct" on timeout) ─
+    from albedo.agent_team import (  # noqa: PLC0415
+        _ROUTER_PROMPT, _extract_json, _role_provider, _emit as _team_emit
+    )
+    from albedo import agent as _agent_mod  # noqa: PLC0415
+
+    _router_bucket: dict = {}
+
+    def _do_classify() -> None:
         try:
-            from albedo.agent_team import classify_and_run
-            res = classify_and_run(text.strip(), history=history)
-            mode = res.get("mode", "direct")
-            inner = res.get("result", {}) or {}
-            answer = inner.get("answer", "")
-            if not answer and mode == "team":
-                # Synthesize a one-line summary from team results when present
-                rs = inner.get("results", []) or []
-                if rs:
-                    answer = "\n".join(f"[{r['role']}] {(r.get('answer') or '').strip()}"
-                                       for r in rs if r.get("answer"))
-            out["ok"]     = inner.get("error") is None
-            out["mode"]   = mode
-            out["reason"] = res.get("reason", "")
-            out["answer"] = answer
-            out["error"]  = inner.get("error")
-            set_swarm_state("ALBEDO_CORE",
-                            "standby" if out["ok"] else "error")
-        except Exception as exc:                                    # noqa: BLE001
-            out["ok"] = False
-            out["error"] = f"{type(exc).__name__}: {exc}"
-            set_swarm_state("ALBEDO_CORE", "error")
+            res = _agent_mod.run_agent(
+                text.strip(),
+                system_prompt=_ROUTER_PROMPT,
+                tool_names=[],
+                provider=_role_provider("Orchestrator"),
+                role="Router",
+            )
+            _router_bucket["res"] = res
+        except Exception as exc:
+            _router_bucket["err"] = str(exc)
 
-    t = threading.Thread(target=_run, daemon=True, name="chat-router")
-    t.start()
-    t.join(timeout=600)
-    if t.is_alive():
+    rt = threading.Thread(target=_do_classify, daemon=True, name="chat-classify")
+    rt.start()
+    rt.join(timeout=20)
+
+    res = _router_bucket.get("res") or {}
+    data = _extract_json(res.get("answer", "") or "") or {}
+    mode = str(data.get("mode", "direct")).lower().strip()
+    if mode not in ("direct", "team"):
+        mode = "direct"
+    reason = str(data.get("reason", ""))[:160]
+    _team_emit("router.decision", mode=mode, reason=reason, message=text[:200])
+
+    # ── 3b. TEAM — non-blocking ───────────────────────────────────────
+    if mode == "team":
+        def _bg_team() -> None:
+            try:
+                from albedo.agent_team import run_team  # noqa: PLC0415
+                team_res = run_team(text.strip(), require_plan_approval=False)
+                answer = team_res.get("answer", "")
+                if not answer:
+                    rs = team_res.get("results", []) or []
+                    answer = "\n\n".join(
+                        f"[{r['role']}] {(r.get('answer') or '').strip()}"
+                        for r in rs if r.get("answer")
+                    )
+                if not answer:
+                    answer = team_res.get("error") or "Team completed with no output."
+            except Exception as exc:
+                answer = f"Team error: {exc}"
+            try:
+                import eel as _eel_mod  # noqa: PLC0415
+                _eel_mod._albedo_chat_push("albedo", answer)
+            except Exception:
+                pass
+            set_swarm_state("ALBEDO_CORE", "standby")
+
+        threading.Thread(target=_bg_team, daemon=True, name="team-bg").start()
+        return {
+            "ok": True,
+            "mode": "team",
+            "reason": reason,
+            "answer": "[TEAM activated — agents are working. Watch Team window for live progress. Answer will appear here when complete.]",
+            "error": None,
+        }
+
+    # ── 3a. DIRECT — 90s timeout ─────────────────────────────────────
+    _direct_bucket: dict = {}
+
+    def _do_direct() -> None:
+        try:
+            r = _agent_mod.run_agent(text.strip(), history=history, role="Albedo")
+            _direct_bucket["r"] = r
+        except Exception as exc:
+            _direct_bucket["r"] = {"answer": "", "error": str(exc)}
+
+    dt = threading.Thread(target=_do_direct, daemon=True, name="chat-direct")
+    dt.start()
+    dt.join(timeout=90)
+    if dt.is_alive():
         set_swarm_state("ALBEDO_CORE", "error")
-        return {"ok": False, "error": "chat timeout (600 s)"}
-    return out
+        return {"ok": False, "mode": "direct", "reason": reason,
+                "answer": "", "error": "direct answer timed out (90 s)"}
+
+    r = _direct_bucket.get("r") or {}
+    ok = not bool(r.get("error"))
+    set_swarm_state("ALBEDO_CORE", "standby" if ok else "error")
+    return {"ok": ok, "mode": "direct", "reason": reason,
+            "answer": r.get("answer", ""), "error": r.get("error")}
 
 
 @_expose

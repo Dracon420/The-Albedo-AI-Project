@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="static/css/panels.css?v=315" />
 </head>
 <body data-background="bg2">
-  <!-- ── Top bar ──────────────────────────────────────────────────────── -->
+  <!-- â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <header class="topbar">
     <div class="topbar__title">
       <span class="topbar__brand" id="personaBrand">ALBEDO</span>
@@ -41,20 +41,20 @@
 
     <!-- View mode switcher -->
     <div class="mode-switcher" role="group" aria-label="View mode">
-      <button class="mode-btn" data-mode="fullscreen" title="Fullscreen — immersive HUD">FULL</button>
-      <button class="mode-btn" data-mode="windowed"   title="Windowed — standard cyberdeck">WIN</button>
-      <button class="mode-btn" data-mode="widget"     title="Widget — compact floating overlay">WIDGET</button>
+      <button class="mode-btn" data-mode="fullscreen" title="Fullscreen â€” immersive HUD">FULL</button>
+      <button class="mode-btn" data-mode="windowed"   title="Windowed â€” standard cyberdeck">WIN</button>
+      <button class="mode-btn" data-mode="widget"     title="Widget â€” compact floating overlay">WIDGET</button>
     </div>
 
-    <button class="drawer__toggle" id="drawerToggle" aria-label="Open tactical drawer">≡</button>
+    <button class="drawer__toggle" id="drawerToggle" aria-label="Open tactical drawer">â‰¡</button>
   </header>
 
-  <!-- ── Main: full-width vertical stack ───────────────────────────── -->
+  <!-- â”€â”€ Main: full-width vertical stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <!--   1) HUD strip (gauges + central orb)                          -->
   <!--   2) Neural-links horizontal status bar                        -->
   <!--   3) Chat panel (full width)                                   -->
   <main class="main">
-    <!-- ── HUD strip: left triangle + central orb + right triangle ─── -->
+    <!-- â”€â”€ HUD strip: left triangle + central orb + right triangle â”€â”€â”€ -->
     <section class="hud">
       <!-- LEFT triangle: small NET above CPU+RAM pair -->
       <div class="hud__wing hud__wing--left">
@@ -66,7 +66,7 @@
             <circle class="gauge__fill" cx="60" cy="60" r="48" />
             <text class="gauge__value" x="60" y="70" text-anchor="middle" dominant-baseline="middle" data-value="net">0</text>
           </svg>
-          <div class="dial__sub" data-sub="net_breakdown">↓-- ↑-- Mbps</div>
+          <div class="dial__sub" data-sub="net_breakdown">â†“-- â†‘-- Mbps</div>
         </div>
         <!-- Base pair with captions BELOW each dial -->
         <div class="wing__base">
@@ -120,7 +120,7 @@
               <text class="gauge__value" x="100" y="110" text-anchor="middle" dominant-baseline="middle" data-value="gpu">0%</text>
             </svg>
             <div class="dial__caption">GPU</div>
-            <div class="dial__sub" data-sub="gpu_temp">-- °C</div>
+            <div class="dial__sub" data-sub="gpu_temp">-- Â°C</div>
           </div>
           <div class="dial">
             <svg class="gauge gauge--medium" viewBox="0 0 200 200" data-gauge="ssd">
@@ -135,18 +135,18 @@
       </div>
     </section>
 
-    <!-- ── Neural-links horizontal status bar ─────────────────────── -->
+    <!-- â”€â”€ Neural-links horizontal status bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="links">
       <div class="links__header">
         <span class="links__title">[ NEURAL LINKS ]</span>
         <span class="links__status" id="linksStatus">// SYNCED</span>
       </div>
       <div class="links__strip" id="linksGrid">
-        <!-- Cells injected by neural.js — one strip, wraps to 2 rows on narrow windows -->
+        <!-- Cells injected by neural.js â€” one strip, wraps to 2 rows on narrow windows -->
       </div>
     </section>
 
-    <!-- ── Chat panel (full width) ────────────────────────────────── -->
+    <!-- â”€â”€ Chat panel (full width) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <section class="chat-panel">
       <div class="chat" id="chat">
         <div class="chat__line chat__line--system">[SYS] Albedo Mission Control online.</div>
@@ -171,26 +171,26 @@
     </section>
   </main>
 
-  <!-- ── Tactical drawer (off-canvas) ───────────────────────────────── -->
+  <!-- â”€â”€ Tactical drawer (off-canvas) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <aside class="drawer" id="drawer" aria-hidden="true">
     <header class="drawer__head">
       <h2>TACTICAL DRAWER</h2>
       <div>
         <button class="drawer__pinbtn" id="drawerPinBtn"
                 aria-label="Pin drawer as sidebar"
-                title="Pin / unpin as right-side sidebar">⇲</button>
-        <button class="drawer__close" id="drawerClose" aria-label="Close drawer">×</button>
+                title="Pin / unpin as right-side sidebar">â‡²</button>
+        <button class="drawer__close" id="drawerClose" aria-label="Close drawer">Ã—</button>
       </div>
     </header>
 
     <!-- Window launcher rail: pop out Chat / Brain / Team as standalone windows -->
     <div class="drawer__windowbar">
       <button class="cmd-btn drawer__winbtn"
-              onclick="eel.open_panel_window('chat')()" title="Open Chat in its own window">▶ CHAT</button>
+              onclick="eel.open_panel_window('chat')()" title="Open Chat in its own window">â–¶ CHAT</button>
       <button class="cmd-btn drawer__winbtn"
-              onclick="eel.open_panel_window('brain')()" title="Open the Obsidian Brain visualization">◈ BRAIN</button>
+              onclick="eel.open_panel_window('brain')()" title="Open the Obsidian Brain visualization">â—ˆ BRAIN</button>
       <button class="cmd-btn drawer__winbtn"
-              onclick="eel.open_panel_window('team')()" title="Open the live Team visualization">◆ TEAM</button>
+              onclick="eel.open_panel_window('team')()" title="Open the live Team visualization">â—† TEAM</button>
     </div>
 
     <!-- Tabs across the top of the drawer -->
@@ -201,7 +201,7 @@
       <button class="drawer__tab"           data-tab="mobile">MOBILE</button>
     </nav>
 
-    <!-- ── Settings tab: interactive controls ───────────────────── -->
+    <!-- â”€â”€ Settings tab: interactive controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="drawer__pane is-active" data-pane="settings">
       <section class="drawer__section">
         <h3>BACKGROUND</h3>
@@ -268,13 +268,13 @@
           <pre class="drawer__readout drawer__readout--small" id="updateStatus">// update check not yet run</pre>
           <a id="updateDownloadLink" class="setting__hint" href="#" target="_blank"
              style="display:none; color:var(--c-cyan); text-shadow:var(--glow-cyan);">
-            ▶ Open release page to download
+            â–¶ Open release page to download
           </a>
         </div>
       </section>
     </div>
 
-    <!-- ── Devices tab: audio I/O ─────────────────────────────────── -->
+    <!-- â”€â”€ Devices tab: audio I/O â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="drawer__pane" data-pane="devices">
       <section class="drawer__section">
         <h3>AUDIO</h3>
@@ -289,7 +289,7 @@
       </section>
     </div>
 
-    <!-- ── System tab: hardware + memory + dream cycle + version ──── -->
+    <!-- â”€â”€ System tab: hardware + memory + dream cycle + version â”€â”€â”€â”€ -->
     <div class="drawer__pane" data-pane="system">
       <section class="drawer__section">
         <h3>HARDWARE PROFILE</h3>
@@ -315,7 +315,7 @@
         <h3>DREAM CYCLE</h3>
         <div class="setting__hint" style="margin-bottom:10px">
           Albedo enters her dream cycle after
-          <strong id="idleThresholdLabel">20</strong> minutes of inactivity —
+          <strong id="idleThresholdLabel">20</strong> minutes of inactivity â€”
           file suggestions, system cataloging, memory consolidation.
         </div>
         <pre class="drawer__readout drawer__readout--small" id="dreamStatus">// dream: watching for idle</pre>
@@ -332,7 +332,7 @@
       </section>
     </div>
 
-    <!-- ── Mobile pairing tab ───────────────────────────────────────── -->
+    <!-- â”€â”€ Mobile pairing tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
     <div class="drawer__pane" data-pane="mobile">
       <section class="drawer__section">
         <h3>MOBILE LINK</h3>
@@ -358,7 +358,7 @@
           <label class="setting__label" style="margin-top:8px">Pairing Token</label>
           <div class="mobile-token-row">
             <code id="mobileToken" class="mobile-token-code mobile-token-code--mono"></code>
-            <button class="mobile-copy-btn" id="mobileCopyBtn" title="Copy token">⎘</button>
+            <button class="mobile-copy-btn" id="mobileCopyBtn" title="Copy token">âŽ˜</button>
           </div>
         </div>
 
@@ -371,7 +371,7 @@
 
         <p class="mobile-hint">
           Download the Albedo app, tap <strong>Scan QR</strong>, and point it at the code above.
-          No account needed — the code is your secure key.
+          No account needed â€” the code is your secure key.
         </p>
       </section>
     </div>
@@ -383,7 +383,7 @@
   <!-- Drawer scrim for click-to-close -->
   <div class="drawer__scrim" id="drawerScrim"></div>
 
-  <!-- ── JS — v=312 cache-bust forces fresh load after each update ── -->
+  <!-- â”€â”€ JS â€” v=312 cache-bust forces fresh load after each update â”€â”€ -->
   <script src="static/js/gauges.js?v=312"></script>
   <script src="static/js/telemetry.js?v=312"></script>
   <script src="static/js/swarm.js?v=312"></script>
@@ -401,7 +401,7 @@
 
   <!-- Event-bus client (subscribed by Brain/Team viz windows; also lets MC react
        to router decisions so chat can flag when the team kicks in) -->
-  <script src="static/js/event_bus_client.js?v=314"></script>
+  <script src="static/js/event_bus_client.js?v=317"></script>
 
   <!-- Settings sub-section panels: reasoning core + API keys + per-role brains -->
   <script src="static/js/panels/brain_panel.js?v=314"></script>
@@ -427,10 +427,10 @@
     })();
   </script>
 
-  <!-- ── Safety catch approval modal ──────────────────────────────────── -->
+  <!-- â”€â”€ Safety catch approval modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="approvalModal" class="approval-modal" aria-hidden="true">
     <div class="approval-modal__box">
-      <div class="approval-modal__title">⚠ COMMAND APPROVAL REQUIRED</div>
+      <div class="approval-modal__title">âš  COMMAND APPROVAL REQUIRED</div>
       <div class="approval-modal__meta" id="approvalRequester"></div>
       <div class="approval-modal__cmd"  id="approvalCmd"></div>
       <div class="approval-modal__hint">Albedo wants to execute this command. Approve or deny.</div>
@@ -441,10 +441,10 @@
     </div>
   </div>
 
-  <!-- ── Dream-cycle file-move suggestions (shown at session start) ─────── -->
+  <!-- â”€â”€ Dream-cycle file-move suggestions (shown at session start) â”€â”€â”€â”€â”€â”€â”€ -->
   <div id="dreamSuggestModal" class="dream-modal" aria-hidden="true">
     <div class="dream-modal__box">
-      <div class="dream-modal__title">◇ DREAM CYCLE — FILE ORGANIZATION SUGGESTIONS</div>
+      <div class="dream-modal__title">â—‡ DREAM CYCLE â€” FILE ORGANIZATION SUGGESTIONS</div>
       <div class="dream-modal__meta" id="dreamSuggestMeta">
         Albedo proposed the following file moves while idle. Nothing has been moved.
         Review and choose.

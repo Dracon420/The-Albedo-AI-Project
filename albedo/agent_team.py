@@ -376,7 +376,7 @@ def classify_and_run(message: str, *, status_cb=None, history=None) -> dict:
 
     # 2. Run the chosen path
     if mode == "team":
-        team_res = run_team(message, status_cb=status_cb)
+        team_res = run_team(message, status_cb=status_cb, require_plan_approval=False)
         return {"mode": "team", "reason": reason, "result": team_res}
     else:
         agent_res = agent.run_agent(message, status_cb=status_cb, history=history,
@@ -394,7 +394,7 @@ def run_team(
     status_cb: Optional[Callable[[str], None]] = None,
     max_tasks: int = 6,
     allow_revision: bool = True,
-    require_plan_approval: bool = True,
+    require_plan_approval: bool = False,  # tool-level approval already gates every action
 ) -> dict:
     """
     Run the specialist team on a goal. Sequential, user-approved.
