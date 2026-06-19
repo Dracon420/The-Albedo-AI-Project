@@ -630,37 +630,44 @@ def send_chat(text: str, history: list | None = None) -> dict:
 
     set_swarm_state("ALBEDO_CORE", "active")
 
-    # ── 2. Quick classify (20s max; defaults to "direct" on timeout) ─
     from albedo.agent_team import (  # noqa: PLC0415
-        _ROUTER_PROMPT, _extract_json, _role_provider, _emit as _team_emit
+        _ROUTER_PROMPT, _extract_json, _role_provider, _emit as _team_emit,
+        _heuristic_classify,
     )
     from albedo import agent as _agent_mod  # noqa: PLC0415
 
-    _router_bucket: dict = {}
+    # ── 2a. Heuristic pre-classifier (zero latency, no LLM) ──────────
+    mode = _heuristic_classify(text.strip()) or ""
+    reason = "keyword-heuristic" if mode else ""
 
-    def _do_classify() -> None:
-        try:
-            res = _agent_mod.run_agent(
-                text.strip(),
-                system_prompt=_ROUTER_PROMPT,
-                tool_names=[],
-                provider=_role_provider("Orchestrator"),
-                role="Router",
-            )
-            _router_bucket["res"] = res
-        except Exception as exc:
-            _router_bucket["err"] = str(exc)
+    if not mode:
+        # ── 2b. LLM classify (30s max; defaults to "direct" on timeout) ─
+        _router_bucket: dict = {}
 
-    rt = threading.Thread(target=_do_classify, daemon=True, name="chat-classify")
-    rt.start()
-    rt.join(timeout=20)
+        def _do_classify() -> None:
+            try:
+                res = _agent_mod.run_agent(
+                    text.strip(),
+                    system_prompt=_ROUTER_PROMPT,
+                    tool_names=[],
+                    provider=_role_provider("Orchestrator"),
+                    role="Router",
+                )
+                _router_bucket["res"] = res
+            except Exception as exc:
+                _router_bucket["err"] = str(exc)
 
-    res = _router_bucket.get("res") or {}
-    data = _extract_json(res.get("answer", "") or "") or {}
-    mode = str(data.get("mode", "direct")).lower().strip()
-    if mode not in ("direct", "team"):
-        mode = "direct"
-    reason = str(data.get("reason", ""))[:160]
+        rt = threading.Thread(target=_do_classify, daemon=True, name="chat-classify")
+        rt.start()
+        rt.join(timeout=30)
+
+        res = _router_bucket.get("res") or {}
+        data = _extract_json(res.get("answer", "") or "") or {}
+        mode = str(data.get("mode", "direct")).lower().strip()
+        if mode not in ("direct", "team"):
+            mode = "direct"
+        reason = str(data.get("reason", ""))[:160]
+
     _team_emit("router.decision", mode=mode, reason=reason, message=text[:200])
 
     # ── 3b. TEAM — non-blocking ───────────────────────────────────────
@@ -696,7 +703,7 @@ def send_chat(text: str, history: list | None = None) -> dict:
             "error": None,
         }
 
-    # ── 3a. DIRECT — 90s timeout ─────────────────────────────────────
+    # ── 3a. DIRECT — 120s timeout ────────────────────────────────────
     _direct_bucket: dict = {}
 
     def _do_direct() -> None:
@@ -708,11 +715,11 @@ def send_chat(text: str, history: list | None = None) -> dict:
 
     dt = threading.Thread(target=_do_direct, daemon=True, name="chat-direct")
     dt.start()
-    dt.join(timeout=90)
+    dt.join(timeout=120)
     if dt.is_alive():
         set_swarm_state("ALBEDO_CORE", "error")
         return {"ok": False, "mode": "direct", "reason": reason,
-                "answer": "", "error": "direct answer timed out (90 s)"}
+                "answer": "", "error": "direct answer timed out (120 s)"}
 
     r = _direct_bucket.get("r") or {}
     ok = not bool(r.get("error"))

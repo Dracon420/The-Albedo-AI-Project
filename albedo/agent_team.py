@@ -338,6 +338,47 @@ _ROUTER_PROMPT = (
     "single-system queries."
 )
 
+# ---------------------------------------------------------------------------
+# Fast keyword pre-classifier — runs BEFORE the LLM router to catch obvious
+# multi-specialist queries without any network call.
+# ---------------------------------------------------------------------------
+
+_SPECIALIST_SIGNAL_GROUPS = [
+    # SysOps territory: process/memory/system state
+    {"memory", "process", "cpu", "ram", "disk", "kill", "running", "top",
+     "hog", "usage", "processes", "task", "vram", "gpu", "service"},
+    # Researcher territory: web/knowledge lookup
+    {"search", "web", "verify", "look up", "online", "safe to", "is it safe",
+     "find out", "check online", "google", "wiki", "tavily"},
+    # Analysis / verdict territory
+    {"verdict", "should i", "recommend", "tell me", "analyze", "advise",
+     "compare", "review", "conclude", "assessment"},
+    # File / code territory
+    {"write file", "create file", "edit file", "save to", "folder",
+     "directory", "write code", "generate code"},
+]
+
+_EXPLICIT_TEAM_PHRASES = [
+    "and then", "step by step", "multiple steps", "in stages",
+    "verify with web", "verify with search", "check with web",
+    "and tell me your verdict", "and give me your verdict",
+    "search and", "find and", "check and verify", "look up and",
+]
+
+
+def _heuristic_classify(message: str) -> Optional[str]:
+    """Fast pre-classifier. Returns 'team', 'direct', or None (defer to LLM).
+    Never makes a network call."""
+    m = message.lower()
+    # Explicit multi-step connectors → always team
+    if any(p in m for p in _EXPLICIT_TEAM_PHRASES):
+        return "team"
+    # Count how many distinct specialist areas the message touches
+    touched = sum(1 for grp in _SPECIALIST_SIGNAL_GROUPS if any(w in m for w in grp))
+    if touched >= 2:
+        return "team"
+    return None  # too ambiguous — let the LLM decide
+
 
 def classify_and_run(message: str, *, status_cb=None, history=None) -> dict:
     """
