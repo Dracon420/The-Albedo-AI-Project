@@ -14,7 +14,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Qwen2.5--7B%20%7C%20Custom%20QLoRA-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-v3.2.3-00F0FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-v3.2.4-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice & text command catalog
 
@@ -32,11 +32,11 @@ When given a directive, Albedo executes it.
 
 ---
 
-## WHAT'S NEW IN v3.2.3
+## WHAT'S NEW IN v3.2.4
 
-**v3.2.3** reworks the 3D brain into an anatomical **Brain Atlas**; it carries the full v3.2.x feature set:
+**v3.2.4** makes the 3D **Brain Atlas** a dense neural web; it carries the full v3.2.x feature set:
 
-- **3D "Brain Atlas" visualization** — the Obsidian-vault graph is a rotating 3D brain: each top-level folder becomes an **anatomical lobe region** (frontal / parietal / temporal / occipital / cerebellum / brain-stem…) pinned to a fixed spot in a brain-shaped ellipsoid, with **tight clusters**, floating region labels, a faint brain-shell point cloud, and an anatomical-regions sidebar. Crisp lit-sphere nodes, depth cueing, drag-to-spin and wheel-zoom. Pure Canvas 2D — no WebGL/CDN, so it works fully offline.
+- **3D "Brain Atlas" visualization** — the Obsidian vault renders as a rotating 3D brain. Each top-level folder is an **anatomical lobe region** (frontal / parietal / temporal / occipital / cerebellum / brain-stem…) in a brain-shaped ellipsoid, and every note **branches into its heading/section sub-nodes (dendrites)** with **`#tag` hub nodes** cross-linking notes — so even a small vault reads as a dense neural web (a 24-note vault → ~247 nodes). Floating region labels, brain-shell point cloud, anatomical-regions sidebar, crisp lit-sphere nodes, depth cueing, drag-to-spin and wheel-zoom. Pure Canvas 2D — no WebGL/CDN, fully offline.
 - **BRAIN model picker is a dropdown** — pick a known-good model per provider (default marked, `Custom…` for any id) instead of typing exact provider model strings.
 - **Running-process popup** — when Albedo checks processes it opens a chooser listing them by RAM with **STOP SELECTED**; critical OS/Albedo processes are locked so you can't crash Windows.
 - **Smarter app-usage tracking** — installed-apps usage now matches Windows UserAssist records by **install path** (not fuzzy name), crediting far more apps with real run-counts/dates.
@@ -119,7 +119,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 <div align="center">
 
-### [⬇ Download Albedo-Setup-3.2.3.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.2.3/Albedo-Setup-3.2.3.exe)
+### [⬇ Download Albedo-Setup-3.2.4.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.2.4/Albedo-Setup-3.2.4.exe)
 
 </div>
 
@@ -143,7 +143,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 **Deployment sequence:**
 
-1. **Download** `Albedo-Setup-3.2.3.exe` from the link above
+1. **Download** `Albedo-Setup-3.2.4.exe` from the link above
 2. **Run** the installer — accept the UAC prompt
 3. The **Setup Wizard** launches automatically and executes:
    - System dependency verification (Python 3.12 + Ollama)
@@ -271,7 +271,7 @@ The installer creates a **Start Menu** shortcut and an optional **Desktop** shor
 | Shortcut / Method | Action |
 |---|---|
 | **Albedo Mission Control** shortcut | Starts Ollama silently, then opens Mission Control via pythonw |
-| Re-run `Albedo-Setup-3.2.3.exe` | Upgrades in-place, preserves all user data |
+| Re-run `Albedo-Setup-3.2.4.exe` | Upgrades in-place, preserves all user data |
 | Windows **Add or remove programs** → Albedo | Uninstalls — preserves `.env`, `settings.json`, `chroma_db`, `albedo_memory_db` |
 
 Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.
