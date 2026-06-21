@@ -1,25 +1,34 @@
 /**
- * brain_viz.js — LIVE 3D visualization of the Obsidian "second brain".
+ * brain_viz.js — LIVE 3D "Brain Atlas" of the Obsidian second brain.
  *
- * A rotating 3D node network of the vault (nodes = notes, edges = wikilinks),
- * colored by top-level folder — the "Brain Atlas" look, rendered entirely in
- * Canvas 2D so it works offline with no Three.js / WebGL / CDN dependency.
+ * The vault (nodes = notes, edges = wikilinks) is laid out as an anatomical
+ * brain: each top-level folder becomes a lobe REGION pinned to a fixed point in
+ * a brain-shaped ellipsoid (frontal/parietal/temporal/occipital/cerebellum/
+ * brain-stem…). Notes cluster tightly around their region anchor, a faint
+ * "brain shell" point cloud fills the silhouette, and region labels float in 3D.
  *
- *   - 3D force-ish layout: notes are spread over a sphere volume, ordered by
- *     folder so each cluster occupies its own region, then relaxed along
- *     wikilink springs so connected notes pull together into lobes.
- *   - Auto-rotates; drag to spin, wheel to zoom. Perspective projection with
- *     depth cueing (near nodes bigger/brighter, far ones smaller/dimmer).
- *   - Neuron firing: rag.hit pulses matched nodes and sends a traveling spark
- *     down each axon to neighbors; a low ambient twinkle keeps it alive at rest.
- *   - Hover a node for an HTML tooltip (title, folder, path, links, last fired).
+ * Pure Canvas 2D — rotates, drag to spin, wheel to zoom. No Three.js / WebGL /
+ * CDN, so it works fully offline. RAG hits pulse nodes + fire axon sparks.
  */
 (function () {
   "use strict";
 
-  const AMBIENT_INTERVAL_MS = 600;
+  const AMBIENT_INTERVAL_MS = 650;
   const AMBIENT_SPARKS_PER_TICK = 3;
-  const MAX_NODES = 700;            // cap for smooth rotation on modest GPUs
+  const MAX_NODES = 700;
+  const SHELL_POINTS = 420;
+
+  // Anatomical lobes (unit-ellipsoid anchors + palette), in display order.
+  const REGION_DEFS = [
+    { key: "PARIETAL",   sub: "Concepts · Tools",     color: "#4ee1ff", a: [ 0.00,  0.92, -0.05] },
+    { key: "FRONTAL",    sub: "Projects · Decisions", color: "#ffb14e", a: [ 0.00,  0.34,  0.95] },
+    { key: "TEMPORAL",   sub: "People · Orgs",        color: "#b988ff", a: [-0.95, -0.08,  0.18] },
+    { key: "OCCIPITAL",  sub: "Sources · Repos",      color: "#5dff9b", a: [ 0.00,  0.24, -0.98] },
+    { key: "CEREBELLUM", sub: "Daily · Incidents",    color: "#ff77ad", a: [ 0.00, -0.58, -0.72] },
+    { key: "BRAIN STEM", sub: "Index · Routing",      color: "#ffd24e", a: [ 0.00, -0.94, -0.08] },
+    { key: "LIMBIC",     sub: "Memory · Links",       color: "#7fd0ff", a: [ 0.92, -0.05,  0.20] },
+    { key: "INSULA",     sub: "Salience",             color: "#ff9d5c", a: [-0.48,  0.42,  0.55] },
+  ];
 
   function _el(tag, cls, txt) {
     const e = document.createElement(tag);
@@ -27,20 +36,15 @@
     if (txt != null) e.textContent = txt;
     return e;
   }
-
-  function _hashHue(folder) {
-    let h = 0;
-    const s = String(folder || "_root_");
-    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
-    return Math.abs(h) % 360;
-  }
-  function _folderColor(folder)    { return `hsl(${_hashHue(folder)}, 80%, 62%)`; }
-  function _folderColorDim(folder) { return `hsla(${_hashHue(folder)}, 60%, 50%, 0.22)`; }
-
   function escapeHtml(s) {
     return String(s).replace(/[&<>"']/g, (c) => (
       { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
     ));
+  }
+  function _hashHue(s) {
+    let h = 0; s = String(s || "_root_");
+    for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+    return Math.abs(h) % 360;
   }
 
   async function mount(root) {
@@ -49,13 +53,11 @@
     root.classList.add("viz", "viz--brain");
 
     const bar = _el("div", "viz__toolbar");
-    bar.appendChild(_el("div", "viz__title", "◈ OBSIDIAN BRAIN — 3D"));
+    bar.appendChild(_el("div", "viz__title", "◈ OBSIDIAN BRAIN — ATLAS"));
     const status = _el("div", "viz__status", "loading vault…");
     bar.appendChild(status);
     const search = document.createElement("input");
-    search.type = "text";
-    search.placeholder = "highlight note…";
-    search.className = "viz__search";
+    search.type = "text"; search.placeholder = "highlight note…"; search.className = "viz__search";
     bar.appendChild(search);
     const refreshBtn = _el("button", "cmd-btn", "REFRESH");
     bar.appendChild(refreshBtn);
@@ -63,7 +65,7 @@
 
     const stage = _el("div", "viz__stage");
     root.appendChild(stage);
-    const legend = _el("div", "brain-legend");
+    const legend = _el("div", "brain-legend brain-legend--regions");
     root.appendChild(legend);
 
     const tooltip = _el("div", "brain-tip");
@@ -74,275 +76,268 @@
       status.textContent = refresh ? "rebuilding vault graph…" : "loading vault…";
       try {
         const g = await eel.get_vault_graph(!!refresh)();
-        if (!g || !g.ok) {
-          status.textContent = "vault unavailable: " + (g && g.error || "unknown");
-          return null;
-        }
-        const folders = new Set((g.nodes || []).map(n => n.folder || "_root_"));
-        status.textContent = `${g.nodes.length} notes · ${g.edges.length} links · ${folders.size} clusters`;
-        legend.innerHTML = "";
-        Array.from(folders).sort().forEach((f) => {
-          const item = _el("span", "brain-legend__item");
-          const sw = _el("span", "brain-legend__swatch");
-          sw.style.background = _folderColor(f);
-          item.appendChild(sw);
-          item.appendChild(_el("span", "brain-legend__label", f === "_root_" ? "(root)" : f));
-          legend.appendChild(item);
-        });
+        if (!g || !g.ok) { status.textContent = "vault unavailable: " + (g && g.error || "unknown"); return null; }
         return g;
-      } catch (e) {
-        status.textContent = "bridge error: " + e;
-        return null;
-      }
+      } catch (e) { status.textContent = "bridge error: " + e; return null; }
     }
 
     const graph = await load(false);
     if (!graph || !graph.nodes.length) { tooltip.remove(); return; }
 
-    let scene = _render3D(stage, graph, { tooltip, lastHit: {}, search });
-
+    let scene = _render3D(stage, graph, { tooltip, lastHit: {}, search, status, legend });
     refreshBtn.addEventListener("click", async () => {
       const g2 = await load(true);
       if (!g2 || !g2.nodes.length) return;
       if (scene && scene.destroy) scene.destroy();
       stage.innerHTML = "";
-      scene = _render3D(stage, g2, { tooltip, lastHit: (scene && scene.lastHit) || {}, search });
+      scene = _render3D(stage, g2, { tooltip, lastHit: (scene && scene.lastHit) || {}, search, status, legend });
     });
-
     window.addEventListener("beforeunload", () => tooltip.remove());
   }
 
-  // ─── 3D canvas renderer ──────────────────────────────────────────────
   function _render3D(stage, graph, ctx) {
     const DPR = Math.min(window.devicePixelRatio || 1, 2);
     let W = stage.clientWidth || 800, H = stage.clientHeight || 560;
     const cv = document.createElement("canvas");
-    cv.style.width = "100%"; cv.style.height = "100%";
-    cv.style.cursor = "grab";
+    cv.style.width = "100%"; cv.style.height = "100%"; cv.style.cursor = "grab";
     stage.appendChild(cv);
     const g = cv.getContext("2d");
-
-    function resize() {
-      W = stage.clientWidth || 800; H = stage.clientHeight || 560;
-      cv.width = W * DPR; cv.height = H * DPR;
-      g.setTransform(DPR, 0, 0, DPR, 0, 0);
-    }
+    function resize() { W = stage.clientWidth || 800; H = stage.clientHeight || 560; cv.width = W * DPR; cv.height = H * DPR; g.setTransform(DPR, 0, 0, DPR, 0, 0); }
     resize();
     const onResize = () => resize();
     window.addEventListener("resize", onResize);
 
-    // ---- node set (capped to highest-degree) ----
+    const R = Math.min(W, H) * 0.40;
+    // Brain ellipsoid: widest L-R-ish and front-back, shorter top-bottom.
+    const EX = R * 0.95, EY = R * 0.74, EZ = R * 1.06;
+
+    // ---- nodes (capped to highest-degree) ----
     const deg = {};
     graph.edges.forEach(e => { deg[e.src] = (deg[e.src] || 0) + 1; deg[e.dst] = (deg[e.dst] || 0) + 1; });
     let src = graph.nodes.slice();
-    if (src.length > MAX_NODES) {
-      src = src.slice().sort((a, b) => (deg[b.id] || 0) - (deg[a.id] || 0)).slice(0, MAX_NODES);
-    }
-    // Order by (folder, -degree) so same-folder notes land in one region → clusters.
-    src.sort((a, b) => {
-      const fa = a.folder || "_root_", fb = b.folder || "_root_";
-      if (fa < fb) return -1; if (fa > fb) return 1;
-      return (deg[b.id] || 0) - (deg[a.id] || 0);
+    if (src.length > MAX_NODES) src = src.sort((a, b) => (deg[b.id] || 0) - (deg[a.id] || 0)).slice(0, MAX_NODES);
+
+    // ---- folders -> anatomical regions ----
+    const counts = {};
+    src.forEach(n => { const f = n.folder || "_root_"; counts[f] = (counts[f] || 0) + 1; });
+    const folders = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    const regionOf = {};
+    const regions = folders.map((f, i) => {
+      let d;
+      if (i < REGION_DEFS.length) d = REGION_DEFS[i];
+      else {
+        const t = (i + 0.5) / folders.length, phi = Math.acos(1 - 2 * t), th = Math.PI * (1 + Math.sqrt(5)) * i;
+        d = { key: "REGION " + (i + 1), sub: f === "_root_" ? "(root)" : f,
+              color: `hsl(${_hashHue(f)},80%,62%)`, a: [Math.sin(phi) * Math.cos(th), Math.cos(phi), Math.sin(phi) * Math.sin(th)] };
+      }
+      const reg = { key: d.key, sub: d.sub, color: d.color, folder: f, count: counts[f],
+                    wx: d.a[0] * EX, wy: d.a[1] * EY, wz: d.a[2] * EZ, _sx: 0, _sy: 0, _depth: 0 };
+      regionOf[f] = reg;
+      return reg;
     });
 
-    const R = Math.min(W, H) * 0.42;       // world radius
-    const nodes = src.map((n, i) => {
-      // Fibonacci sphere over a volume → even spread, ordered placement.
-      const t = (i + 0.5) / src.length;
-      const phi = Math.acos(1 - 2 * t);
-      const theta = Math.PI * (1 + Math.sqrt(5)) * i;
-      const rad = R * (0.5 + 0.5 * Math.cbrt(t));
-      return {
-        ...n, deg: deg[n.id] || 0,
-        x: rad * Math.sin(phi) * Math.cos(theta),
-        y: rad * Math.sin(phi) * Math.sin(theta),
-        z: rad * Math.cos(phi),
-        fire: 0, _sx: 0, _sy: 0, _sr: 0, _depth: 0,
-      };
+    // sidebar: anatomical regions
+    if (ctx.legend) {
+      ctx.legend.innerHTML = "";
+      const head = _el("div", "brain-legend__head", "ANATOMICAL REGIONS");
+      ctx.legend.appendChild(head);
+      regions.forEach(r => {
+        const item = _el("div", "brain-legend__region");
+        const sw = _el("span", "brain-legend__swatch"); sw.style.background = r.color;
+        const tx = _el("span", "brain-legend__rlabel");
+        tx.appendChild(_el("b", null, r.key));
+        tx.appendChild(_el("span", "brain-legend__rsub", "  " + (r.folder === "_root_" ? "(root)" : r.folder)));
+        const ct = _el("span", "brain-legend__count", String(r.count));
+        item.appendChild(sw); item.appendChild(tx); item.appendChild(ct);
+        ctx.legend.appendChild(item);
+      });
+    }
+    if (ctx.status) ctx.status.textContent = `${src.length} notes · ${graph.edges.length} links · ${regions.length} regions`;
+
+    const nodes = src.map(n => {
+      const reg = regionOf[n.folder || "_root_"];
+      return { ...n, deg: deg[n.id] || 0, reg,
+        x: reg.wx + (Math.random() - 0.5) * R * 0.3,
+        y: reg.wy + (Math.random() - 0.5) * R * 0.3,
+        z: reg.wz + (Math.random() - 0.5) * R * 0.3,
+        fire: 0, _sx: 0, _sy: 0, _depth: 0, _scale: 1 };
     });
     const byId = {}; nodes.forEach(n => byId[n.id] = n);
-    const edges = graph.edges
-      .filter(e => byId[e.src] && byId[e.dst])
-      .map(e => ({ a: byId[e.src], b: byId[e.dst] }));
-
+    const edges = graph.edges.filter(e => byId[e.src] && byId[e.dst]).map(e => ({ a: byId[e.src], b: byId[e.dst] }));
     const neighbors = {};
-    edges.forEach(e => {
-      (neighbors[e.a.id] = neighbors[e.a.id] || []).push(e.b);
-      (neighbors[e.b.id] = neighbors[e.b.id] || []).push(e.a);
-    });
+    edges.forEach(e => { (neighbors[e.a.id] = neighbors[e.a.id] || []).push(e.b); (neighbors[e.b.id] = neighbors[e.b.id] || []).push(e.a); });
 
-    // ---- Fruchterman-Reingold 3D force layout ----
-    // Repulsion spreads every node apart; link attraction pulls connected notes
-    // together; mild gravity + cooling settle it into a SPREAD 3D cloud with
-    // visible clusters (the Brain Atlas look) instead of a collapsed ball.
+    // ---- layout: strong pull to region anchor (tight clusters) + gentle local
+    //      repulsion (spread within a lobe) + mild link attraction ----
     (function layout() {
-      const k = 1.1 * Math.cbrt((R * R * R) / Math.max(1, nodes.length)); // ideal spacing
-      const GRAV = 0.045;
-      let temp = R * 0.30;
-      const iters = nodes.length > 400 ? 120 : 180;
+      const ANCHOR = 0.16, REP = R * R * 0.16, LINK = 0.012, SEP = R * 0.13;
+      const iters = nodes.length > 400 ? 70 : 110;
       for (let it = 0; it < iters; it++) {
-        for (const a of nodes) { a._dx = 0; a._dy = 0; a._dz = 0; }
-        // repulsion (all pairs, each counted once)
+        for (const a of nodes) {
+          a._dx = (a.reg.wx - a.x) * ANCHOR;
+          a._dy = (a.reg.wy - a.y) * ANCHOR;
+          a._dz = (a.reg.wz - a.z) * ANCHOR;
+        }
         for (let i = 0; i < nodes.length; i++) {
           const a = nodes[i];
           for (let j = i + 1; j < nodes.length; j++) {
             const b = nodes[j];
             let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
-            const f = (k * k) / dist;
-            dx /= dist; dy /= dist; dz /= dist;
+            const d2 = dx * dx + dy * dy + dz * dz + 1;
+            if (d2 > SEP * SEP * 9) continue;          // only push near pairs apart
+            const f = REP / d2, d = Math.sqrt(d2);
+            dx /= d; dy /= d; dz /= d;
             a._dx += dx * f; a._dy += dy * f; a._dz += dz * f;
             b._dx -= dx * f; b._dy -= dy * f; b._dz -= dz * f;
           }
         }
-        // attraction along wikilinks
         for (const e of edges) {
           const a = e.a, b = e.b;
-          let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
-          const f = (dist * dist) / k;
-          dx /= dist; dy /= dist; dz /= dist;
-          a._dx -= dx * f; a._dy -= dy * f; a._dz -= dz * f;
-          b._dx += dx * f; b._dy += dy * f; b._dz += dz * f;
+          a._dx += (b.x - a.x) * LINK; a._dy += (b.y - a.y) * LINK; a._dz += (b.z - a.z) * LINK;
+          b._dx += (a.x - b.x) * LINK; b._dy += (a.y - b.y) * LINK; b._dz += (a.z - b.z) * LINK;
         }
-        // gravity toward origin + temperature-capped integration
+        const cap = R * 0.08;
         for (const a of nodes) {
-          a._dx -= a.x * GRAV; a._dy -= a.y * GRAV; a._dz -= a.z * GRAV;
-          const dl = Math.sqrt(a._dx * a._dx + a._dy * a._dy + a._dz * a._dz) || 0.01;
-          const s = Math.min(dl, temp) / dl;
-          a.x += a._dx * s; a.y += a._dy * s; a.z += a._dz * s;
+          a.x += Math.max(-cap, Math.min(cap, a._dx));
+          a.y += Math.max(-cap, Math.min(cap, a._dy));
+          a.z += Math.max(-cap, Math.min(cap, a._dz));
         }
-        temp *= 0.96;   // cool down
       }
     })();
 
-    // ---- camera ----
-    let rotY = 0.4, rotX = -0.25, zoom = 1, autoSpin = true;
-    const FOCAL = R * 2.6;
+    // ---- decorative brain-shell point cloud (fills the silhouette) ----
+    const shell = [];
+    for (let i = 0; i < SHELL_POINTS; i++) {
+      const t = (i + 0.5) / SHELL_POINTS, phi = Math.acos(1 - 2 * t), th = Math.PI * (1 + Math.sqrt(5)) * i;
+      const j = 0.94 + Math.random() * 0.08;
+      shell.push({ x: Math.sin(phi) * Math.cos(th) * EX * j, y: Math.cos(phi) * EY * j, z: Math.sin(phi) * Math.sin(th) * EZ * j });
+    }
 
-    function project(p, ry, rx, cy, sy, cx2, sx2) {
-      // rotate Y then X
-      const x1 = p.x * cy + p.z * sy;
-      const z1 = -p.x * sy + p.z * cy;
-      const y1 = p.y * cx2 - z1 * sx2;
-      const z2 = p.y * sx2 + z1 * cx2;
+    // ---- camera ----
+    let rotY = 0.5, rotX = -0.22, zoom = 1, dragging = false;
+    const FOCAL = R * 2.7;
+    function proj(p, cy, sy, cx, sx) {
+      const x1 = p.x * cy + p.z * sy, z1 = -p.x * sy + p.z * cy;
+      const y1 = p.y * cx - z1 * sx, z2 = p.y * sx + z1 * cx;
       const scale = (FOCAL * zoom) / (FOCAL + z2);
       return { sx: W / 2 + x1 * scale, sy: H / 2 + y1 * scale, depth: z2, scale };
     }
 
-    const sparks = [];   // {a,b,t,dur,color}
+    const sparks = [];
     function fireEdge(a, b, color) { if (a && b) sparks.push({ a, b, t: 0, color }); }
     function pulseNode(n, big) { if (n) n.fire = Math.max(n.fire, big ? 1 : 0.6); }
-
     let q = "";
     ctx.search.addEventListener("input", () => { q = ctx.search.value.trim().toLowerCase(); });
 
+    let showLabels = true;
+
     function draw() {
-      const cy = Math.cos(rotY), sy = Math.sin(rotY);
-      const cx2 = Math.cos(rotX), sx2 = Math.sin(rotX);
+      const cy = Math.cos(rotY), sy = Math.sin(rotY), cx = Math.cos(rotX), sx = Math.sin(rotX);
       g.clearRect(0, 0, W, H);
 
-      // project all
-      for (const n of nodes) {
-        const pr = project(n, rotY, rotX, cy, sy, cx2, sx2);
-        n._sx = pr.sx; n._sy = pr.sy; n._depth = pr.depth; n._scale = pr.scale;
+      // brain shell (faint, behind everything)
+      g.fillStyle = "rgba(150,180,255,0.05)";
+      for (const p of shell) {
+        const pr = proj(p, cy, sy, cx, sx);
+        const a = Math.max(0.02, 0.10 + pr.depth / (R * 10));
+        g.globalAlpha = a;
+        g.beginPath(); g.arc(pr.sx, pr.sy, 0.9 * pr.scale, 0, Math.PI * 2); g.fill();
       }
+      g.globalAlpha = 1;
 
-      // edges (depth-faded), behind nodes
+      for (const n of nodes) { const pr = proj(n, cy, sy, cx, sx); n._sx = pr.sx; n._sy = pr.sy; n._depth = pr.depth; n._scale = pr.scale; }
+      for (const r of regions) { const pr = proj({ x: r.wx, y: r.wy, z: r.wz }, cy, sy, cx, sx); r._sx = pr.sx; r._sy = pr.sy; r._depth = pr.depth; }
+
+      // edges
       g.lineWidth = 1;
       for (const e of edges) {
         const a = e.a, b = e.b;
-        const fade = Math.max(0.05, Math.min(0.5, 0.6 - (a._depth + b._depth) / (R * 8)));
-        g.strokeStyle = (a.fire > 0.05 && b.fire > 0.05)
-          ? _folderColor(a.folder) : _folderColorDim(a.folder);
-        g.globalAlpha = fade;
+        const lit = a.fire > 0.05 && b.fire > 0.05;
+        g.strokeStyle = lit ? a.reg.color : "rgba(150,170,220,1)";
+        g.globalAlpha = lit ? 0.5 : Math.max(0.04, 0.16 + (a._depth + b._depth) / (R * 14));
         g.beginPath(); g.moveTo(a._sx, a._sy); g.lineTo(b._sx, b._sy); g.stroke();
       }
       g.globalAlpha = 1;
 
-      // sparks (ride the axon in 3D)
+      // sparks
       for (let i = sparks.length - 1; i >= 0; i--) {
-        const s = sparks[i];
-        s.t += 0.02;
+        const s = sparks[i]; s.t += 0.02;
         if (s.t >= 1) { sparks.splice(i, 1); continue; }
-        const a = s.a, b = s.b;
-        const px = a.x + (b.x - a.x) * s.t, py = a.y + (b.y - a.y) * s.t, pz = a.z + (b.z - a.z) * s.t;
-        const pr = project({ x: px, y: py, z: pz }, rotY, rotX, cy, sy, cx2, sx2);
-        g.globalAlpha = Math.sin(s.t * Math.PI);
-        g.fillStyle = s.color;
+        const px = s.a.x + (s.b.x - s.a.x) * s.t, py = s.a.y + (s.b.y - s.a.y) * s.t, pz = s.a.z + (s.b.z - s.a.z) * s.t;
+        const pr = proj({ x: px, y: py, z: pz }, cy, sy, cx, sx);
+        g.globalAlpha = Math.sin(s.t * Math.PI); g.fillStyle = s.color;
         g.shadowBlur = 10; g.shadowColor = s.color;
-        g.beginPath(); g.arc(pr.sx, pr.sy, 2.6 * pr.scale, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(pr.sx, pr.sy, 2.4 * pr.scale, 0, Math.PI * 2); g.fill();
         g.shadowBlur = 0;
       }
       g.globalAlpha = 1;
 
-      // nodes — far first (painter's algorithm). Crisp solid sphere look:
-      // small low-alpha halo, a sharp colored core, and a white highlight.
+      // nodes (far first) — crisp lit spheres tinted by region
       const order = nodes.slice().sort((a, b) => b._depth - a._depth);
       for (const n of order) {
-        const base = (2 + Math.min(7, n.deg * 0.5)) * n._scale;
-        const fireBoost = n.fire > 0 ? (1 + n.fire * 0.6) : 1;
+        const base = (1.8 + Math.min(6, n.deg * 0.45)) * n._scale;
         const match = q && (n.title || "").toLowerCase().includes(q);
-        const r = Math.max(1.4, (match ? base + 3 : base) * fireBoost);
-        const col = _folderColor(n.folder);
-        const da = Math.max(0.4, Math.min(1, 0.78 + n._depth / (R * 6)));
-        const sx = n._sx, sy = n._sy;
-        // faint halo (small + low alpha so the node itself stays sharp)
-        g.globalAlpha = da * 0.16;
-        g.fillStyle = col;
-        g.beginPath(); g.arc(sx, sy, r * 2.4, 0, Math.PI * 2); g.fill();
-        // crisp colored core (bloom only while firing / matched)
-        if (n.fire > 0 || match) { g.shadowBlur = 14; g.shadowColor = col; }
-        g.globalAlpha = da;
-        g.fillStyle = col;
-        g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill();
+        const fb = n.fire > 0 ? (1 + n.fire * 0.7) : 1;
+        const r = Math.max(1.2, (match ? base + 3 : base) * fb);
+        const col = n.reg.color;
+        const da = Math.max(0.4, Math.min(1, 0.8 + n._depth / (R * 6)));
+        const sX = n._sx, sY = n._sy;
+        g.globalAlpha = da * 0.14; g.fillStyle = col;
+        g.beginPath(); g.arc(sX, sY, r * 2.3, 0, Math.PI * 2); g.fill();
+        if (n.fire > 0 || match) { g.shadowBlur = 13; g.shadowColor = col; }
+        g.globalAlpha = da; g.fillStyle = col;
+        g.beginPath(); g.arc(sX, sY, r, 0, Math.PI * 2); g.fill();
         g.shadowBlur = 0;
-        // bright off-centre highlight → reads as a lit sphere
-        g.globalAlpha = da * 0.9;
-        g.fillStyle = "rgba(255,255,255,0.85)";
-        g.beginPath(); g.arc(sx - r * 0.18, sy - r * 0.18, r * 0.42, 0, Math.PI * 2); g.fill();
+        g.globalAlpha = da * 0.85; g.fillStyle = "rgba(255,255,255,0.85)";
+        g.beginPath(); g.arc(sX - r * 0.2, sY - r * 0.2, r * 0.42, 0, Math.PI * 2); g.fill();
         if (n.fire > 0) n.fire = Math.max(0, n.fire - 0.012);
       }
       g.globalAlpha = 1; g.shadowBlur = 0;
 
-      if (autoSpin && !dragging) rotY += 0.0016;
+      // region labels (in 3D)
+      if (showLabels) {
+        for (const r of regions) {
+          // anchor dot
+          g.globalAlpha = 0.85; g.fillStyle = r.color;
+          g.beginPath(); g.arc(r._sx, r._sy, 2.4, 0, Math.PI * 2); g.fill();
+          g.globalAlpha = 1;
+          g.font = "700 12px 'Courier New', monospace"; g.fillStyle = r.color;
+          g.textAlign = "left"; g.textBaseline = "middle";
+          g.fillText(r.key, r._sx + 8, r._sy - 5);
+          g.font = "10px 'Courier New', monospace"; g.fillStyle = "rgba(190,205,235,0.7)";
+          g.fillText(`${r.sub} · ${r.count} notes`, r._sx + 8, r._sy + 7);
+        }
+        g.textAlign = "start"; g.textBaseline = "alphabetic";
+      }
+
+      if (!dragging) rotY += 0.0014;
       raf = requestAnimationFrame(draw);
     }
     let raf = requestAnimationFrame(draw);
 
     // ---- interaction ----
-    let dragging = false, lx = 0, ly = 0, moved = 0;
-    cv.addEventListener("mousedown", (e) => { dragging = true; lx = e.clientX; ly = e.clientY; moved = 0; cv.style.cursor = "grabbing"; });
+    let lx = 0, ly = 0;
+    cv.addEventListener("mousedown", (e) => { dragging = true; lx = e.clientX; ly = e.clientY; cv.style.cursor = "grabbing"; });
     window.addEventListener("mouseup", () => { dragging = false; cv.style.cursor = "grab"; });
     window.addEventListener("mousemove", (e) => {
-      if (dragging) {
-        const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
-        moved += Math.abs(dx) + Math.abs(dy);
-        rotY += dx * 0.005; rotX = Math.max(-1.3, Math.min(1.3, rotX + dy * 0.005));
-      }
+      if (!dragging) return;
+      const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
+      rotY += dx * 0.005; rotX = Math.max(-1.3, Math.min(1.3, rotX + dy * 0.005));
     });
-    cv.addEventListener("wheel", (e) => {
-      e.preventDefault();
-      zoom = Math.max(0.4, Math.min(3, zoom * (e.deltaY < 0 ? 1.1 : 0.9)));
-    }, { passive: false });
+    cv.addEventListener("wheel", (e) => { e.preventDefault(); zoom = Math.max(0.4, Math.min(3.5, zoom * (e.deltaY < 0 ? 1.1 : 0.9))); }, { passive: false });
+    cv.addEventListener("dblclick", () => { showLabels = !showLabels; });
 
-    // hover tooltip (hit-test nearest projected node)
     cv.addEventListener("mousemove", (e) => {
       if (dragging) { ctx.tooltip.style.display = "none"; return; }
-      const rect = cv.getBoundingClientRect();
-      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
-      let best = null, bestD = 16;
-      for (const n of nodes) {
-        const d = Math.hypot(n._sx - mx, n._sy - my);
-        if (d < bestD && n._depth > -R) { bestD = d; best = n; }
-      }
+      const rect = cv.getBoundingClientRect(); const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      let best = null, bestD = 14;
+      for (const n of nodes) { const d = Math.hypot(n._sx - mx, n._sy - my); if (d < bestD) { bestD = d; best = n; } }
       if (!best) { ctx.tooltip.style.display = "none"; return; }
-      const last = ctx.lastHit[best.id];
-      const when = last ? new Date(last).toLocaleTimeString([], { hour12: false }) : "—";
+      const last = ctx.lastHit[best.id]; const when = last ? new Date(last).toLocaleTimeString([], { hour12: false }) : "—";
       ctx.tooltip.innerHTML =
         `<div class="brain-tip__title">${escapeHtml(best.title)}</div>` +
-        `<div class="brain-tip__row"><span class="brain-tip__swatch" style="background:${_folderColor(best.folder)}"></span>` +
-        `<span>${escapeHtml(best.folder === "_root_" ? "(vault root)" : best.folder)}</span></div>` +
+        `<div class="brain-tip__row"><span class="brain-tip__swatch" style="background:${best.reg.color}"></span>` +
+        `<span>${escapeHtml(best.reg.key)} · ${escapeHtml(best.folder === "_root_" ? "(root)" : best.folder)}</span></div>` +
         `<div class="brain-tip__path">${escapeHtml(best.path || "")}</div>` +
         `<div class="brain-tip__stats"><span>${best.deg} links</span><span>·</span><span>last fired: ${when}</span></div>`;
       ctx.tooltip.style.display = "block";
@@ -351,38 +346,23 @@
     });
     cv.addEventListener("mouseleave", () => { ctx.tooltip.style.display = "none"; });
 
-    // ---- firing: RAG hits + ambient ----
     if (window.EventBus) {
       EventBus.on("rag.hit", (e) => {
         const now = Date.now();
         (e.notes || []).forEach((nt) => {
-          const id = (nt.title || "").toLowerCase();
-          const node = byId[id];
-          if (!node) return;
-          ctx.lastHit[id] = now;
-          pulseNode(node, true);
-          (neighbors[id] || []).slice(0, 6).forEach((dst) => {
-            fireEdge(node, dst, _folderColor(node.folder));
-            setTimeout(() => pulseNode(dst, false), 600);
-          });
+          const id = (nt.title || "").toLowerCase(); const node = byId[id]; if (!node) return;
+          ctx.lastHit[id] = now; pulseNode(node, true);
+          (neighbors[id] || []).slice(0, 6).forEach((dst) => { fireEdge(node, dst, node.reg.color); setTimeout(() => pulseNode(dst, false), 600); });
         });
       });
       EventBus.replayHistory(50);
     }
     const ambient = setInterval(() => {
       if (!edges.length) return;
-      for (let i = 0; i < AMBIENT_SPARKS_PER_TICK; i++) {
-        const e = edges[(Math.random() * edges.length) | 0];
-        fireEdge(e.a, e.b, _folderColor(e.a.folder));
-        if (Math.random() < 0.3) pulseNode(e.a, false);
-      }
+      for (let i = 0; i < AMBIENT_SPARKS_PER_TICK; i++) { const e = edges[(Math.random() * edges.length) | 0]; fireEdge(e.a, e.b, e.a.reg.color); if (Math.random() < 0.3) pulseNode(e.a, false); }
     }, AMBIENT_INTERVAL_MS);
 
-    function destroy() {
-      cancelAnimationFrame(raf);
-      clearInterval(ambient);
-      window.removeEventListener("resize", onResize);
-    }
+    function destroy() { cancelAnimationFrame(raf); clearInterval(ambient); window.removeEventListener("resize", onResize); }
     return { destroy, lastHit: ctx.lastHit };
   }
 

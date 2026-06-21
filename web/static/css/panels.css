@@ -517,6 +517,46 @@ body.popout--chat .panel__chat-feed {
   text-transform: lowercase;
 }
 
+/* ── Brain Atlas: anatomical-regions panel (floats over the 3D stage) ── */
+.brain-legend--regions {
+  position: absolute;
+  top: 56px;
+  left: 14px;
+  width: 232px;
+  display: block;
+  flex-wrap: nowrap;
+  max-height: none;
+  background: rgba(14, 8, 28, 0.72);
+  border: 1px solid rgba(120, 80, 180, 0.35);
+  border-radius: 8px;
+  padding: 8px 10px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 4;
+}
+.brain-legend__head {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  color: #9a86c8;
+  margin-bottom: 6px;
+}
+.brain-legend__region {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 0.72rem;
+}
+.brain-legend--regions .brain-legend__swatch {
+  width: 9px; height: 9px; border-radius: 2px; flex: none;
+}
+.brain-legend__rlabel {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--pp-fg);
+}
+.brain-legend__rsub { color: #8f9bbf; font-size: 0.66rem; }
+.brain-legend__count { color: #c9b6ff; font-size: 0.66rem; }
+
 /* ── Team status summary strip ──────────────────────────────── */
 .team-summary {
   display: flex;
