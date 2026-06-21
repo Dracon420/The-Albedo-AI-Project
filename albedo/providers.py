@@ -56,6 +56,43 @@ DEFAULT_MODELS = {
     "ollama":    "albedo-cortana-8b",
 }
 
+# Curated, known-good model ids per provider for the BRAIN model dropdown so
+# users don't have to memorise provider model strings. The DEFAULT_MODELS pick
+# is surfaced first by the UI; a "Custom…" option still lets power users type
+# any id. Keep these conservative (stable, currently-served models only).
+PROVIDER_MODELS = {
+    "groq": [
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+        "gemma2-9b-it",
+    ],
+    "gemini": [
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash",
+        "gemini-1.5-pro",
+    ],
+    "together": [
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo-Free",
+    ],
+    "ollama": [
+        "albedo-cortana-8b",
+        "albedo-jarvis-8b",
+        "albedo-cortana",
+        "albedo-jarvis",
+    ],
+    "openai": [
+        "gpt-4o-mini",
+        "gpt-4o",
+    ],
+    "anthropic": [
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+    ],
+    "azure": [],   # model is the Azure deployment name — not selectable here
+}
+
 # Order matters for auto-failover: free cloud providers (gemini, groq, together)
 # are tried before slow local ollama. together sits before ollama so a groq
 # rate-limit fails over to fast cloud instead of grinding on the 6GB GPU.

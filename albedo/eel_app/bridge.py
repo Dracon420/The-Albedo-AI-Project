@@ -1311,6 +1311,7 @@ def get_brain_config() -> dict:
             "active_model": providers.resolve_model(providers.resolve_provider()),
             "available": providers.available_providers(),
             "default_models": providers.DEFAULT_MODELS,
+            "models_by_provider": providers.PROVIDER_MODELS,
             "autonomy": _read_settings_dict().get("agent_autonomy", "approve_all"),
         }
     except Exception as exc:                                        # noqa: BLE001

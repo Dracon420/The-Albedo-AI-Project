@@ -61,20 +61,66 @@
     provWrap.appendChild(provSel);
     root.appendChild(provWrap);
 
-    // ── Model field (placeholder shows the provider default) ──
+    // ── Model dropdown (curated list per provider; "Custom…" for any id) ──
+    const modelsByProvider = cfg.models_by_provider || {};
+    const CUSTOM = "__custom__";
+
     const modelWrap = _el("label", "panel__field");
     modelWrap.appendChild(_el("span", "panel__label", "Model"));
-    const modelInput = _el("input", "panel__input");
-    modelInput.type = "text";
-    modelInput.value = cfg.active_model || "";
-    modelInput.placeholder = (cfg.default_models || {})[cfg.active_provider] || "default";
-    modelWrap.appendChild(modelInput);
+    const modelSel = _el("select", "panel__select");
+    modelWrap.appendChild(modelSel);
     root.appendChild(modelWrap);
 
-    // Update placeholder when provider changes
-    provSel.addEventListener("change", () => {
-      modelInput.placeholder = (cfg.default_models || {})[provSel.value] || "default";
+    // Hidden text box, revealed only when "Custom…" is selected.
+    const customWrap = _el("label", "panel__field");
+    customWrap.style.display = "none";
+    customWrap.appendChild(_el("span", "panel__label", "Custom model id"));
+    const customInput = _el("input", "panel__input");
+    customInput.type = "text";
+    customInput.placeholder = "exact provider model id";
+    customWrap.appendChild(customInput);
+    root.appendChild(customWrap);
+
+    // (Re)build the model options for a provider, pre-selecting `selected`.
+    function populateModels(provider, selected) {
+      modelSel.innerHTML = "";
+      const dflt = (cfg.default_models || {})[provider] || "";
+      const list = (modelsByProvider[provider] || []).slice();
+      if (dflt && !list.includes(dflt)) list.unshift(dflt);
+
+      list.forEach((m) => {
+        const o = _el("option", null, m + (m === dflt ? "  (default)" : ""));
+        o.value = m;
+        modelSel.appendChild(o);
+      });
+      const customOpt = _el("option", null, "Custom…");
+      customOpt.value = CUSTOM;
+      modelSel.appendChild(customOpt);
+
+      if (selected && list.includes(selected)) {
+        modelSel.value = selected;
+        customWrap.style.display = "none";
+      } else if (selected) {                // a model not in the list → custom
+        modelSel.value = CUSTOM;
+        customInput.value = selected;
+        customWrap.style.display = "";
+      } else {                              // provider switch → its default
+        modelSel.value = dflt || (list[0] || CUSTOM);
+        customWrap.style.display = (modelSel.value === CUSTOM) ? "" : "none";
+      }
+    }
+    populateModels(cfg.active_provider, cfg.active_model);
+
+    modelSel.addEventListener("change", () => {
+      customWrap.style.display = (modelSel.value === CUSTOM) ? "" : "none";
     });
+    // Switching provider rebuilds the model list to that provider's default.
+    provSel.addEventListener("change", () => populateModels(provSel.value, ""));
+
+    // Resolve the chosen model id at save time (dropdown value or custom text).
+    function chosenModel() {
+      return modelSel.value === CUSTOM ? customInput.value.trim() : modelSel.value;
+    }
 
     // ── Autonomy radio ──
     const autoWrap = _el("div", "panel__field");
@@ -100,7 +146,7 @@
       saveBtn.disabled = true;
       const autonomy = (autoBox.querySelector("input:checked") || {}).value || "approve_all";
       try {
-        const r = await eel.set_brain_config(provSel.value, modelInput.value.trim(), autonomy)();
+        const r = await eel.set_brain_config(provSel.value, chosenModel(), autonomy)();
         status.textContent = r && r.ok
           ? `saved: ${r.brain_provider || provSel.value} / ${r.agent_autonomy}`
           : "save error: " + (r && r.error || "unknown");
