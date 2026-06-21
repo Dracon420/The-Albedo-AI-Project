@@ -109,7 +109,9 @@
 
     const R = Math.min(W, H) * 0.40;
     // Brain ellipsoid: widest L-R-ish and front-back, shorter top-bottom.
-    const EX = R * 0.95, EY = R * 0.74, EZ = R * 1.06;
+    // Lobes spread to fill the frame (like the reference) yet stay linked by
+    // the edge web into one connected brain.
+    const EX = R * 0.92, EY = R * 0.70, EZ = R * 1.02;
 
     // ---- nodes (capped to highest-degree) ----
     const deg = {};
@@ -164,13 +166,16 @@
     });
     const byId = {}; nodes.forEach(n => byId[n.id] = n);
     const edges = graph.edges.filter(e => byId[e.src] && byId[e.dst]).map(e => ({ a: byId[e.src], b: byId[e.dst] }));
+    // Small vaults get bigger nodes so the few notes still fill the brain
+    // (a 24-note vault shouldn't render as specks like a 700-note one).
+    const densityK = Math.min(1.6, Math.max(1, Math.sqrt(90 / Math.max(8, nodes.length))));
     const neighbors = {};
     edges.forEach(e => { (neighbors[e.a.id] = neighbors[e.a.id] || []).push(e.b); (neighbors[e.b.id] = neighbors[e.b.id] || []).push(e.a); });
 
     // ---- layout: strong pull to region anchor (tight clusters) + gentle local
     //      repulsion (spread within a lobe) + mild link attraction ----
     (function layout() {
-      const ANCHOR = 0.16, REP = R * R * 0.16, LINK = 0.012, SEP = R * 0.13;
+      const ANCHOR = 0.14, REP = R * R * 0.12, LINK = 0.012, SEP = R * 0.16;
       const iters = nodes.length > 400 ? 70 : 110;
       for (let it = 0; it < iters; it++) {
         for (const a of nodes) {
@@ -253,8 +258,9 @@
       for (const e of edges) {
         const a = e.a, b = e.b;
         const lit = a.fire > 0.05 && b.fire > 0.05;
-        g.strokeStyle = lit ? a.reg.color : "rgba(150,170,220,1)";
-        g.globalAlpha = lit ? 0.5 : Math.max(0.04, 0.16 + (a._depth + b._depth) / (R * 14));
+        g.strokeStyle = lit ? a.reg.color : "rgba(180,200,245,1)";
+        g.lineWidth = lit ? 1.5 : 1;
+        g.globalAlpha = lit ? 0.6 : Math.max(0.12, 0.32 + (a._depth + b._depth) / (R * 14));
         g.beginPath(); g.moveTo(a._sx, a._sy); g.lineTo(b._sx, b._sy); g.stroke();
       }
       g.globalAlpha = 1;
@@ -275,15 +281,15 @@
       // nodes (far first) — crisp lit spheres tinted by region
       const order = nodes.slice().sort((a, b) => b._depth - a._depth);
       for (const n of order) {
-        const base = (1.8 + Math.min(6, n.deg * 0.45)) * n._scale;
+        const base = (1.8 + Math.min(6, n.deg * 0.45)) * densityK * n._scale;
         const match = q && (n.title || "").toLowerCase().includes(q);
         const fb = n.fire > 0 ? (1 + n.fire * 0.7) : 1;
         const r = Math.max(1.2, (match ? base + 3 : base) * fb);
         const col = n.reg.color;
         const da = Math.max(0.4, Math.min(1, 0.8 + n._depth / (R * 6)));
         const sX = n._sx, sY = n._sy;
-        g.globalAlpha = da * 0.14; g.fillStyle = col;
-        g.beginPath(); g.arc(sX, sY, r * 2.3, 0, Math.PI * 2); g.fill();
+        g.globalAlpha = da * 0.13; g.fillStyle = col;
+        g.beginPath(); g.arc(sX, sY, r * 1.8, 0, Math.PI * 2); g.fill();
         if (n.fire > 0 || match) { g.shadowBlur = 13; g.shadowColor = col; }
         g.globalAlpha = da; g.fillStyle = col;
         g.beginPath(); g.arc(sX, sY, r, 0, Math.PI * 2); g.fill();
@@ -296,16 +302,28 @@
 
       // region labels (in 3D)
       if (showLabels) {
+        // de-collide labels vertically so small/empty regions don't overlap
+        const sortedR = regions.slice().sort((a, b) => a._sy - b._sy);
+        let prevY = -1e9;
+        for (const r of sortedR) {
+          r._ly = (r._sy - prevY < 26) ? prevY + 26 : r._sy;
+          prevY = r._ly;
+        }
+        g.textAlign = "left"; g.textBaseline = "middle";
         for (const r of regions) {
-          // anchor dot
-          g.globalAlpha = 0.85; g.fillStyle = r.color;
-          g.beginPath(); g.arc(r._sx, r._sy, 2.4, 0, Math.PI * 2); g.fill();
+          // anchor dot at the true 3D position
+          g.globalAlpha = 0.9; g.fillStyle = r.color;
+          g.beginPath(); g.arc(r._sx, r._sy, 2.6, 0, Math.PI * 2); g.fill();
+          // faint leader from anchor to de-collided label
+          if (Math.abs(r._ly - r._sy) > 2) {
+            g.globalAlpha = 0.3; g.strokeStyle = r.color; g.lineWidth = 1;
+            g.beginPath(); g.moveTo(r._sx + 4, r._sy); g.lineTo(r._sx + 8, r._ly); g.stroke();
+          }
           g.globalAlpha = 1;
           g.font = "700 12px 'Courier New', monospace"; g.fillStyle = r.color;
-          g.textAlign = "left"; g.textBaseline = "middle";
-          g.fillText(r.key, r._sx + 8, r._sy - 5);
+          g.fillText(r.key, r._sx + 10, r._ly - 5);
           g.font = "10px 'Courier New', monospace"; g.fillStyle = "rgba(190,205,235,0.7)";
-          g.fillText(`${r.sub} · ${r.count} notes`, r._sx + 8, r._sy + 7);
+          g.fillText(`${r.sub} · ${r.count} notes`, r._sx + 10, r._ly + 7);
         }
         g.textAlign = "start"; g.textBaseline = "alphabetic";
       }
