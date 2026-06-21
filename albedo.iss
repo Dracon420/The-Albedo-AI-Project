@@ -1,7 +1,12 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.2.1.exe
+; Output: Output\Albedo-Setup-3.2.2.exe
+;
+; What's new in 3.2.2 (patch on top of 3.2.1)
+;   - 3D Brain visualization fix: crisp lit-sphere nodes + a Fruchterman-Reingold
+;     spread layout, so it reads as a Brain-Atlas node cloud instead of the
+;     blurry collapsed ball 3.2.1 shipped
 ;
 ; What's new in 3.2.1 (feature release on top of 3.2.0)
 ;   - BRAIN model picker is now a dropdown of known-good models per provider
@@ -57,7 +62,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.2.1"
+#define AppVersion   "3.2.2"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -85,13 +90,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.2.1
+OutputBaseFilename=Albedo-Setup-3.2.2
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.2.1.0
+VersionInfoVersion=3.2.2.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.2.1.0
+VersionInfoProductVersion=3.2.2.0
 
 ; Compression
 Compression=lzma2/max
@@ -338,13 +343,13 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.2.1.' + #13#10 + #13#10 +
-      'What''s new in 3.2.1:' + #13#10 +
-      '  - BRAIN model picker is now a dropdown (no typing model ids)' + #13#10 +
-      '  - 3D rotating Brain Atlas vault visualization' + #13#10 +
-      '  - Running-process popup with STOP buttons' + #13#10 +
-      '  - Smarter app-usage tracking; apps popup stops nagging' + #13#10 +
-      '  - Plus everything from 3.2.0 (streaming, failover, caching)' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v3.2.2.' + #13#10 + #13#10 +
+      'What''s new in 3.2.2:' + #13#10 +
+      '  - 3D Brain fix: crisp lit-sphere nodes + spread layout' + #13#10 +
+      '    (no longer a blurry collapsed ball)' + #13#10 + #13#10 +
+      'From 3.2.1:' + #13#10 +
+      '  - BRAIN model dropdown, 3D Brain Atlas, process popup' + #13#10 +
+      '  - Smarter app-usage tracking; apps popup stops nagging' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +
