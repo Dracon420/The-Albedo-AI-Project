@@ -72,8 +72,7 @@ $itemsToBackup = @(
     "settings.json",
     "hardware_config.json",
     "chroma_db",
-    "albedo_memory_db",
-    "albedo-mobile"
+    "albedo_memory_db"
 )
 
 $backedUp = @()

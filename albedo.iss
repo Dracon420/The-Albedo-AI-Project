@@ -114,7 +114,6 @@ Name: "{app}\mobile";             Permissions: everyone-full
 ; User-data dirs: uninsneveruninstall = survived both upgrade AND full uninstall
 Name: "{app}\chroma_db";          Permissions: everyone-full; Flags: uninsneveruninstall
 Name: "{app}\albedo_memory_db";   Permissions: everyone-full; Flags: uninsneveruninstall
-Name: "{app}\albedo-mobile";      Permissions: everyone-full; Flags: uninsneveruninstall
 
 [Files]
 ; â”€â”€ Python source packages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
