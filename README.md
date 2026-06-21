@@ -14,7 +14,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Qwen2.5--7B%20%7C%20Custom%20QLoRA-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-v3.2.0-00F0FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-v3.2.1-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice & text command catalog
 
@@ -32,16 +32,17 @@ When given a directive, Albedo executes it.
 
 ---
 
-## WHAT'S NEW IN v3.2.0
+## WHAT'S NEW IN v3.2.1
 
-A feature + stability release on top of v3.1.1:
+A feature release on top of v3.2.0:
 
-- **Faster everywhere** — the specialist team runs in parallel, Ollama keeps the model resident (`keep_alive`), tool results (web / Wikipedia / Wolfram) are TTL-cached, repeat answers hit a semantic answer cache, and retrieval is sharpened by a cross-encoder reranker.
-- **Live token streaming** — responses stream into the chat window token-by-token with a reading-pace typewriter reveal, and a live "thinking / active" status so you can follow what Albedo is doing.
-- **Free-provider failover** — automatic chain of free providers (**Groq → Gemini → Together → Ollama**). Paid providers (Azure / OpenAI / Anthropic) are strictly opt-in and never auto-failover targets, so you don't burn paid credits by accident.
-- **Cyber-HUD overhaul** — a more brain-like neural viz (curved dendrites, glowing soma, traveling neuron sparks), an enhanced team window, neural-link cells that flip **READY → ACTIVE** when a subsystem is working, NET / DISK gauges with Down/Up and Read/Write breakdowns, distinct per-window taskbar icons, and an installed-apps inventory popup.
-- **Stability** — UTF-8 stdout (kills the Windows cp1252 `print()` crash), cooperative gevent waiting (the chat no longer freezes the UI), conversation continuity (answering "yes" continues the thread), and incremental Dream-Cycle indexing that only touches new/changed files.
-- **New tool** — installed-apps inventory with optional uninstall, surfaced in a popup.
+- **3D "Brain Atlas" visualization** — the Obsidian-vault graph is now a rotating 3D node network: notes grouped by folder into glowing lobes, with depth cueing, drag-to-spin and wheel-zoom. Pure Canvas 2D — no WebGL/CDN, so it works fully offline.
+- **BRAIN model picker is a dropdown** — pick a known-good model per provider (default marked, `Custom…` for any id) instead of typing exact provider model strings.
+- **Running-process popup** — when Albedo checks processes it opens a chooser listing them by RAM with **STOP SELECTED**; critical OS/Albedo processes are locked so you can't crash Windows.
+- **Smarter app-usage tracking** — installed-apps usage now matches Windows UserAssist records by **install path** (not fuzzy name), crediting far more apps with real run-counts/dates.
+- **Less-naggy apps popup** — it no longer re-opens after you dismiss it, and the agent makes one short offer instead of repeating it every turn.
+
+Plus everything from **v3.2.0**: end-to-end token streaming, free-provider failover (Groq → Gemini → Together → Ollama), tool-result + semantic answer caching, a RAG cross-encoder reranker, the Cyber-HUD overhaul, and the UTF-8/stability fixes.
 
 ---
 
@@ -118,7 +119,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 <div align="center">
 
-### [⬇ Download Albedo-Setup-3.2.0.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.2.0/Albedo-Setup-3.2.0.exe)
+### [⬇ Download Albedo-Setup-3.2.1.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.2.1/Albedo-Setup-3.2.1.exe)
 
 </div>
 
@@ -142,7 +143,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 **Deployment sequence:**
 
-1. **Download** `Albedo-Setup-3.2.0.exe` from the link above
+1. **Download** `Albedo-Setup-3.2.1.exe` from the link above
 2. **Run** the installer — accept the UAC prompt
 3. The **Setup Wizard** launches automatically and executes:
    - System dependency verification (Python 3.12 + Ollama)
@@ -270,7 +271,7 @@ The installer creates a **Start Menu** shortcut and an optional **Desktop** shor
 | Shortcut / Method | Action |
 |---|---|
 | **Albedo Mission Control** shortcut | Starts Ollama silently, then opens Mission Control via pythonw |
-| Re-run `Albedo-Setup-3.2.0.exe` | Upgrades in-place, preserves all user data |
+| Re-run `Albedo-Setup-3.2.1.exe` | Upgrades in-place, preserves all user data |
 | Windows **Add or remove programs** → Albedo | Uninstalls — preserves `.env`, `settings.json`, `chroma_db`, `albedo_memory_db` |
 
 Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.
