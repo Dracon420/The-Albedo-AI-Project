@@ -1,7 +1,14 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.2.4.exe
+; Output: Output\Albedo-Setup-3.2.5.exe
+;
+; What's new in 3.2.5 (on top of 3.2.4)
+;   - Chat understands short replies in context: "no" / "ok" / "sure" / "nope" /
+;     "go ahead" etc. mid-conversation now reach the model WITH history instead
+;     of a context-free canned/cached reply, so Albedo follows the thread
+;   - Brain Atlas auto-fits the window (re-centres + scales) so it always sits
+;     cleanly centred with margin, whatever the vault size
 ;
 ; What's new in 3.2.4 (on top of 3.2.3)
 ;   - Denser Brain Atlas: notes break into heading/section sub-nodes (dendrites)
@@ -74,7 +81,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.2.4"
+#define AppVersion   "3.2.5"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -102,13 +109,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.2.4
+OutputBaseFilename=Albedo-Setup-3.2.5
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.2.4.0
+VersionInfoVersion=3.2.5.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.2.4.0
+VersionInfoProductVersion=3.2.5.0
 
 ; Compression
 Compression=lzma2/max
@@ -355,13 +362,13 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.2.4.' + #13#10 + #13#10 +
-      'What''s new in 3.2.4:' + #13#10 +
-      '  - Denser Brain Atlas: notes branch into heading/section' + #13#10 +
-      '    sub-nodes + #tag hubs, so the vault reads as a real' + #13#10 +
-      '    neural web (24 notes -> ~247 nodes)' + #13#10 + #13#10 +
-      'From 3.2.1-3.2.3:' + #13#10 +
-      '  - BRAIN model dropdown, 3D Brain Atlas, process popup' + #13#10 +
+      'This installer will upgrade Albedo to v3.2.5.' + #13#10 + #13#10 +
+      'What''s new in 3.2.5:' + #13#10 +
+      '  - Chat understands "no"/"ok"/"sure" in context (replies to' + #13#10 +
+      '    her question now follow the thread, not a canned answer)' + #13#10 +
+      '  - Brain Atlas auto-fits the window cleanly' + #13#10 + #13#10 +
+      'From 3.2.1-3.2.4:' + #13#10 +
+      '  - Dense 3D Brain Atlas, model dropdown, process popup' + #13#10 +
       '  - Smarter app-usage tracking; apps popup stops nagging' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
