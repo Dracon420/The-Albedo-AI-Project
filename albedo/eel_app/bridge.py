@@ -1081,9 +1081,12 @@ def get_event_history(limit: int = 200) -> dict:
 # --- Obsidian vault graph (for the Brain visualization) -----------------------
 
 _WIKILINK_RE = None
+_HEADING_RE = None
+_TAG_RE = None
 # Bump this token if the graph schema changes — the cached dict from an older
 # version (e.g. without "folder" on nodes) won't satisfy the new viz.
-_VAULT_GRAPH_SCHEMA = "v2-folder"
+_VAULT_GRAPH_SCHEMA = "v3-rich"
+_MAX_GRAPH_NODES = 1500    # safety cap so a huge vault can't explode the viz
 _vault_graph_cache: dict | None = None
 
 
@@ -1094,7 +1097,7 @@ def get_vault_graph(refresh: bool = False) -> dict:
     Brain viz. Cached in memory; pass refresh=True to rebuild.
     Returns {ok, nodes:[{id,title,path}], edges:[{src,dst}], count}.
     """
-    global _WIKILINK_RE, _vault_graph_cache
+    global _WIKILINK_RE, _HEADING_RE, _TAG_RE, _vault_graph_cache
     if (_vault_graph_cache is not None and not refresh
             and _vault_graph_cache.get("schema") == _VAULT_GRAPH_SCHEMA):
         return _vault_graph_cache
@@ -1103,6 +1106,8 @@ def get_vault_graph(refresh: bool = False) -> dict:
         from pathlib import Path as _Path
         if _WIKILINK_RE is None:
             _WIKILINK_RE = _re.compile(r"\[\[([^\]\|#]+)(?:[#\|][^\]]*)?\]\]")
+            _HEADING_RE  = _re.compile(r"^(#{1,6})\s+(.+?)\s*#*$")
+            _TAG_RE      = _re.compile(r"(?:^|\s)#([A-Za-z][\w/-]{1,40})")
         vault = _os.environ.get("OBSIDIAN_VAULT_PATH", "").strip()
         if not vault:
             return {"ok": False, "error": "OBSIDIAN_VAULT_PATH not set",
@@ -1112,39 +1117,84 @@ def get_vault_graph(refresh: bool = False) -> dict:
             return {"ok": False, "error": f"vault not found: {vault}",
                     "nodes": [], "edges": []}
 
-        # Build node table keyed by lowercase title (Obsidian wikilinks are
+        # Build note nodes keyed by lowercase title (Obsidian wikilinks are
         # title-based; multiple files with the same stem collide — first wins).
         nodes: dict[str, dict] = {}
+        note_meta: dict[str, dict] = {}   # src_key -> {path, folder}
         for md in root.rglob("*.md"):
             try:
                 rel = str(md.relative_to(root)).replace("\\", "/")
                 title = md.stem
                 key = title.lower()
-                # Top-level folder = the "category" for color grouping in the viz.
-                # Notes at vault root get folder "_root_".
                 parts = rel.split("/")
                 folder = parts[0] if len(parts) > 1 else "_root_"
                 if key not in nodes:
-                    nodes[key] = {
-                        "id":     key,
-                        "title":  title,
-                        "path":   rel,
-                        "folder": folder,
-                    }
+                    nodes[key] = {"id": key, "title": title, "path": rel,
+                                  "folder": folder, "kind": "note"}
+                    note_meta[key] = {"path": rel, "folder": folder}
             except Exception:
                 continue
-        # Edges: parse [[wikilinks]] -> existing nodes only
+
+        # Enrich: break each note into heading sub-nodes (its sections) and add
+        # #tag hub nodes that cross-link notes — so the graph reads as a dense
+        # neural web instead of a handful of dots. Plus the [[wikilinks]].
         edges: list[dict] = []
+        seen_edges: set = set()
+
+        def _add_edge(s, d):
+            if s == d:
+                return
+            k = (s, d)
+            if k in seen_edges:
+                return
+            seen_edges.add(k)
+            edges.append({"src": s, "dst": d})
+
+        def _slug(s):
+            return _re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:40] or "h"
+
         for md in root.rglob("*.md"):
             try:
                 src_key = md.stem.lower()
-                if src_key not in nodes:
+                meta = note_meta.get(src_key)
+                if not meta:
                     continue
                 txt = md.read_text(encoding="utf-8", errors="ignore")
+                h_idx = 0
+                stack: list = []   # (level, node_key) heading hierarchy
+                for line in txt.splitlines():
+                    hm = _HEADING_RE.match(line)
+                    if hm:
+                        if len(nodes) >= _MAX_GRAPH_NODES:
+                            continue
+                        level = len(hm.group(1))
+                        htext = hm.group(2).strip().strip("#").strip()
+                        htext = _WIKILINK_RE.sub(r"\1", htext)
+                        if not htext:
+                            continue
+                        h_idx += 1
+                        hkey = f"{src_key}#{h_idx}-{_slug(htext)}"
+                        nodes[hkey] = {"id": hkey, "title": htext, "path": meta["path"],
+                                       "folder": meta["folder"], "kind": "section"}
+                        while stack and stack[-1][0] >= level:
+                            stack.pop()
+                        _add_edge(stack[-1][1] if stack else src_key, hkey)
+                        stack.append((level, hkey))
+                    else:
+                        for tm in _TAG_RE.finditer(line):
+                            tag = tm.group(1).lower()
+                            tkey = "tag:" + tag
+                            if tkey not in nodes:
+                                if len(nodes) >= _MAX_GRAPH_NODES:
+                                    continue
+                                nodes[tkey] = {"id": tkey, "title": "#" + tag, "path": "",
+                                               "folder": "Tags", "kind": "tag"}
+                            _add_edge(src_key, tkey)
+                # [[wikilinks]] between notes
                 for m in _WIKILINK_RE.finditer(txt):
                     dst_key = m.group(1).strip().lower()
-                    if dst_key in nodes and dst_key != src_key:
-                        edges.append({"src": src_key, "dst": dst_key})
+                    if dst_key in note_meta:
+                        _add_edge(src_key, dst_key)
             except Exception:
                 continue
 
