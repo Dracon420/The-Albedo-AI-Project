@@ -1,7 +1,13 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.2.2.exe
+; Output: Output\Albedo-Setup-3.2.3.exe
+;
+; What's new in 3.2.3 (on top of 3.2.2)
+;   - Brain Atlas layout: folders become anatomical lobe regions (frontal /
+;     parietal / temporal / occipital / cerebellum / brain-stem...) pinned in a
+;     brain-shaped ellipsoid, with tight clusters, floating region labels, a
+;     brain-shell point cloud, and an anatomical-regions sidebar
 ;
 ; What's new in 3.2.2 (patch on top of 3.2.1)
 ;   - 3D Brain visualization fix: crisp lit-sphere nodes + a Fruchterman-Reingold
@@ -62,7 +68,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.2.2"
+#define AppVersion   "3.2.3"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -90,13 +96,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.2.2
+OutputBaseFilename=Albedo-Setup-3.2.3
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.2.2.0
+VersionInfoVersion=3.2.3.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.2.2.0
+VersionInfoProductVersion=3.2.3.0
 
 ; Compression
 Compression=lzma2/max
@@ -343,12 +349,12 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.2.2.' + #13#10 + #13#10 +
-      'What''s new in 3.2.2:' + #13#10 +
-      '  - 3D Brain fix: crisp lit-sphere nodes + spread layout' + #13#10 +
-      '    (no longer a blurry collapsed ball)' + #13#10 + #13#10 +
-      'From 3.2.1:' + #13#10 +
-      '  - BRAIN model dropdown, 3D Brain Atlas, process popup' + #13#10 +
+      'This installer will upgrade Albedo to v3.2.3.' + #13#10 + #13#10 +
+      'What''s new in 3.2.3:' + #13#10 +
+      '  - Brain Atlas layout: folders become anatomical lobe' + #13#10 +
+      '    regions with tight clusters + floating region labels' + #13#10 + #13#10 +
+      'From 3.2.1-3.2.2:' + #13#10 +
+      '  - BRAIN model dropdown, crisp 3D brain, process popup' + #13#10 +
       '  - Smarter app-usage tracking; apps popup stops nagging' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
