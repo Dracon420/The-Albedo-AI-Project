@@ -210,12 +210,26 @@
       }
     })();
 
+    // ---- auto-fit: normalize the settled brain to a target radius so it always
+    //      sits cleanly centred in the window with margin, whatever the vault
+    //      size or how far the force layout spread. Re-centre on the centroid
+    //      first so a lopsided vault isn't shoved off to one side. ----
+    let cx0 = 0, cy0 = 0, cz0 = 0;
+    for (const n of nodes) { cx0 += n.x; cy0 += n.y; cz0 += n.z; }
+    cx0 /= (nodes.length || 1); cy0 /= (nodes.length || 1); cz0 /= (nodes.length || 1);
+    let _br = 1;
+    for (const n of nodes) { const d = Math.hypot(n.x - cx0, n.y - cy0, n.z - cz0); if (d > _br) _br = d; }
+    const fit = Math.max(0.12, Math.min(5, (R * 0.82) / _br));
+    for (const n of nodes) { n.x = (n.x - cx0) * fit; n.y = (n.y - cy0) * fit; n.z = (n.z - cz0) * fit; }
+    for (const r of regions) { r.wx = (r.wx - cx0) * fit; r.wy = (r.wy - cy0) * fit; r.wz = (r.wz - cz0) * fit; }
+    const SEX = EX * fit, SEY = EY * fit, SEZ = EZ * fit;
+
     // ---- decorative brain-shell point cloud (fills the silhouette) ----
     const shell = [];
     for (let i = 0; i < SHELL_POINTS; i++) {
       const t = (i + 0.5) / SHELL_POINTS, phi = Math.acos(1 - 2 * t), th = Math.PI * (1 + Math.sqrt(5)) * i;
       const j = 0.94 + Math.random() * 0.08;
-      shell.push({ x: Math.sin(phi) * Math.cos(th) * EX * j, y: Math.cos(phi) * EY * j, z: Math.sin(phi) * Math.sin(th) * EZ * j });
+      shell.push({ x: Math.sin(phi) * Math.cos(th) * SEX * j, y: Math.cos(phi) * SEY * j, z: Math.sin(phi) * Math.sin(th) * SEZ * j });
     }
 
     // ---- camera ----
