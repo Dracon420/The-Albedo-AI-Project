@@ -18,6 +18,7 @@ import subprocess
 from pathlib import Path
 
 from memory import search_memory
+from albedo import perf
 from albedo.web.search import web_search, format_web_results
 from albedo.web.wolfram import is_wolfram_query, wolfram_short_answer
 from albedo.web.wikipedia import is_wiki_candidate, wikipedia_summary
@@ -852,7 +853,11 @@ def run(query: str, use_web: bool = False,
     # ── 0k. Conversational bypass (AFTER all action handlers) ────────────────
     # Short social exchanges go direct to Gemini/Groq with no RAG overhead.
     if _is_conversational(query):
-        return _strip_markdown(direct_reply(query, history=history))
+        _turn = perf.Turn(query)
+        with _turn.stage("llm"):
+            _out = _strip_markdown(direct_reply(query, history=history))
+        _turn.finish("conversational")
+        return _out
 
     # ── 1. Hardware Verify protocol ──────────────────────────────────────────
     if is_hardware_query(query):
@@ -869,23 +874,37 @@ def run(query: str, use_web: bool = False,
     _route = classify(query)
     if _route == ROUTE_TECH:
         print(f"[Router] TECH route → jarvis-tech")
+        _turn = perf.Turn(query)
         # Still pull RAG context — code answers improve with local context
-        memory_chunks = [] if len(query) < 5 else search_memory(query)
-        web_results   = web_search(query) if not memory_chunks else []
+        with _turn.stage("rag"):
+            memory_chunks = [] if len(query) < 5 else search_memory(query)
+        with _turn.stage("web"):
+            web_results   = web_search(query) if not memory_chunks else []
         augmented     = _build_standard_prompt(query, memory_chunks, web_results)
-        return _strip_markdown(jarvis_tech_chat(augmented, history=history))
+        with _turn.stage("llm"):
+            _out = _strip_markdown(jarvis_tech_chat(augmented, history=history))
+        _turn.finish("tech")
+        return _out
 
     if _route == ROUTE_JARVIS:
         print(f"[Router] JARVIS route → jarvis-8b analysis")
-        memory_chunks = [] if len(query) < 5 else search_memory(query)
-        web_results   = web_search(query) if not memory_chunks else []
+        _turn = perf.Turn(query)
+        with _turn.stage("rag"):
+            memory_chunks = [] if len(query) < 5 else search_memory(query)
+        with _turn.stage("web"):
+            web_results   = web_search(query) if not memory_chunks else []
         augmented     = _build_standard_prompt(query, memory_chunks, web_results)
-        return _strip_markdown(bridge_chat(augmented, history=history))
+        with _turn.stage("llm"):
+            _out = _strip_markdown(bridge_chat(augmented, history=history))
+        _turn.finish("jarvis")
+        return _out
 
     # ── 2. Obsidian vault RAG + smart web search + Wikipedia ────────────────
     # Skip RAG for very short inputs — no useful embedding match and can
     # cause n_results=0 crashes in ChromaDB.
-    memory_chunks = [] if len(query) < 5 else search_memory(query)
+    _turn = perf.Turn(query)
+    with _turn.stage("rag"):
+        memory_chunks = [] if len(query) < 5 else search_memory(query)
 
     # Auto web search: always search if explicitly requested OR if local RAG
     # has no useful results OR if the query looks like it needs current info.
@@ -902,12 +921,16 @@ def run(query: str, use_web: bool = False,
         or not memory_chunks
         or any(sig in q_lower for sig in _WEB_SIGNALS)
     )
-    web_results = web_search(query) if _needs_web else []
+    with _turn.stage("web"):
+        web_results = web_search(query) if _needs_web else []
 
     # Wikipedia: pull encyclopedic summary for factual queries as extra context
-    wiki = wikipedia_summary(query) if is_wiki_candidate(query) else None
+    with _turn.stage("wiki"):
+        wiki = wikipedia_summary(query) if is_wiki_candidate(query) else None
 
     prompt   = _build_standard_prompt(query, memory_chunks, web_results, wiki)
-    response = _strip_markdown(bridge_chat(prompt, history=history))
+    with _turn.stage("llm"):
+        response = _strip_markdown(bridge_chat(prompt, history=history))
+    _turn.finish("standard-rag")
     log_turn(query, response)
     return response

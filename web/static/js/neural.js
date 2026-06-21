@@ -11,13 +11,15 @@
 const Neural = (() => {
   const POLL_MS = 1500;
 
-  // Display order — left column then right column, matched to the CSS grid.
+  // Display order — flex strip wraps across rows. Grouped: swarm LLMs →
+  // reasoning brains → local runtime → tools → vector store → IO → audio →
+  // wake → dream. Kept in sync with _detect_neural_links() in bridge.py.
   const ORDER = [
-    "GEMINI",   "GROQ",
-    "TOGETHER", "OLLAMA",
-    "VEC_DB",   "WEBHOOK",
-    "STT",      "TTS",
-    "WAKE",     // last cell intentionally left half-empty so WAKE sits alone
+    "GEMINI",   "GROQ",     "TOGETHER",
+    "AZURE",    "ANTHROPIC", "OLLAMA",
+    "WOLFRAM",  "TAVILY",   "VEC_DB",
+    "WEBHOOK",  "STT",      "TTS",
+    "WAKE",     "DREAM",
   ];
 
   let _gridEl, _stateEl, _statusEl;
@@ -51,8 +53,16 @@ const Neural = (() => {
       const entry = data[name] || { status: "off", label: "--", detail: "" };
       const dot   = cell.querySelector(".link__dot");
       const label = cell.querySelector(".link__label");
-      if (dot)   dot.setAttribute("data-status", entry.status || "off");
-      if (label) label.textContent = entry.label || "--";
+      const st    = entry.status || "off";
+      if (dot)   dot.setAttribute("data-status", st);
+      if (label) {
+        // When a subsystem is actively working, the WORD changes too (not just
+        // the dot): READY → ACTIVE (green), error → ERROR (red).
+        label.textContent = st === "active" ? "ACTIVE"
+                          : st === "error"  ? "ERROR"
+                          : (entry.label || "--");
+        label.setAttribute("data-status", st);
+      }
       if (entry.detail) cell.title = `${name} — ${entry.detail}`;
     }
   }
@@ -63,6 +73,14 @@ const Neural = (() => {
     _stateEl.textContent = s;
     _stateEl.setAttribute("data-state", s);
   }
+
+  // Immediate push from the backend so the orb flips to ACTIVE the instant a
+  // query starts (instead of waiting up to a full poll interval).
+  window._albedo_state_push = function (state) {
+    if (!_stateEl) _stateEl = document.getElementById("appState");
+    _applyAppState(state);
+  };
+  if (window.eel) { try { eel.expose(_albedo_state_push, "_albedo_state_push"); } catch (_) {} }
 
   async function _tick() {
     try {

@@ -226,6 +226,39 @@ def disk_cleanup() -> str:
         return f"[tool error] Cleanup error: {exc}"
 
 
+def list_installed_apps(limit: int = 15) -> str:
+    """List installed apps by reclaimable size, with usage where Windows knows it."""
+    try:
+        from albedo.app_inventory import list_installed_apps as _li
+        apps = _li(limit=min(int(limit or 15), 40))
+        if not apps:
+            return "Could not read the installed-apps list."
+        lines = []
+        for a in apps:
+            if a.get("last_used"):
+                use = f"last used {a['last_used']}"
+            elif a.get("run_count"):
+                use = f"{a['run_count']} launches"
+            else:
+                use = "usage not tracked by Windows"
+            size = f"{a['size_mb']:.0f} MB" if a.get("size_mb") else "size unknown"
+            lines.append(f"- {a['name']} — {size} ({use})")
+        return ("Installed apps, largest (most reclaimable) first. NOTE: 'usage "
+                "not tracked' does NOT mean unused — confirm with the user before "
+                "removing anything.\n" + "\n".join(lines))
+    except Exception as exc:                                          # noqa: BLE001
+        return f"[tool error] list_installed_apps: {exc}"
+
+
+def uninstall_app(name: str = "") -> str:
+    """Uninstall an app by display name (winget --silent, else its uninstaller)."""
+    try:
+        from albedo.app_inventory import uninstall_app as _u
+        return _u(name)
+    except Exception as exc:                                          # noqa: BLE001
+        return f"[tool error] uninstall_app: {exc}"
+
+
 def optimize_system(include_registry: bool = False) -> str:
     """Full optimization: temp purge + Windows Disk Cleanup + prefetch clear
     (+ optional CCleaner registry scan if installed)."""
@@ -504,6 +537,31 @@ _register(ToolSpec(
     description="Purge temporary files and report how much space was freed.",
     parameters={"properties": {}, "required": []},
     fn=disk_cleanup,
+    destructive=True,
+))
+
+_register(ToolSpec(
+    name="list_installed_apps",
+    description="List the user's installed apps ranked by reclaimable disk size, "
+                "with last-used/launch-count where Windows tracks it. READ-ONLY. "
+                "Use this to answer 'what can I uninstall to free space?' with real "
+                "data before suggesting anything.",
+    parameters={"properties": {
+        "limit": {"type": "integer", "description": "Max apps to list (default 30)."}
+    }, "required": []},
+    fn=list_installed_apps,
+    destructive=False,
+))
+
+_register(ToolSpec(
+    name="uninstall_app",
+    description="Uninstall ONE app by its display name. DESTRUCTIVE — only call "
+                "after the user has explicitly confirmed they want this specific "
+                "app removed.",
+    parameters={"properties": {
+        "name": {"type": "string", "description": "The app's display name (or a unique part of it)."}
+    }, "required": ["name"]},
+    fn=uninstall_app,
     destructive=True,
 ))
 

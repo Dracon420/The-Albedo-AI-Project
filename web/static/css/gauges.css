@@ -67,7 +67,11 @@
   fill: var(--c-text);
 }
 .gauge--medium .gauge__value { font-size: 44px; }
-.gauge--small  .gauge__value { font-size: 34px; }
+.gauge--small  .gauge__value { font-size: 24px; }   /* apex (NET / DISK I/O) — smaller */
+
+/* Apex dials (NET / DISK I/O) show only the Dn/Up + R/W breakdown line; the
+   old combined-total number in the ring centre is removed to avoid redundancy. */
+.dial--apex .gauge__value { display: none; }
 
 /* Secondary readout — HTML element sitting below the SVG ring, not inside it.
    This avoids crowding text inside the circle and allows natural line-wrap. */
@@ -85,10 +89,15 @@
   white-space: nowrap;
 }
 
-/* Apex dials sit above a pair of base dials with no vertical gap — hide
-   sub-text there to avoid it being crushed between the stacked rings. */
+/* Apex dials (NETWORK / DISK I/O) — show the down/up + read/write breakdown
+   below the ring so it's clear what each is measuring. */
 .dial--apex .dial__sub {
-  display: none;
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  /* Centre the readout INSIDE the ring (where the old total number was),
+     not below it. Negative margin pulls it up onto the ring's vertical centre. */
+  margin-top: -100px;
 }
 
 .gauge__label {

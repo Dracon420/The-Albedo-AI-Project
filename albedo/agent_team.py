@@ -287,13 +287,17 @@ def _critique(goal: str, results: list[dict], status) -> dict:
     }
 
 
-def _run_tasks(tasks: list[dict], status) -> list[dict]:
-    """Execute each task on its specialist sequentially. Tool calls stay gated."""
-    results: list[dict] = []
-    for i, t in enumerate(tasks, 1):
-        role, task = t["role"], t["task"]
-        spec = ROLES[role]
-        status(f"[{i}/{len(tasks)}] {role}: {task[:60]}")
+# Max specialists running at once. Planned tasks share no data (each agent only
+# sees its own task string; the Critic aggregates at the end), so they are safe
+# to run concurrently. Cap keeps cloud rate limits + the local GPU sane.
+_TEAM_MAX_PARALLEL = 4
+
+
+def _run_one_task(i: int, total: int, t: dict, status, on_task_done=None) -> dict:
+    role, task = t["role"], t["task"]
+    spec = ROLES[role]
+    status(f"[{i + 1}/{total}] {role}: {task[:60]}")
+    try:
         res = agent.run_agent(
             task,
             system_prompt=spec.system_prompt,
@@ -302,14 +306,56 @@ def _run_tasks(tasks: list[dict], status) -> list[dict]:
             status_cb=status,
             role=role,
         )
-        results.append({
+        result = {
             "role": role, "task": task,
             "answer": res.get("answer", ""),
             "steps": res.get("steps", []),
             "provider": res.get("provider"),
             "error": res.get("error"),
-        })
-    return results
+        }
+    except Exception as exc:                                         # noqa: BLE001
+        result = {"role": role, "task": task, "answer": "",
+                  "steps": [], "provider": None, "error": str(exc)}
+    # Fire the per-task completion hook (e.g. push this result into the chat
+    # feed immediately, instead of waiting for the whole goal to finish).
+    if on_task_done:
+        try:
+            on_task_done(result)
+        except Exception:
+            pass
+    return result
+
+
+def _run_tasks(tasks: list[dict], status, on_task_done=None) -> list[dict]:
+    """
+    Run each specialist task. Independent tasks (the common case) run CONCURRENTLY
+    on a bounded thread pool; results are returned in plan order. Tool calls stay
+    gated by safety_catch exactly as before. ``on_task_done(result)`` fires as
+    each specialist finishes (completion order), for live streaming to the UI.
+    """
+    n = len(tasks)
+    if n <= 1:
+        return [_run_one_task(0, n, tasks[0], status, on_task_done)] if n else []
+
+    workers = max(1, min(_TEAM_MAX_PARALLEL, n))
+    status(f"Running {n} specialists ({workers} in parallel)...")
+
+    results: list[Optional[dict]] = [None] * n
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    with ThreadPoolExecutor(max_workers=workers,
+                            thread_name_prefix="team") as ex:
+        futs = {ex.submit(_run_one_task, i, n, t, status, on_task_done): i
+                for i, t in enumerate(tasks)}
+        for fut in as_completed(futs):
+            i = futs[fut]
+            try:
+                results[i] = fut.result()
+            except Exception as exc:                                # noqa: BLE001
+                t = tasks[i]
+                results[i] = {"role": t["role"], "task": t["task"],
+                              "answer": "", "steps": [], "provider": None,
+                              "error": str(exc)}
+    return [r for r in results if r]
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +479,7 @@ def run_team(
     goal: str,
     *,
     status_cb: Optional[Callable[[str], None]] = None,
+    on_task_done: Optional[Callable[[dict], None]] = None,
     max_tasks: int = 6,
     allow_revision: bool = True,
     require_plan_approval: bool = False,  # tool-level approval already gates every action
@@ -476,7 +523,7 @@ def run_team(
                     "revised": False, "error": "plan denied by user"}
 
     # 3. Execute
-    results = _run_tasks(tasks, _status)
+    results = _run_tasks(tasks, _status, on_task_done)
 
     # 4. Critique
     _status("Critic reviewing…")
@@ -495,7 +542,7 @@ def run_team(
         if gap_tasks:
             _emit("team.plan", tasks=gap_tasks, revision=True)
             if not require_plan_approval or _approve_plan(gap_tasks):
-                results.extend(_run_tasks(gap_tasks, _status))
+                results.extend(_run_tasks(gap_tasks, _status, on_task_done))
                 critique = _critique(goal, results, _status)
                 _emit("team.critique", complete=critique.get("complete"),
                       summary=critique.get("summary",""),

@@ -26,6 +26,15 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 
+# Force UTF-8 on stdout/stderr so a print() containing a non-ASCII glyph
+# (e.g. "View mode → windowed") can never raise UnicodeEncodeError under
+# Windows' default cp1252 console/file encoding and crash the eel handler.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 try:
     import customtkinter as ctk
     from PIL import Image, ImageTk
@@ -2649,6 +2658,16 @@ def main() -> None:
                       "falling back to Tk. Run 'pip install eel'.")
             else:
                 print("[gui] Launching Eel UI (ALBEDO_UI=eel)...")
+                # Hide the console window — the Eel UI is the whole interface, so
+                # the terminal behind it is just visual noise. Harmless no-op when
+                # launched windowless (pythonw) since GetConsoleWindow() returns 0.
+                try:
+                    import ctypes
+                    _hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+                    if _hwnd:
+                        ctypes.windll.user32.ShowWindow(_hwnd, 0)  # SW_HIDE
+                except Exception as _exc:
+                    print(f"[gui] (could not hide console: {_exc})")
                 run_eel()
                 return
         except Exception as exc:

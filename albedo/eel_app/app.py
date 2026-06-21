@@ -53,11 +53,12 @@ def _expose_widget_fns() -> None:
             return None
 
         # Per-panel default size + spawn position (x, y, w, h).
+        # Compact by default — Brain/Team are companion panels, not full screens.
         _PANEL_GEOMETRY = {
             "widget": (30, 80, 380, 560),
             "chat":   (40, 60, 520, 720),
-            "brain":  (580, 60, 440, 560),
-            "team":   (580, 60, 560, 720),
+            "brain":  (560, 120, 760, 600),
+            "team":   (520, 120, 860, 640),
         }
         _PANEL_PAGES = {
             "widget": "widget.html",
@@ -84,12 +85,15 @@ def _expose_widget_fns() -> None:
                 print("[eel_app] Chrome/Edge not found — cannot open panel.")
                 return
             x, y, w, h = _PANEL_GEOMETRY.get(panel, _PANEL_GEOMETRY["widget"])
+            from pathlib import Path as _Path
+            prof = _Path(_ROOT) / f".chrome_profile_{panel}"
             try:
                 subprocess.Popen([
                     exe,
                     f"--app={url}",
                     f"--window-size={w},{h}",
                     f"--window-position={x},{y}",
+                    f"--user-data-dir={str(prof)}",
                     "--disable-extensions",
                     "--no-first-run",
                     "--no-default-browser-check",
@@ -99,6 +103,17 @@ def _expose_widget_fns() -> None:
                 print(f"[eel_app] Panel '{panel}' window opened -> {url}")
             except Exception as exc:
                 print(f"[eel_app] Panel '{panel}' launch failed: {exc}")
+                return
+
+            # Chrome --app windows ignore --window-size here (they restore a
+            # remembered/maximized state), so FORCE the geometry with win32 once
+            # the window appears. Tiling: chat = left half, brain = top-right
+            # quarter, team = bottom-right quarter.
+            if panel in ("chat", "brain", "team"):
+                import threading
+                threading.Thread(
+                    target=_force_panel_geometry, args=(panel,), daemon=True
+                ).start()
 
         @_eel.expose
         def open_widget_window() -> None:
@@ -263,6 +278,92 @@ def _expose_widget_fns() -> None:
 
     except Exception as exc:
         print(f"[eel_app] Widget fn registration failed (non-fatal): {exc}")
+
+
+def _force_panel_geometry(panel: str) -> None:
+    """
+    Force a freshly-opened panel window to a tiled size/position via win32.
+    Chrome --app mode ignores --window-size on some setups (it restores a
+    remembered or maximized state), so we wait for the window to appear (by
+    title) then un-maximize + SetWindowPos it.
+
+    Tiling on the work area (taskbar excluded):
+        chat  -> left half           (W/2 x H)
+        brain -> top-right quarter    (W/2 x H/2)
+        team  -> bottom-right quarter (W/2 x H/2)
+    """
+    import time
+    try:
+        import win32gui, win32con
+        import ctypes
+        from ctypes import wintypes
+    except Exception as exc:                                         # noqa: BLE001
+        print(f"[eel_app] force-geometry: win32 unavailable ({exc})")
+        return
+
+    # Work area (excludes taskbar)
+    try:
+        r = wintypes.RECT()
+        if ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(r), 0):
+            ox, oy, W, H = r.left, r.top, r.right - r.left, r.bottom - r.top
+        else:
+            raise OSError("SPI_GETWORKAREA failed")
+    except Exception:
+        ox, oy = 0, 0
+        W = ctypes.windll.user32.GetSystemMetrics(0)
+        H = ctypes.windll.user32.GetSystemMetrics(1)
+
+    geom = {
+        "chat":  (ox,            oy,            W // 2, H),
+        "brain": (ox + W // 2,   oy,            W // 2, H // 2),
+        "team":  (ox + W // 2,   oy + H // 2,   W // 2, H // 2),
+    }.get(panel)
+    if not geom:
+        return
+    x, y, w, h = geom
+
+    title = {"chat": "ALBEDO // CHAT",
+             "brain": "ALBEDO // BRAIN",
+             "team": "ALBEDO // TEAM"}.get(panel, "")
+
+    # Wait for the window to show up (Chrome cold-start can take a couple sec).
+    hwnd = None
+    for _ in range(50):                       # up to ~7.5s
+        time.sleep(0.15)
+        found: list[int] = []
+
+        def _cb(h_, _):
+            if not win32gui.IsWindowVisible(h_):
+                return True
+            if title.upper() in (win32gui.GetWindowText(h_) or "").upper():
+                found.append(h_)
+            return True
+
+        try:
+            win32gui.EnumWindows(_cb, None)
+        except Exception:
+            pass
+        if found:
+            hwnd = found[0]
+            break
+    if not hwnd:
+        print(f"[eel_app] force-geometry: window for '{panel}' not found")
+        return
+
+    # Re-apply several times: slower panels (Team replays its event history)
+    # finish initializing AFTER the first SetWindowPos and Chrome re-maximizes
+    # them. Looping for a few seconds wins that race.
+    for _ in range(10):
+        try:
+            win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)   # drop maximized state
+            win32gui.SetWindowPos(hwnd, win32con.HWND_TOP,
+                                  int(x), int(y), int(w), int(h),
+                                  win32con.SWP_SHOWWINDOW)
+        except Exception as exc:                                     # noqa: BLE001
+            print(f"[eel_app] force-geometry SetWindowPos failed: {exc}")
+            break
+        time.sleep(0.4)
+    print(f"[eel_app] '{panel}' sized -> {w}x{h} @ {x},{y}")
 
 
 def _full_screen_size() -> tuple[int, int]:
@@ -640,6 +741,17 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     except Exception as exc:
         print(f"[eel_app] Idle monitor failed to start: {exc}")
 
+    # Prewarm the RAG embedding model in the background. The first vault search
+    # otherwise pays a ~44 s cold-start (CPU SentenceTransformer warmup) on the
+    # user's first question; doing it here absorbs that before any query lands.
+    try:
+        import threading as _th
+        import memory as _memory
+        _th.Thread(target=_memory.prewarm, daemon=True).start()
+        print("[eel_app] RAG prewarm started (background).")
+    except Exception as exc:
+        print(f"[eel_app] RAG prewarm failed to start (non-fatal): {exc}")
+
     actual_port  = _free_port(port)
     _active_port = actual_port          # expose to widget launcher
     win_size = _full_screen_size()
@@ -658,8 +770,10 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
             shutdown_delay=0.5,
             cmdline_args=[
                 "--start-maximized",
-                "--disk-cache-size=1",      # disable persistent cache so updated
-                "--media-cache-size=1",     # HTML/JS/CSS is always fetched fresh
+                "--disk-cache-size=1",
+                "--media-cache-size=1",
+                "--disable-application-cache",
+                f"--user-data-dir={str(_ROOT / '.chrome_profile')}",
             ],
         )
     except (SystemExit, KeyboardInterrupt):

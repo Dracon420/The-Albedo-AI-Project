@@ -16,6 +16,8 @@ import json
 import urllib.parse
 import urllib.request
 
+from albedo.cache import ttl_cache
+
 _WOLFRAM_KEY = os.getenv("WOLFRAM_API_KEY", "").strip()
 
 # Patterns that indicate a computation/conversion query
@@ -50,6 +52,8 @@ def is_wolfram_query(query: str) -> bool:
     return bool(_COMPUTE_RE.search(query))
 
 
+@ttl_cache(ttl_seconds=3600, maxsize=256,
+           key_fn=lambda q, *a, **k: str(q).strip().lower())
 def wolfram_short_answer(query: str) -> str | None:
     """Call Wolfram Alpha Short Answers API and return a plain-text answer.
 

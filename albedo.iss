@@ -1,9 +1,25 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.1.1.exe
+; Output: Output\Albedo-Setup-3.2.0.exe
 ;
-; What's new in 3.1.1 (bug-fix release on top of 3.1.0)
+; What's new in 3.2.0 (feature release on top of 3.1.1)
+;   - Performance: parallel specialist team, Ollama keep_alive (model stays
+;     resident), tool-result TTL caching, semantic answer cache, and a RAG
+;     cross-encoder reranker
+;   - Token streaming end-to-end with reading-pace typewriter reveal in chat
+;   - Free-provider failover chain (Groq -> Gemini -> Together -> Ollama);
+;     paid providers (Azure/OpenAI/Anthropic) are opt-in, never auto-failover
+;   - Cyber-HUD overhaul: brain viz (curved dendrites, glowing soma, neuron
+;     sparks), enhanced team window, neural-link ACTIVE/READY labels,
+;     NET/DISK throughput breakdown gauges, distinct per-window taskbar icons,
+;     and an installed-apps inventory popup
+;   - Stability: UTF-8 stdout (fixes the cp1252 print crash), cooperative
+;     gevent wait (chat no longer freezes the UI), conversation continuity,
+;     and incremental dream-cycle indexing (only new/changed files)
+;   - New tool: installed-apps inventory + uninstall
+;
+; Carried over from 3.1.1 (bug-fix release on top of 3.1.0)
 ;   - Widget telemetry fixed (named-function expose, not inline eel.expose)
 ;   - FULL screen mode fixed (native Win32 borderless, not requestFullscreen)
 ;   - Chrome disk-cache disabled so UI updates load after restart
@@ -32,7 +48,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.1.1"
+#define AppVersion   "3.2.0"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -60,13 +76,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.1.1
+OutputBaseFilename=Albedo-Setup-3.2.0
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.1.1.0
+VersionInfoVersion=3.2.0.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.1.1.0
+VersionInfoProductVersion=3.2.0.0
 
 ; Compression
 Compression=lzma2/max
@@ -314,13 +330,13 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.1.1.' + #13#10 + #13#10 +
-      'What''s new in 3.1.1:' + #13#10 +
-      '  - Widget telemetry + FULL screen mode fixed' + #13#10 +
-      '  - UI updates load correctly after restart' + #13#10 +
-      '  - Speech-to-text no longer clips the first word' + #13#10 +
-      '  - Phone relay replies now delivered reliably' + #13#10 +
-      '  - "Open app" voice command routing fixed' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v3.2.0.' + #13#10 + #13#10 +
+      'What''s new in 3.2.0:' + #13#10 +
+      '  - Faster responses: caching, reranker, parallel team' + #13#10 +
+      '  - Live token streaming in the chat window' + #13#10 +
+      '  - Free-provider failover (Groq/Gemini/Together/Ollama)' + #13#10 +
+      '  - Cyber-HUD overhaul + installed-apps inventory' + #13#10 +
+      '  - Stability: UTF-8 stdout + chat-freeze fixes' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +

@@ -11,6 +11,7 @@ const Chat = (() => {
   let _commMode    = "latch";   // matches CommMode.LATCH.value
   let _wakeState   = "disarmed";
   let _personaName = "ALBEDO";  // display label — updated by wake word or settings
+  const _history = [];          // rolling {role, content} so Albedo remembers the conversation
 
   function _ts() {
     const d = new Date();
@@ -41,16 +42,28 @@ const Chat = (() => {
     try {
       // Auto-router path: Albedo decides direct-answer vs. spin-up-team.
       // Live team/RAG activity shows in the Team + Brain visualization windows.
-      const r = await eel.send_chat(raw, null)();
+      const r = await eel.send_chat(raw, _history.slice(-10))();
       if (r && r.ok) {
         if (r.mode === "team") {
           appendLine("system", "[TEAM activated — see Team window for live progress]");
         }
-        appendLine("albedo", _personaName + "  " + (r.answer || "(no response)"));
+        // Streamed answers are already typing; otherwise type the full answer
+        // out at reading pace too.
+        if (!r.streamed && r.mode !== "team") {
+          _twMessage("albedo", _personaName + "  " + (r.answer || "(no response)"),
+                     `${_ts()} `);
+        }
+        // Remember the exchange so follow-ups ("yes please") keep context.
+        if (r.mode !== "team" && r.answer) {
+          _history.push({ role: "user", content: raw });
+          _history.push({ role: "assistant", content: r.answer });
+        }
       } else {
+        _twClose();
         appendLine("error", "[SYS] " + (r && r.error ? r.error : "no response"));
       }
     } catch (err) {
+      _clearStatus();
       appendLine("error", "[SYS] " + err);
     } finally {
       _sendBtn.disabled = false;
@@ -129,9 +142,92 @@ const Chat = (() => {
   window._albedo_persona_push = function (name) { _applyPersonaName(name); };
   eel.expose(_albedo_persona_push, "_albedo_persona_push");
 
-  // Python pushes chat lines here from backend threads (e.g. wake-word pipeline)
-  window._albedo_chat_push = function (kind, text) { appendLine(kind, text); };
+  // ── Live activity status ("thinking…", "checking installed apps…") ────────
+  // An ephemeral line the backend updates as the agent works, so the user can
+  // follow progress and knows it isn't stalled. Cleared when the answer starts.
+  let _statusEl = null;
+  function _showStatus(text) {
+    if (!_feedEl || !text) return;
+    if (!_statusEl) {
+      _statusEl = document.createElement("div");
+      _statusEl.className = "chat__line chat__line--status";
+      _feedEl.appendChild(_statusEl);
+    }
+    _statusEl.textContent = `${_ts()} ⋯ ${text}`;
+    _feedEl.scrollTop = _feedEl.scrollHeight;
+  }
+  function _clearStatus() {
+    if (_statusEl) { _statusEl.remove(); _statusEl = null; }
+  }
+  window._albedo_chat_status = function (text) { _showStatus(text); };
+  eel.expose(_albedo_chat_status, "_albedo_chat_status");
+
+  // ── Typewriter queue — reveals text at a steady reading pace ──────────────
+  // Every Albedo answer (streamed tokens OR a full pushed message) flows through
+  // this queue so text never pops in all at once. Messages type out FIFO; a
+  // streaming message stays "open" and accepts more tokens until closed.
+  const _tw = { q: [], timer: null, STEP_MS: 18 };
+
+  function _twPump() {
+    if (_tw.timer) return;
+    _tw.timer = setInterval(() => {
+      const m = _tw.q[0];
+      if (!m) { clearInterval(_tw.timer); _tw.timer = null; return; }
+      if (!m.el) {
+        m.el = document.createElement("div");
+        m.el.className = `chat__line chat__line--${m.kind}`;
+        m.el.textContent = m.prefix;
+        _feedEl.appendChild(m.el);
+      }
+      const remaining = m.full.length - m.shown;
+      if (remaining > 0) {
+        // reveal a few chars/tick; speed up when a big backlog is queued
+        const step = Math.min(remaining, Math.max(1, Math.ceil(remaining / 22)));
+        m.shown += step;
+        m.el.textContent = m.prefix + m.full.slice(0, m.shown);
+        _feedEl.scrollTop = _feedEl.scrollHeight;
+      } else if (m.closed) {
+        _tw.q.shift();   // fully revealed + closed → advance to next message
+      }
+    }, _tw.STEP_MS);
+  }
+  function _twOpen(kind, prefix) {
+    const m = { kind, prefix, full: "", shown: 0, closed: false, el: null };
+    _tw.q.push(m);
+    _twPump();
+    return m;
+  }
+  function _twToken(tok) {
+    _clearStatus();   // the answer is arriving — drop the "thinking…" line
+    let m = _tw.q[_tw.q.length - 1];
+    if (!m || m.closed) m = _twOpen("albedo", `${_ts()} ${_personaName}  `);
+    m.full += tok;
+    _twPump();
+  }
+  function _twClose() {
+    const m = _tw.q[_tw.q.length - 1];
+    if (m) m.closed = true;
+  }
+  function _twMessage(kind, text, prefix) {
+    _clearStatus();
+    const m = _twOpen(kind, prefix != null ? prefix : `${_ts()} `);
+    m.full = text || "";
+    m.closed = true;
+  }
+
+  // Python pushes chat lines here from backend threads (wake pipeline, team).
+  // Albedo answers type out; system/error lines appear instantly.
+  window._albedo_chat_push = function (kind, text) {
+    if (kind === "albedo") _twMessage("albedo", text, `${_ts()} `);
+    else appendLine(kind, text);
+  };
   eel.expose(_albedo_chat_push, "_albedo_chat_push");
+
+  // Live token stream from the direct answer path.
+  window._albedo_chat_token = function (tok) { _twToken(tok); };
+  eel.expose(_albedo_chat_token, "_albedo_chat_token");
+  window._albedo_chat_token_end = function () { _twClose(); };
+  eel.expose(_albedo_chat_token_end, "_albedo_chat_token_end");
 
   // Settings panel calls this when the user changes persona from the drawer
   window._albedo_persona_select = function (name) { _applyPersonaName(name); };
@@ -229,13 +325,21 @@ const Chat = (() => {
           _sendBtn.disabled = true;
           _sendBtn.textContent = "...";
           try {
-            const qr = await eel.send_chat(r.text, null)();
+            const qr = await eel.send_chat(r.text, _history.slice(-10))();
             if (qr && qr.ok) {
               if (qr.mode === "team") {
                 appendLine("system", "[TEAM activated — see Team window]");
               }
-              appendLine("albedo", _personaName + "  " + (qr.answer || "(no response)"));
+              if (!qr.streamed && qr.mode !== "team") {
+                _twMessage("albedo", _personaName + "  " + (qr.answer || "(no response)"),
+                           `${_ts()} `);
+              }
+              if (qr.mode !== "team" && qr.answer) {
+                _history.push({ role: "user", content: r.text });
+                _history.push({ role: "assistant", content: qr.answer });
+              }
             } else {
+              _twClose();
               appendLine("error", "[SYS] " + (qr && qr.error ? qr.error : "no response"));
             }
           } finally {

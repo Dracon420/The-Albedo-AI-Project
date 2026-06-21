@@ -14,6 +14,8 @@ import re
 import urllib.parse
 import urllib.request
 
+from albedo.cache import ttl_cache
+
 _WIKI_SUMMARY_URL = "https://en.wikipedia.org/api/rest_v1/page/summary/{}"
 _WIKI_SEARCH_URL  = "https://en.wikipedia.org/w/api.php"
 
@@ -100,6 +102,8 @@ def _search_then_summary(topic: str) -> str | None:
         return None
 
 
+@ttl_cache(ttl_seconds=86400, maxsize=256,
+           key_fn=lambda q, *a, **k: str(q).strip().lower())
 def wikipedia_summary(query: str) -> str | None:
     """Fetch a Wikipedia first-paragraph summary relevant to the query.
 

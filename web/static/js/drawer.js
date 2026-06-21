@@ -52,6 +52,28 @@ const Drawer = (() => {
   };
   eel.expose(_albedo_dream_push, "_albedo_dream_push");
 
+  // ── Query-latency readout (albedo.perf via get_perf_timings) ─────────────
+  async function _refreshPerf() {
+    const el = document.getElementById("perfReadout");
+    if (!el) return;
+    try {
+      const r = await eel.get_perf_timings(10)();
+      if (!r || !r.ok || !Array.isArray(r.data) || !r.data.length) {
+        el.textContent = "// no queries yet";
+        return;
+      }
+      // newest first
+      const lines = r.data.slice().reverse().map((t) => {
+        const stages = (t.stages || [])
+          .map((s) => `${s[0]} ${Math.round(s[1])}ms`).join("  ");
+        const route = String(t.route || "?").padEnd(13).slice(0, 13);
+        const total = `${Math.round(t.total_ms || 0)}ms`.padStart(7);
+        return `${route}${total}   ${stages}`;
+      });
+      el.textContent = lines.join("\n");
+    } catch (_) { /* ignore */ }
+  }
+
   async function _refreshDreamState() {
     try {
       const r = await eel.get_dream_state()();
@@ -102,6 +124,7 @@ const Drawer = (() => {
     _scrim.classList.add("is-open");
     _drawer.setAttribute("aria-hidden", "false");
     _populate();
+    _refreshPerf();   // latency readout — refresh every time the drawer opens
   }
   function close() {
     _drawer.classList.remove("is-open");
@@ -134,6 +157,11 @@ const Drawer = (() => {
     _scrim     = document.getElementById("drawerScrim");
     _toggleBtn = document.getElementById("drawerToggle");
     _closeBtn  = document.getElementById("drawerClose");
+
+    const missing = [["drawer",_drawer],["drawerScrim",_scrim],
+                     ["drawerToggle",_toggleBtn],["drawerClose",_closeBtn]]
+                    .filter(([,el]) => !el).map(([id]) => id);
+    if (missing.length) throw new Error("missing IDs: " + missing.join(", "));
 
     _toggleBtn.addEventListener("click", toggle);
     _closeBtn .addEventListener("click", close);
@@ -248,6 +276,10 @@ const Drawer = (() => {
         }
       });
     }
+
+    // Keep the QUERY LATENCY readout live — it otherwise only refreshed on
+    // drawer-open, so a PINNED drawer never updated after a query.
+    setInterval(_refreshPerf, 3000);
 
     // Keyboard: Escape closes the drawer
     document.addEventListener("keydown", (ev) => {

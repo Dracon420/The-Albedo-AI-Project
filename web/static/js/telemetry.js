@@ -73,7 +73,7 @@ const Telemetry = (() => {
       const up    = t.network.up_mbps   || 0;
       const total = down + up;
       const pct   = Math.min(100, (total / NET_CAP_MBPS) * 100);
-      const breakdown = `↓${_fmtMbps(down)} ↑${_fmtMbps(up)} Mbps`;
+      const breakdown = "Dn " + _fmtMbps(down) + " / Up " + _fmtMbps(up) + " Mbps";
       Gauges.update("net", pct, _fmtMbps(total), breakdown);
     }
 

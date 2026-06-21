@@ -67,9 +67,12 @@
       });
     });
 
-    // Restore previously saved mode (default: windowed)
-    const saved = localStorage.getItem(PREF_KEY) || MODE_WIN;
-    applyMode(saved !== MODE_WDGT ? saved : MODE_WIN); // widget can't auto-reopen
+    // The FULL/WIN/WIDGET mode-switcher buttons were removed from the topbar,
+    // so there's no longer any way to toggle out of fullscreen. Force the main
+    // window to windowed on every load and clear any stale saved preference
+    // (e.g. a leftover "fullscreen" from before the buttons were removed).
+    try { localStorage.setItem(PREF_KEY, MODE_WIN); } catch (_) {}
+    applyMode(MODE_WIN);
   }
 
   if (document.readyState === "loading") {

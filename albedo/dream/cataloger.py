@@ -76,8 +76,17 @@ def _file_metadata(path: Path) -> dict:
         return {}
 
 
+# Cap NEW files embedded per dream cycle. The default ChromaDB embedding model
+# (a 2nd all-MiniLM, separate from the RAG model) running over tens of thousands
+# of files at once is heavy enough to OOM a 16 GB box → app crash. Embedding only
+# new files, capped per cycle, spreads the work and keeps memory bounded.
+_MAX_NEW_PER_CYCLE = 1500
+
+
 def _chroma_index(files: list[dict], interrupt: Optional[Callable]) -> int:
-    """Upsert file metadata into ChromaDB collection 'file_catalog'."""
+    """Upsert NEW file metadata into ChromaDB collection 'file_catalog'.
+    Skips files already indexed (idempotent) and caps new files per cycle so the
+    embedding pass can't exhaust memory and crash the app."""
     indexed = 0
     try:
         import chromadb
@@ -85,19 +94,31 @@ def _chroma_index(files: list[dict], interrupt: Optional[Callable]) -> int:
         client  = chromadb.PersistentClient(path=str(root / "chroma_db"))
         col     = client.get_or_create_collection("file_catalog")
 
+        # Already-indexed ids — skip them so we don't re-embed the whole tree.
+        try:
+            existing = set(col.get(include=[]).get("ids", []))
+        except Exception:
+            existing = set()
+
         batch_docs, batch_metas, batch_ids = [], [], []
         BATCH = 100
+        new_count = 0
 
         for i, f in enumerate(files):
             if interrupt and interrupt():
                 break
+            if new_count >= _MAX_NEW_PER_CYCLE:
+                break
             if not f:
                 continue
             doc_id = hashlib.md5(f["path"].encode()).hexdigest()
+            if doc_id in existing:
+                continue
             doc    = f"{f['name']} — {f['ext']} — {f['parent']}"
             batch_docs.append(doc)
             batch_metas.append(f)
             batch_ids.append(doc_id)
+            new_count += 1
 
             if len(batch_docs) >= BATCH:
                 col.upsert(documents=batch_docs, metadatas=batch_metas, ids=batch_ids)
@@ -159,14 +180,36 @@ def _write_vault_note(result: CatalogResult) -> Optional[str]:
         return None
 
 
+def _catalog_state_path() -> Path:
+    return Path(__file__).resolve().parent.parent.parent / "chroma_db" / ".catalog_last_index"
+
+
+def _read_last_index() -> float:
+    """Epoch seconds of the last successful catalog pass (0 if never)."""
+    try:
+        return float(_catalog_state_path().read_text(encoding="utf-8").strip())
+    except Exception:
+        return 0.0
+
+
+def _write_last_index(ts: float) -> None:
+    try:
+        p = _catalog_state_path()
+        p.parent.mkdir(exist_ok=True)
+        p.write_text(str(ts), encoding="utf-8")
+    except Exception:
+        pass
+
+
 def build_catalog(
     catalog_roots: Optional[list[str]] = None,
     interrupt:     Optional[Callable[[], bool]] = None,
     progress_cb:   Optional[Callable[[str, float], None]] = None,
 ) -> CatalogResult:
     """
-    Walk the user's file system, index all discovered files into ChromaDB,
-    and write a summary note to the Obsidian vault.
+    Walk the user's file system and index only files CREATED/MODIFIED since the
+    last catalog pass (by mtime), then write a summary note to the Obsidian vault.
+    Incremental so the dream cycle never re-embeds the whole tree (which OOM'd).
     """
     def _prog(msg: str, frac: float) -> None:
         if progress_cb:
@@ -174,6 +217,8 @@ def build_catalog(
         print(f"[cataloger] {msg}")
 
     t0 = time.monotonic()
+    scan_started = time.time()           # wall-clock — becomes the new watermark
+    last_index = _read_last_index()      # only files newer than this are indexed
 
     roots = (
         [Path(r) for r in catalog_roots]
@@ -182,7 +227,8 @@ def build_catalog(
     )
     roots = [r for r in roots if r.exists()]
 
-    _prog(f"Beginning catalog sweep across {len(roots)} root(s)…", 0.0)
+    _prog(f"Beginning catalog sweep across {len(roots)} root(s) "
+          f"(incremental since {last_index:.0f})…", 0.0)
 
     all_files: list[dict] = []
     by_category: dict[str, int] = {}
@@ -197,6 +243,12 @@ def build_catalog(
                 if interrupt and interrupt():
                     break
                 if not path.is_file():
+                    continue
+                # INCREMENTAL: skip files unchanged since the last catalog pass.
+                try:
+                    if path.stat().st_mtime <= last_index:
+                        continue
+                except OSError:
                     continue
                 if _should_exclude(path):
                     continue
@@ -220,8 +272,13 @@ def build_catalog(
 
     total_size_mb = sum(f.get("size_kb", 0) for f in all_files) / 1024
 
-    _prog(f"Indexing {len(all_files):,} files into ChromaDB…", 0.65)
+    _prog(f"Indexing {len(all_files):,} new/changed files into ChromaDB…", 0.65)
     indexed = _chroma_index(all_files, interrupt)
+
+    # Advance the watermark only if we weren't interrupted, so the next cycle
+    # starts from here and never re-scans files we've already handled.
+    if not (interrupt and interrupt()):
+        _write_last_index(scan_started)
 
     result = CatalogResult(
         total_files   = len(all_files),

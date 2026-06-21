@@ -12,9 +12,9 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 
 ![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D4?style=flat-square&logo=windows)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
-![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20DeepSeek%20R1%20%7C%20Custom%20LoRA-black?style=flat-square)
+![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Qwen2.5--7B%20%7C%20Custom%20QLoRA-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-v2.0.0-00F0FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-v3.2.0-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice & text command catalog
 
@@ -32,26 +32,41 @@ When given a directive, Albedo executes it.
 
 ---
 
+## WHAT'S NEW IN v3.2.0
+
+A feature + stability release on top of v3.1.1:
+
+- **Faster everywhere** — the specialist team runs in parallel, Ollama keeps the model resident (`keep_alive`), tool results (web / Wikipedia / Wolfram) are TTL-cached, repeat answers hit a semantic answer cache, and retrieval is sharpened by a cross-encoder reranker.
+- **Live token streaming** — responses stream into the chat window token-by-token with a reading-pace typewriter reveal, and a live "thinking / active" status so you can follow what Albedo is doing.
+- **Free-provider failover** — automatic chain of free providers (**Groq → Gemini → Together → Ollama**). Paid providers (Azure / OpenAI / Anthropic) are strictly opt-in and never auto-failover targets, so you don't burn paid credits by accident.
+- **Cyber-HUD overhaul** — a more brain-like neural viz (curved dendrites, glowing soma, traveling neuron sparks), an enhanced team window, neural-link cells that flip **READY → ACTIVE** when a subsystem is working, NET / DISK gauges with Down/Up and Read/Write breakdowns, distinct per-window taskbar icons, and an installed-apps inventory popup.
+- **Stability** — UTF-8 stdout (kills the Windows cp1252 `print()` crash), cooperative gevent waiting (the chat no longer freezes the UI), conversation continuity (answering "yes" continues the thread), and incremental Dream-Cycle indexing that only touches new/changed files.
+- **New tool** — installed-apps inventory with optional uninstall, surfaced in a popup.
+
+---
+
 ## CORE ARCHITECTURE
 
-### Language Model — Dual-Persona Fine-Tuned Models (QLoRA on DeepSeek R1)
+### Language Model — Dual-Persona Fine-Tuned Models (QLoRA on Qwen2.5-7B)
 
-V2 ships two custom-trained Ollama models, each a QLoRA fine-tune of **DeepSeek-R1-Distill-Qwen-1.5B**, quantized to Q4_K_M GGUF (1.80 GB each) for the RTX 2060's 6 GB VRAM envelope:
+V3 ships two custom-trained Ollama models, each a QLoRA fine-tune of **Qwen2.5-7B-Instruct**, quantized to Q4_K_M GGUF for the RTX 2060's 6 GB VRAM envelope:
 
 | Model | Wake Word | Personality | Training |
 |---|---|---|---|
-| `albedo-cortana` | *"Hey Cortana"* | Halo Spartan-class AI — precise, loyal, tactical | Round 2 · 147 examples · rank 16 · cosine LR |
-| `albedo-jarvis` | *"Hey Jarvis"* | Iron Man AI — formal, British wit, addresses user as "sir" | 83 examples · rank 16 · 5 epochs |
+| `albedo-cortana-8b` | *"Cortana"* | Halo Spartan-class AI — precise, loyal, tactical | QLoRA · Azure T4 · rank 32 + 64 runs |
+| `albedo-jarvis-8b` | *"Jarvis"* | Iron Man AI — formal, British wit, addresses user as "sir" | QLoRA · Azure T4 · same pipeline |
 
-Wake word detection routes to the correct model at runtime via `set_active_persona()` in `albedo/bridge.py`. The persona can also be swapped live from the Settings panel without restarting. A fixed `num_ctx` of 2048 tokens covers the system prompt, 10-turn rolling history, and the current query. ChromaDB embeddings run entirely on CPU to preserve every byte of VRAM for LLM inference. Offline-first by design — web search is additive intelligence, not a dependency.
+The legacy 1.9 GB baselines (`albedo-cortana` / `albedo-jarvis`) remain installed as offline fallbacks. Wake word detection routes to the correct model at runtime, and the persona can be swapped live from the Settings panel without restarting. ChromaDB embeddings run entirely on CPU to preserve every byte of VRAM for LLM inference.
 
-### Speech-to-Text & Wake Word — Vosk (CPU, offline)
+**LLM routing** prefers cloud providers when keys are present and falls back to local Ollama: by default Albedo uses **free** providers (Groq → Gemini → Together) with **Ollama** as the offline floor; paid providers (Azure OpenAI / OpenAI / Anthropic) are opt-in only. Offline-first by design — cloud APIs and web search are additive intelligence, not a dependency.
 
-**Vosk** (`vosk-model-small-en-us-0.15`, ~40 MB) handles both wake-word detection and full transcription on the CPU, eliminating the prior dual-engine stack (Faster-Whisper + OpenWakeWord). Zero VRAM cost — the entire LLM budget stays available for inference. The model is pre-warmed on a daemon thread at startup so the first MIC press has no load latency, and the recognizer uses a restricted grammar of just the configured wake words plus `[unk]` to keep idle-listen CPU usage minimal. A three-attempt stream strategy (16 kHz mono → native WASAPI → MME host API fallback) ensures compatibility across all Windows audio configurations including exclusive-mode WASAPI devices.
+### Speech-to-Text & Wake Word — Tiered (Vosk offline by default)
 
-### Text-to-Speech — Piper (CPU, Sentence-Streamed)
+Speech-to-text runs as a **tiered waterfall** — **Vosk** (offline, default) → **Azure Speech** → **Groq Whisper** → **Deepgram** — so it works fully offline yet upgrades to cloud accuracy when keys are present. **Vosk** (`vosk-model-small-en-us-0.15`, ~40 MB) handles both wake-word detection and full transcription on the CPU, eliminating the prior dual-engine stack (Faster-Whisper + OpenWakeWord). Zero VRAM cost — the entire LLM budget stays available for inference. The model is pre-warmed on a daemon thread at startup so the first MIC press has no load latency, and the recognizer uses a restricted grammar of just the configured wake words plus `[unk]` to keep idle-listen CPU usage minimal. A three-attempt stream strategy (16 kHz mono → native WASAPI → MME host API fallback) ensures compatibility across all Windows audio configurations including exclusive-mode WASAPI devices.
 
-**Piper** runs as a CPU subprocess, preserving the full VRAM budget for inference. Responses are sentence-split and pipelined: a producer thread synthesizes sentence N+1 via Piper while the consumer plays sentence N through sounddevice. First audio begins as soon as the opening sentence is processed — no waiting for the full response to synthesize. The **AUDIO: ON / AUDIO: MUTE** tactical toggle kills active playback instantly via `sd.stop()` and blocks subsequent TTS routing until re-enabled.
+### Text-to-Speech — Tiered (Azure Neural → … → Piper offline)
+
+Text-to-speech is a **tiered waterfall** — **Azure Neural** → **XTTS-v2** → **Edge-TTS** → **Kokoro** → **Piper** — picking the highest-quality engine available and always degrading gracefully to fully-offline **Piper**. **Piper** runs as a CPU subprocess, preserving the full VRAM budget for inference. Responses are sentence-split and pipelined: a producer thread synthesizes sentence N+1 via Piper while the consumer plays sentence N through sounddevice. First audio begins as soon as the opening sentence is processed — no waiting for the full response to synthesize. The **AUDIO: ON / AUDIO: MUTE** tactical toggle kills active playback instantly via `sd.stop()` and blocks subsequent TTS routing until re-enabled.
 
 ### Vision Cortex — Moondream (Ollama)
 
@@ -91,7 +106,7 @@ Local knowledge is indexed into ChromaDB from a single configurable source:
 
 Configure the vault path via **Settings → OBSIDIAN VAULT** and rebuild the index with **RE-INDEX NOW**. Every query that the autonomous commander routes to `"memory"` searches this collection semantically via ChromaDB's `all-MiniLM-L6-v2` embeddings.
 
-Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and is always available on demand with the `web:` prefix. File-count queries (e.g. "how many STL files") are intercepted and resolved directly via `pathlib.rglob()` — the LLM never guesses the working directory.
+Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **DuckDuckGo** (`ddgs`, no key required) as the always-available fallback, and is invoked on demand with the `web:` prefix. **Wikipedia** and **Wolfram Alpha** interceptors handle factual lookups and computation before the LLM is ever consulted. File-count queries (e.g. "how many STL files") are intercepted and resolved directly via `pathlib.rglob()` — the LLM never guesses the working directory.
 
 ---
 
@@ -103,7 +118,7 @@ Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and
 
 <div align="center">
 
-### [⬇ Download Albedo-Setup-2.0.0.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v2.0.0/Albedo-Setup-2.0.0.exe)
+### [⬇ Download Albedo-Setup-3.2.0.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.2.0/Albedo-Setup-3.2.0.exe)
 
 </div>
 
@@ -127,14 +142,14 @@ Web search runs in parallel via DuckDuckGo for queries routed to `"direct"`, and
 
 **Deployment sequence:**
 
-1. **Download** `Albedo-Setup-2.0.0.exe` from the link above
+1. **Download** `Albedo-Setup-3.2.0.exe` from the link above
 2. **Run** the installer — accept the UAC prompt
 3. The **Setup Wizard** launches automatically and executes:
    - System dependency verification (Python 3.12 + Ollama)
    - Virtual environment creation and full pip dependency installation
    - Piper voice model download (Kristin + Ryan from HuggingFace)
    - `.env` configuration write with persona, voice, and wake word paths
-   - Ollama model pull (`albedo-cortana` + `albedo-jarvis`) with live progress output
+   - Ollama model pull (`albedo-cortana-8b` + `albedo-jarvis-8b`) with live progress output
    - Desktop shortcut creation
 4. **Select your initial persona** (Cortana or Jarvis) in the wizard
 5. **Double-click** the Albedo shortcut — Mission Control is online
@@ -306,7 +321,7 @@ The installer creates a **Start Menu** shortcut and an optional **Desktop** shor
 | Shortcut / Method | Action |
 |---|---|
 | **Albedo Mission Control** shortcut | Starts Ollama silently, then opens Mission Control via pythonw |
-| Re-run `Albedo-Setup-2.0.0.exe` | Upgrades in-place, preserves all user data |
+| Re-run `Albedo-Setup-3.2.0.exe` | Upgrades in-place, preserves all user data |
 | Windows **Add or remove programs** → Albedo | Uninstalls — preserves `.env`, `settings.json`, `chroma_db`, `albedo_memory_db` |
 
 Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.
@@ -317,7 +332,7 @@ Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those v
 
 | Parameter | Standard — RTX 2060 · 6 GB VRAM | High-Spec — RTX 3080+ · 8 GB+ VRAM |
 |---|---|---|
-| `OLLAMA_MODEL` | `albedo-cortana` / `albedo-jarvis` | `albedo-cortana` / `albedo-jarvis` |
+| `OLLAMA_MODEL` | `albedo-cortana-8b` / `albedo-jarvis-8b` | `albedo-cortana-8b` / `albedo-jarvis-8b` |
 | `VOSK_MODEL_PATH` | `vosk-model-small-en-us-0.15` (~40 MB) | `vosk-model-en-us-0.22` (~1.8 GB) |
 | `RAG_TOP_K` | `5` | `10` |
 | `num_ctx` | `2048` | `4096` |
@@ -330,7 +345,7 @@ Edit `.env` and restart to switch tiers. No reinstall required.
 
 | Layer | Technology |
 |---|---|
-| LLM runtime | [Ollama](https://ollama.com) · `albedo-cortana` / `albedo-jarvis` (DeepSeek-R1-Distill-Qwen-1.5B · Q4_K_M) |
+| LLM runtime | [Ollama](https://ollama.com) · `albedo-cortana-8b` / `albedo-jarvis-8b` (Qwen2.5-7B-Instruct · QLoRA · Q4_K_M) · cloud swarm (Groq / Gemini / Together) additive |
 | Vision model | [Moondream](https://github.com/vikhyat/moondream) via Ollama |
 | Vector store | [ChromaDB](https://www.trychroma.com) · CPU embeddings (`all-MiniLM-L6-v2`) |
 | Speech-to-text + wake word | [Vosk](https://alphacephei.com/vosk/) · CPU · `vosk-model-small-en-us-0.15` |
@@ -338,7 +353,8 @@ Edit `.env` and restart to switch tiers. No reinstall required.
 | Webcam capture | [OpenCV](https://opencv.org) · DirectShow |
 | Desktop GUI | [Eel](https://github.com/python-eel/Eel) · Chrome app-mode · Cyber-HUD |
 | Desktop control | [Open Interpreter](https://github.com/OpenInterpreter/open-interpreter) |
-| Web search | [ddgs](https://github.com/deedy5/ddgs) — DuckDuckGo, zero API key |
+| Web search | [Tavily](https://tavily.com) (AI-optimised, optional key) → [ddgs](https://github.com/deedy5/ddgs) DuckDuckGo fallback (zero key) |
+| Knowledge / compute | [Wikipedia](https://www.wikipedia.org) (always on) · [Wolfram Alpha](https://www.wolframalpha.com) (optional key) |
 | Mobile bridge | FastAPI · Uvicorn · Tailscale WireGuard mesh |
 | Home Assistant | REST API proxy via Tailscale tunnel |
 | Installer | [Inno Setup 6](https://jrsoftware.org/isinfo.php) |

@@ -5,14 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Cache-Control" content="no-store" />
   <title>ALBEDO  //  MISSION CONTROL</title>
+  <link rel="icon" type="image/svg+xml" href="static/icons/icon_main.svg?v=1" />
 
   <!-- Eel JS bridge -->
   <script type="text/javascript" src="/eel.js"></script>
 
-  <link rel="stylesheet" href="static/css/cyberdeck.css?v=318" />
-  <link rel="stylesheet" href="static/css/gauges.css?v=312" />
-  <link rel="stylesheet" href="static/css/drawer.css?v=314" />
-  <link rel="stylesheet" href="static/css/panels.css?v=318" />
+  <link rel="stylesheet" href="static/css/cyberdeck.css?v=329" />
+  <link rel="stylesheet" href="static/css/gauges.css?v=319" />
+  <link rel="stylesheet" href="static/css/drawer.css?v=322" />
+  <link rel="stylesheet" href="static/css/panels.css?v=324" />
 </head>
 <body data-background="bg2">
   <!-- â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
@@ -40,7 +41,7 @@
     </nav>
 
     <!-- View mode switcher -->
-    <button class=”drawer__toggle” id=”drawerToggle” aria-label=”Open tactical drawer”>&#9776;</button>
+    <button class="drawer__toggle" id="drawerToggle" aria-label="Open tactical drawer">&#8801;</button>
   </header>
 
   <!-- â”€â”€ Main: full-width vertical stack â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ -->
@@ -60,7 +61,7 @@
             <circle class="gauge__fill" cx="60" cy="60" r="48" />
             <text class="gauge__value" x="60" y="70" text-anchor="middle" dominant-baseline="middle" data-value="net">0</text>
           </svg>
-          <div class="dial__sub" data-sub="net_breakdown">â†“-- â†‘-- Mbps</div>
+          <div class="dial__sub" data-sub="net_breakdown">Dn -- / Up -- Mbps</div>
         </div>
         <!-- Base pair with captions BELOW each dial -->
         <div class="wing__base">
@@ -172,8 +173,8 @@
       <div>
         <button class="drawer__pinbtn" id="drawerPinBtn"
                 aria-label="Pin drawer as sidebar"
-                title="Pin / unpin as right-side sidebar">â‡²</button>
-        <button class="drawer__close" id="drawerClose" aria-label="Close drawer">Ã—</button>
+                title="Pin / unpin as right-side sidebar">&#128204;</button>
+        <button class="drawer__close" id="drawerClose" aria-label="Close drawer">&times;</button>
       </div>
     </header>
 
@@ -294,6 +295,13 @@
         <pre class="drawer__readout" id="resourceReadout">loading...</pre>
       </section>
       <section class="drawer__section">
+        <h3>QUERY LATENCY</h3>
+        <pre class="drawer__readout drawer__readout--small" id="perfReadout">// no queries yet</pre>
+        <div class="setting__hint">
+          Per-turn timing &mdash; route + stage breakdown (rag/web/wiki/llm), newest first.
+        </div>
+      </section>
+      <section class="drawer__section">
         <h3>MEMORY</h3>
         <div class="setting">
           <button class="drawer__action" id="indexVaultBtn">
@@ -379,19 +387,20 @@
 
   <!-- â”€â”€ JS â€” v=312 cache-bust forces fresh load after each update â”€â”€ -->
   <script src="static/js/gauges.js?v=312"></script>
-  <script src="static/js/telemetry.js?v=312"></script>
+  <script src="static/js/telemetry.js?v=315"></script>
   <script src="static/js/swarm.js?v=312"></script>
-  <script src="static/js/neural.js?v=312"></script>
-  <script src="static/js/drawer.js?v=314"></script>
+  <script src="static/js/neural.js?v=333"></script>
+  <script src="static/js/drawer.js?v=331"></script>
   <script src="static/js/settings.js?v=312"></script>
   <script src="static/js/mobile.js?v=312"></script>
   <script src="static/js/dream_suggestions.js?v=313"></script>
-  <script src="static/js/chat.js?v=315"></script>
+  <script src="static/js/chat.js?v=332"></script>
+  <script src="static/js/apps_popup.js?v=1"></script>
   <script src="static/js/app.js?v=312"></script>
   <!-- Holographic orb animator (Canvas 2D, no deps) -->
   <script src="static/js/orb.js?v=312"></script>
   <!-- View mode switcher (FULL / WIN / WIDGET) -->
-  <script src="static/js/modes.js?v=313"></script>
+  <script src="static/js/modes.js?v=322"></script>
 
   <!-- Event-bus client (subscribed by Brain/Team viz windows; also lets MC react
        to router decisions so chat can flag when the team kicks in) -->

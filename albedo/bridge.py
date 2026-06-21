@@ -22,6 +22,7 @@ stop     sequences are injected into every payload so the model cannot simulate
 
 from __future__ import annotations
 
+import os
 import threading as _threading
 
 from albedo.config import OLLAMA_MODEL, OLLAMA_BASE_URL
@@ -30,6 +31,12 @@ from albedo.config import OLLAMA_MODEL, OLLAMA_BASE_URL
 _NUM_CTX              = 4096   # context window — covers system prompt + history
 _PREDICT_STANDARD     = 512    # hard output cap for normal answers
 _PREDICT_CONVERSATIONAL = 200  # hard output cap for greetings / one-liners
+
+# How long Ollama keeps the model resident in VRAM after a request. Avoids a
+# multi-second cold reload on the next query. "30m" by default; override via
+# OLLAMA_KEEP_ALIVE (e.g. "-1" = forever, "0" = unload immediately). Only the
+# single active persona is ever loaded, so this stays within the 6 GB budget.
+_OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "30m")
 
 # ── JARVIS-Tech model availability cache ──────────────────────────────────────
 # Checked once per session on the first TECH route hit, then cached.
@@ -260,6 +267,7 @@ def _ollama_chat(message: str, history: list[dict] | None = None,
         "model": model_to_use,
         "messages": messages,
         "stream": False,
+        "keep_alive": _OLLAMA_KEEP_ALIVE,
         "options": {
             "num_ctx":     _NUM_CTX,
             "num_predict": num_predict,
@@ -322,6 +330,7 @@ def jarvis_tech_chat(message: str, history: list[dict] | None = None) -> str:
             "model": "albedo-jarvis-tech",
             "messages": messages,
             "stream": False,
+            "keep_alive": _OLLAMA_KEEP_ALIVE,
             "options": {
                 "num_ctx":     _NUM_CTX,
                 "num_predict": _PREDICT_STANDARD,
@@ -352,6 +361,7 @@ def jarvis_tech_chat(message: str, history: list[dict] | None = None) -> str:
         "model": "albedo-jarvis-8b",
         "messages": messages_fb,
         "stream": False,
+        "keep_alive": _OLLAMA_KEEP_ALIVE,
         "options": {
             "num_ctx":     _NUM_CTX,
             "num_predict": _PREDICT_STANDARD,

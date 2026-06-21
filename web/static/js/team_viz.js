@@ -19,6 +19,13 @@
     "Math", "FactChecker",
   ];
 
+  // Monochrome glyph per role (picks up cyberdeck glow via currentColor).
+  const ROLE_GLYPH = {
+    "Orchestrator": "◈", "SysOps": "⚙", "Researcher": "◎", "FileScout": "▣",
+    "Code Writer": "⟨⟩", "Analyzer": "▤", "Designer": "◇", "Critic": "✓",
+    "Math": "∑", "FactChecker": "⊜",
+  };
+
   function _el(tag, cls, txt) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -40,25 +47,61 @@
     const banner = _el("div", "viz__banner", "Team idle.");
     root.appendChild(banner);
 
-    // ── Card grid ──
-    const grid = _el("div", "team-grid");
-    const cards = {};
-    ROLES.forEach((role) => {
-      const card = _el("div", "team-card", null);
+    // ── Live status summary strip (counts by state) ──
+    const summary = _el("div", "team-summary");
+    const SUM_STATES = ["thinking", "tool", "done", "error", "idle"];
+    const sumEls = {};
+    SUM_STATES.forEach((s) => {
+      const chip = _el("span", `team-summary__chip team-summary__chip--${s}`);
+      chip.appendChild(_el("span", "team-summary__dot"));
+      const n = _el("span", "team-summary__n", "0");
+      chip.appendChild(n);
+      chip.appendChild(_el("span", "team-summary__lbl", s));
+      summary.appendChild(chip);
+      sumEls[s] = n;
+    });
+    root.appendChild(summary);
+
+    function _buildCard(role, featured) {
+      const card = _el("div", featured ? "team-card team-card--lead" : "team-card", null);
       card.dataset.role = role;
       card.dataset.state = "idle";
       const head = _el("div", "team-card__head");
-      const dot  = _el("span", "team-card__dot");
-      head.appendChild(dot);
+      head.appendChild(_el("span", "team-card__glyph", ROLE_GLYPH[role] || "•"));
+      head.appendChild(_el("span", "team-card__dot"));
       head.appendChild(_el("span", "team-card__role", role));
       card.appendChild(head);
       card.appendChild(_el("div", "team-card__state", "idle"));
       card.appendChild(_el("div", "team-card__task", "—"));
       card.appendChild(_el("div", "team-card__tool", ""));
+      return card;
+    }
+
+    const cards = {};
+
+    // ── Orchestrator featured as the team hub ──
+    const lead = _buildCard("Orchestrator", true);
+    cards["Orchestrator"] = lead;
+    root.appendChild(lead);
+
+    // ── Specialist card grid ──
+    const grid = _el("div", "team-grid");
+    ROLES.filter((r) => r !== "Orchestrator").forEach((role) => {
+      const card = _buildCard(role, false);
       grid.appendChild(card);
       cards[role] = card;
     });
     root.appendChild(grid);
+
+    function _refreshSummary() {
+      const counts = { thinking: 0, tool: 0, done: 0, error: 0, idle: 0 };
+      Object.values(cards).forEach((c) => {
+        const s = c.dataset.state;
+        if (counts[s] !== undefined) counts[s]++;
+      });
+      SUM_STATES.forEach((s) => { sumEls[s].textContent = counts[s]; });
+    }
+    _refreshSummary();
 
     // ── Timeline ──
     const tlWrap = _el("div", "viz__section");
@@ -74,6 +117,7 @@
       card.querySelector(".team-card__state").textContent = state;
       if (task !== undefined) card.querySelector(".team-card__task").textContent = task || "—";
       if (toolText !== undefined) card.querySelector(".team-card__tool").textContent = toolText || "";
+      _refreshSummary();
     }
 
     function addTimeline(role, text, kind) {

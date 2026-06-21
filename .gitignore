@@ -4,6 +4,10 @@
 *.env
 !.env.example
 
+# Chrome app-mode profiles (created at runtime for the Eel UI + panels)
+.chrome_profile/
+.chrome_profile_*/
+
 # ChromaDB vector database
 chroma/
 chroma_db/
@@ -120,3 +124,8 @@ albedo_mobile/**/local.properties
 # Dream-cycle pending move suggestions (per-machine, regenerated)
 dream_pending_moves.json
 scratchpad.json
+
+# Dream-cycle runtime state (per-machine watermarks, regenerated each cycle)
+albedo/dream/.deep_cycle_counter
+albedo/dream/.reindex_state.json
+.catalog_last_index

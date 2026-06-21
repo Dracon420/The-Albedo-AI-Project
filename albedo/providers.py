@@ -52,10 +52,14 @@ DEFAULT_MODELS = {
     "azure":     "",          # uses AZURE_OPENAI_DEPLOYMENT
     "gemini":    "gemini-2.0-flash",
     "groq":      "llama-3.3-70b-versatile",
+    "together":  "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
     "ollama":    "albedo-cortana-8b",
 }
 
-PROVIDERS = ("anthropic", "openai", "azure", "gemini", "groq", "ollama")
+# Order matters for auto-failover: free cloud providers (gemini, groq, together)
+# are tried before slow local ollama. together sits before ollama so a groq
+# rate-limit fails over to fast cloud instead of grinding on the 6GB GPU.
+PROVIDERS = ("anthropic", "openai", "azure", "gemini", "groq", "together", "ollama")
 
 # Azure tool-calling needs a recent API version; bump 2024-02-01 default.
 _AZURE_TOOLS_API_VERSION = "2024-08-01-preview"
@@ -98,6 +102,8 @@ def _provider_has_key(provider: str) -> bool:
         return bool(_env("GEMINI_API_KEY"))
     if provider == "groq":
         return bool(_env("GROQ_API_KEY"))
+    if provider == "together":
+        return bool(_env("TOGETHER_API_KEY"))
     if provider == "ollama":
         return True  # local, no key
     return False
@@ -226,52 +232,132 @@ def _msgs_to_openai(messages: list[dict]) -> list[dict]:
 
 
 def _openai_client(provider: str):
-    """Construct the right client for an OpenAI-format provider."""
+    """Construct the right client for an OpenAI-format provider.
+
+    timeout=30 + max_retries=0: a hung request raises after 30s with NO internal
+    SDK retries (the SDK default is 2, which would turn a hang into 30s*3=90s
+    before our own failover ever runs). Our complete_with_tools handles failover.
+    """
+    common = {"timeout": 30.0, "max_retries": 0}
     if provider == "openai":
         from openai import OpenAI
-        return OpenAI(api_key=_env("OPENAI_API_KEY"))
+        return OpenAI(api_key=_env("OPENAI_API_KEY"), **common)
     if provider == "azure":
         from openai import AzureOpenAI
         ver = _env("AZURE_OPENAI_API_VERSION") or _AZURE_TOOLS_API_VERSION
         return AzureOpenAI(
             api_key=_env("AZURE_OPENAI_KEY"),
             azure_endpoint=_env("AZURE_OPENAI_ENDPOINT"),
-            api_version=ver,
+            api_version=ver, **common,
         )
     if provider == "groq":
         from openai import OpenAI
         return OpenAI(api_key=_env("GROQ_API_KEY"),
-                      base_url="https://api.groq.com/openai/v1")
+                      base_url="https://api.groq.com/openai/v1", **common)
+    if provider == "together":
+        from openai import OpenAI
+        return OpenAI(api_key=_env("TOGETHER_API_KEY"),
+                      base_url="https://api.together.xyz/v1", **common)
     if provider == "ollama":
         from openai import OpenAI
         base = (_env("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
-        return OpenAI(api_key="ollama", base_url=f"{base}/v1")
+        # local model can be slower to first-token; give it more headroom.
+        return OpenAI(api_key="ollama", base_url=f"{base}/v1",
+                      timeout=90.0, max_retries=0)
     raise ValueError(f"not an OpenAI-format provider: {provider}")
 
 
 def _complete_openai(provider: str, model: str, messages: list[dict],
-                     tools: list[dict]) -> dict:
+                     tools: list[dict], on_token=None) -> dict:
     client = _openai_client(provider)
     kwargs: dict[str, Any] = {
         "model": model,
         "messages": _msgs_to_openai(messages),
+        # Hard per-request timeout so a hung call raises (→ failover) instead of
+        # blocking forever. A chat completion never legitimately needs this long.
+        "timeout": 30,
     }
     if tools:
         kwargs["tools"] = _tools_openai_format(tools)
         kwargs["tool_choice"] = "auto"
-    resp = client.chat.completions.create(**kwargs)
-    choice = resp.choices[0].message
-    tool_calls: list[ToolCall] = []
-    for tc in (choice.tool_calls or []):
+
+    # ── Non-streaming path ──────────────────────────────────────────────────
+    # IMPORTANT: streaming + tools is broken on Groq (and some others) — it
+    # returns EMPTY content, which made the agent loop until the 150s timeout.
+    # So only stream when there are NO tools; with tools, use non-streaming.
+    # (The client-side typewriter still reveals the answer at reading pace.)
+    if on_token is None or tools:
+        def _once(kw: dict):
+            resp = client.chat.completions.create(**kw)
+            choice = resp.choices[0].message
+            tcs: list[ToolCall] = []
+            for tc in (choice.tool_calls or []):
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except Exception:
+                    args = {}
+                tcs.append(ToolCall(id=tc.id, name=tc.function.name, arguments=args))
+            return (choice.content or ""), tcs
+
         try:
-            args = json.loads(tc.function.arguments or "{}")
+            text, tool_calls = _once(kwargs)
+        except Exception:
+            text, tool_calls = "", []
+        # Groq function-calling is flaky on tool-result follow-ups: it can return
+        # EMPTY content (no text, no tool call) or a 400. The tools already ran,
+        # so retry WITHOUT the tool catalog to force a plain text summary.
+        if tools and not text and not tool_calls:
+            kw2 = dict(kwargs)
+            kw2.pop("tools", None)
+            kw2.pop("tool_choice", None)
+            text, tool_calls = _once(kw2)
+        return {
+            "text": text,
+            "tool_calls": tool_calls,
+            "raw_assistant_msg": {"role": "assistant", "content": text,
+                                  "tool_calls": tool_calls},
+            "provider": provider, "model": model, "error": None,
+        }
+
+    # ── Streaming path: fire on_token per text delta, accumulate tool deltas ─
+    kwargs["stream"] = True
+    text_parts: list[str] = []
+    tool_acc: dict[int, dict] = {}   # index -> {id, name, args}
+    for chunk in client.chat.completions.create(**kwargs):
+        if not chunk.choices:
+            continue
+        delta = chunk.choices[0].delta
+        piece = getattr(delta, "content", None)
+        if piece:
+            text_parts.append(piece)
+            try:
+                on_token(piece)
+            except Exception:
+                pass
+        for tc in (getattr(delta, "tool_calls", None) or []):
+            slot = tool_acc.setdefault(tc.index, {"id": "", "name": "", "args": ""})
+            if tc.id:
+                slot["id"] = tc.id
+            fn = getattr(tc, "function", None)
+            if fn is not None:
+                if getattr(fn, "name", None):
+                    slot["name"] = fn.name
+                if getattr(fn, "arguments", None):
+                    slot["args"] += fn.arguments
+
+    text = "".join(text_parts)
+    tool_calls = []
+    for idx in sorted(tool_acc):
+        slot = tool_acc[idx]
+        try:
+            args = json.loads(slot["args"] or "{}")
         except Exception:
             args = {}
-        tool_calls.append(ToolCall(id=tc.id, name=tc.function.name, arguments=args))
+        tool_calls.append(ToolCall(id=slot["id"], name=slot["name"], arguments=args))
     return {
-        "text": choice.content or "",
+        "text": text,
         "tool_calls": tool_calls,
-        "raw_assistant_msg": {"role": "assistant", "content": choice.content,
+        "raw_assistant_msg": {"role": "assistant", "content": text,
                               "tool_calls": tool_calls},
         "provider": provider, "model": model, "error": None,
     }
@@ -340,7 +426,8 @@ def _complete_anthropic(model: str, messages: list[dict], tools: list[dict]) -> 
 # Gemini adapter (function_call / function_response Parts)
 # ---------------------------------------------------------------------------
 
-def _complete_gemini(model: str, messages: list[dict], tools: list[dict]) -> dict:
+def _complete_gemini(model: str, messages: list[dict], tools: list[dict],
+                     on_token=None) -> dict:
     from google import genai
     from google.genai import types
     client = genai.Client(api_key=_env("GEMINI_API_KEY"))
@@ -377,22 +464,44 @@ def _complete_gemini(model: str, messages: list[dict], tools: list[dict]) -> dic
         cfg_kwargs["tools"] = _tools_gemini_format(tools)
     config = types.GenerateContentConfig(**cfg_kwargs)
 
-    resp = client.models.generate_content(model=model, contents=contents, config=config)
-
     text = ""
     tool_calls: list[ToolCall] = []
+
+    def _consume_parts(parts, stream: bool) -> None:
+        nonlocal text
+        for part in (parts or []):
+            piece = getattr(part, "text", None)
+            if piece:
+                text += piece
+                if stream and on_token:
+                    try:
+                        on_token(piece)
+                    except Exception:
+                        pass
+            fc = getattr(part, "function_call", None)
+            if fc:
+                tool_calls.append(ToolCall(
+                    id=f"gemini_{fc.name}_{len(tool_calls)}",
+                    name=fc.name, arguments=dict(fc.args or {})))
+
+    use_stream = on_token is not None and hasattr(client.models, "generate_content_stream")
     try:
-        for cand in (resp.candidates or []):
-            for part in (cand.content.parts or []):
-                if getattr(part, "text", None):
-                    text += part.text
-                fc = getattr(part, "function_call", None)
-                if fc:
-                    tool_calls.append(ToolCall(
-                        id=f"gemini_{fc.name}_{len(tool_calls)}",
-                        name=fc.name, arguments=dict(fc.args or {})))
-    except Exception:
-        text = getattr(resp, "text", "") or text
+        if use_stream:
+            for chunk in client.models.generate_content_stream(
+                    model=model, contents=contents, config=config):
+                for cand in (chunk.candidates or []):
+                    _consume_parts(getattr(getattr(cand, "content", None), "parts", None), True)
+        else:
+            resp = client.models.generate_content(model=model, contents=contents, config=config)
+            for cand in (resp.candidates or []):
+                _consume_parts(getattr(getattr(cand, "content", None), "parts", None), False)
+            if not text:
+                text = getattr(resp, "text", "") or ""
+    except Exception as exc:                                          # noqa: BLE001
+        if not text:
+            return {"text": "", "tool_calls": [], "raw_assistant_msg": None,
+                    "provider": "gemini", "model": model,
+                    "error": f"{type(exc).__name__}: {exc}"}
 
     return {
         "text": text, "tool_calls": tool_calls,
@@ -403,45 +512,132 @@ def _complete_gemini(model: str, messages: list[dict], tools: list[dict]) -> dic
 
 
 # ---------------------------------------------------------------------------
-# Unified entry point
+# Unified entry point (with cross-provider failover)
 # ---------------------------------------------------------------------------
 
+# Error substrings that mean "this provider is unavailable right now — try the
+# next one" (quota / rate / auth / transient / model-not-found). A genuinely
+# malformed request won't match, so it returns immediately instead of retrying
+# the same bad call against every provider.
+_FAILOVER_MARKERS = (
+    "429", "quota", "rate", "exhausted", "resource_exhausted",
+    "unavailable", "503", "500", "overloaded", "temporarily",
+    "timeout", "timed out", "connection", "connecterror",
+    "auth", "api key", "api_key", "unauthorized", "permission",
+    "not found", "deployment", "model_not_found", "no api key",
+    "no adapter", "has no api key",
+)
+
+
+def _is_failover_error(err: str) -> bool:
+    e = (err or "").lower()
+    return any(m in e for m in _FAILOVER_MARKERS)
+
+
+# Paid APIs — used ONLY when explicitly chosen as the primary provider, never as
+# an automatic failover target (so a free-tier rate-limit can't silently start
+# spending money). Free/local providers — gemini (free tier), groq (free tier),
+# ollama (local) — are always eligible for auto-failover.
+_PAID_PROVIDERS = {"azure", "openai", "anthropic"}
+
+
+def _plog(msg: str) -> None:
+    """Append a line to logs/chat_timing.log (diagnostics; console is hidden)."""
+    try:
+        import time as _t
+        from pathlib import Path as _P
+        root = _P(__file__).resolve().parent.parent
+        with open(root / "logs" / "chat_timing.log", "a", encoding="utf-8") as f:
+            f.write(f"{_t.strftime('%H:%M:%S')}    [prov] {msg}\n")
+    except Exception:
+        pass
+
+
+def _call_provider(prov: str, mdl: str, messages: list[dict],
+                   tools: list[dict], on_token=None) -> dict:
+    import time as _t
+    _t0 = _t.perf_counter()
+    try:
+        if prov in ("openai", "azure", "groq", "together", "ollama"):
+            r = _complete_openai(prov, mdl, messages, tools, on_token=on_token)
+        elif prov == "anthropic":
+            r = _complete_anthropic(mdl, messages, tools)
+        elif prov == "gemini":
+            r = _complete_gemini(mdl, messages, tools, on_token=on_token)
+        else:
+            r = {"text": "", "tool_calls": [], "raw_assistant_msg": None,
+                 "provider": prov, "model": mdl, "error": "no adapter matched"}
+    except Exception as exc:                                          # noqa: BLE001
+        r = {"text": "", "tool_calls": [], "raw_assistant_msg": None,
+             "provider": prov, "model": mdl,
+             "error": f"{type(exc).__name__}: {exc}"}
+    _plog(f"{prov}:{mdl} took {(_t.perf_counter()-_t0):.1f}s "
+          f"err={(r.get('error') or 'none')[:50]} tools={len(tools)}")
+    return r
+
+
 def complete_with_tools(messages: list[dict], tools: list[dict] | None = None,
-                        provider: str | None = None, model: str | None = None) -> dict:
+                        provider: str | None = None, model: str | None = None,
+                        on_token=None) -> dict:
     """
     Send a conversation + tool catalog to the active provider and return the
     normalized result dict. Never raises — returns error=... on any failure.
 
-    messages : neutral message list (see module docstring)
-    tools    : neutral tool schemas from agent_tools.get_tool_schemas() (or None)
-    provider : override active provider (else resolve_provider())
-    model    : override model (else resolve_model())
-    """
-    prov = resolve_provider(provider)
-    if prov not in PROVIDERS:
-        return {"text": "", "tool_calls": [], "raw_assistant_msg": None,
-                "provider": prov, "model": model or "",
-                "error": f"Unknown provider: {prov!r}. Choose from {PROVIDERS}."}
-    if not _provider_has_key(prov):
-        return {"text": "", "tool_calls": [], "raw_assistant_msg": None,
-                "provider": prov, "model": model or "",
-                "error": f"Provider {prov!r} has no API key configured."}
+    Auto-failover: tries the resolved provider first, then every other
+    key-configured provider, ending at local Ollama. A provider-level failure
+    (quota/429/rate/auth/transient/model-not-found) falls through to the next;
+    other errors return immediately. Never fails over once tokens have already
+    streamed (that would double-render the answer).
 
-    mdl = resolve_model(prov, model)
+    provider : override active provider (else resolve_provider())
+    model    : override model (only applied to the resolved provider)
+    on_token : optional callable(str) — fired per text delta for live streaming.
+               OpenAI-format providers + gemini stream; anthropic returns whole.
+    """
+    primary = resolve_provider(provider)
     tools = tools or []
-    try:
-        if prov in ("openai", "azure", "groq", "ollama"):
-            return _complete_openai(prov, mdl, messages, tools)
-        if prov == "anthropic":
-            return _complete_anthropic(mdl, messages, tools)
-        if prov == "gemini":
-            return _complete_gemini(mdl, messages, tools)
-    except Exception as exc:
-        return {"text": "", "tool_calls": [], "raw_assistant_msg": None,
-                "provider": prov, "model": mdl,
-                "error": f"{type(exc).__name__}: {exc}"}
-    return {"text": "", "tool_calls": [], "raw_assistant_msg": None,
-            "provider": prov, "model": mdl, "error": "no adapter matched"}
+
+    # Build ordered candidate list: the chosen primary first (even if it's a
+    # paid provider — that's an explicit choice), then FREE providers only as
+    # auto-failover (paid APIs are never auto-tried), Ollama last (local).
+    candidates: list[str] = []
+    if primary in PROVIDERS and (_provider_has_key(primary) or primary == "ollama"):
+        candidates.append(primary)
+    for p in PROVIDERS:
+        if p in candidates or p in _PAID_PROVIDERS:
+            continue
+        if _provider_has_key(p):
+            candidates.append(p)
+    if "ollama" not in candidates:
+        candidates.append("ollama")
+
+    # Guard on_token so we can detect (and stop) mid-stream failover.
+    streamed = {"any": False}
+    cb = None
+    if on_token is not None:
+        def cb(tok):                                                  # noqa: E306
+            streamed["any"] = True
+            on_token(tok)
+
+    last: dict | None = None
+    for prov in candidates:
+        mdl = resolve_model(prov, model if prov == primary else None)
+        res = _call_provider(prov, mdl, messages, tools, on_token=cb)
+        if not res.get("error"):
+            if prov != primary:
+                print(f"[providers] failed over -> {prov}:{mdl}")
+            return res
+        last = res
+        # Already streamed partial text → don't restart on another provider.
+        if streamed["any"]:
+            return res
+        if not _is_failover_error(res["error"]):
+            return res
+        print(f"[providers] {prov} unavailable ({res['error'][:70]}…) — failing over")
+
+    return last or {"text": "", "tool_calls": [], "raw_assistant_msg": None,
+                    "provider": primary, "model": model or "",
+                    "error": "all providers failed"}
 
 
 if __name__ == "__main__":

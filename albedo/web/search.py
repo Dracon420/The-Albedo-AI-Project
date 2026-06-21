@@ -13,6 +13,9 @@ from __future__ import annotations
 import os
 
 from albedo.config import WEB_SEARCH_MAX_RESULTS
+from albedo.cache import ttl_cache
+
+_norm_q = lambda q, *a, **k: f"{str(q).strip().lower()}|{a}|{sorted(k.items())}"
 
 # Read at import time; changing the env var at runtime won't re-read.
 _TAVILY_KEY = os.getenv("TAVILY_API_KEY", "").strip()
@@ -53,6 +56,7 @@ def _ddg_search(query: str, max_results: int) -> list[dict]:
         return []
 
 
+@ttl_cache(ttl_seconds=600, maxsize=128, key_fn=_norm_q)
 def web_search(query: str, max_results: int = WEB_SEARCH_MAX_RESULTS) -> list[dict]:
     """Return search results as [{title, url, snippet}].
 

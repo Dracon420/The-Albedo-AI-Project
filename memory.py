@@ -90,6 +90,103 @@ def _get_collection() -> chromadb.Collection:
     )
 
 
+def prewarm() -> None:
+    """
+    Load the embedding model + open the collection + run one throwaway encode
+    so the FIRST real RAG search doesn't pay the cold-start.
+
+    Measured cold first query: ~44 s (the initial SentenceTransformer forward
+    pass on CPU). Warm queries: ~65 ms. Call this once in a background daemon
+    thread at app startup so that latency is absorbed before the user asks
+    anything. Safe + idempotent (the embedding fn is a process singleton).
+    """
+    import time as _time
+    t0 = _time.perf_counter()
+    try:
+        ef = _get_ef()
+        if ef is None:
+            print("[memory] prewarm skipped — embedding model unavailable.")
+            return
+        col = _get_collection()
+        _ = col.count()
+        ef(["warmup"])  # first encode is the expensive part — do it now
+        # Warm the cross-encoder reranker too (first predict is slow on CPU,
+        # and on a fresh install this also downloads the ~80 MB model once).
+        ce = _get_cross_encoder()
+        if ce is not None:
+            try:
+                ce.predict([["warmup query", "warmup passage"]])
+            except Exception:
+                pass
+        dt = (_time.perf_counter() - t0) * 1000.0
+        print(f"[memory] RAG prewarmed in {dt:.0f} ms "
+              f"(embeddings + reranker + collection ready, {col.count()} chunks).")
+    except Exception as exc:                                            # noqa: BLE001
+        print(f"[memory] prewarm failed (non-fatal): {exc}")
+
+
+def embed_query(text: str):
+    """
+    Return the embedding vector (list[float]) for a single string using the
+    shared all-MiniLM-L6-v2 model, or None if the model is unavailable. Reuses
+    the prewarmed singleton, so this is ~ms once warm. Used by the semantic
+    answer cache.
+    """
+    ef = _get_ef()
+    if ef is None:
+        return None
+    try:
+        out = ef([text])
+        if out is None or len(out) == 0:
+            return None
+        return list(out[0])
+    except Exception:
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Cross-encoder reranker
+# ---------------------------------------------------------------------------
+# The bi-encoder (all-MiniLM) ranks fast but coarsely — it embeds the query and
+# each chunk separately. A cross-encoder reads (query, chunk) TOGETHER, which is
+# much more accurate. We fetch a wide candidate set with the bi-encoder, then
+# rerank down to the top-N with the cross-encoder. Optional + graceful: if the
+# model can't load (offline first-run, missing dep), we keep the vector order.
+_RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+_CE = None
+_CE_tried = False
+
+
+def _get_cross_encoder():
+    global _CE, _CE_tried
+    if _CE_tried:
+        return _CE
+    _CE_tried = True
+    try:
+        from sentence_transformers import CrossEncoder
+        _CE = CrossEncoder(_RERANK_MODEL)
+        print("[memory] Reranker loaded (cross-encoder/ms-marco-MiniLM-L-6-v2, CPU).")
+    except Exception as exc:                                            # noqa: BLE001
+        print(f"[memory] Reranker unavailable ({exc}); using vector order.")
+        _CE = None
+    return _CE
+
+
+def _rerank(query: str, docs: list, metas: list, top_n: int):
+    """Re-order (docs, metas) by cross-encoder relevance; return the top_n.
+    Falls back to the original (vector) order if the reranker isn't available."""
+    ce = _get_cross_encoder()
+    if ce is None or len(docs) <= 1:
+        return docs[:top_n], metas[:top_n]
+    try:
+        scores = ce.predict([[query, d] for d in docs])
+        order = sorted(range(len(docs)), key=lambda i: scores[i], reverse=True)[:top_n]
+        return [docs[i] for i in order], [metas[i] for i in order]
+    except Exception as exc:                                            # noqa: BLE001
+        print(f"[memory] rerank failed ({exc}); vector order.")
+        return docs[:top_n], metas[:top_n]
+
+
 def _chunk_text(text: str) -> list[str]:
     """Sliding-window text chunker with overlap."""
     chunks: list[str] = []
@@ -198,16 +295,20 @@ def search_memory(query: str, n_results: int = 3) -> list[str]:
                 collection = _get_collection()
             if collection.count() == 0:
                 return []
+        # Fetch a WIDE candidate set with the fast bi-encoder, then rerank down
+        # to the best n_results with the cross-encoder for precise ordering.
+        fetch_k = min(max(n_results * 4, 12), collection.count())
         results = collection.query(
             query_texts=[query],
-            n_results=min(n_results, collection.count()),
+            n_results=fetch_k,
             include=["documents", "metadatas"],
         )
-        chunks = results.get("documents", [[]])[0]
+        cand_docs  = results.get("documents", [[]])[0] or []
+        cand_metas = results.get("metadatas", [[]])[0] or []
+        chunks, metas = _rerank(query, cand_docs, cand_metas, n_results)
         # Emit a rag.hit event so the Brain visualization can light up the
         # matched notes ("synapse firing"). Best-effort — bus is optional.
         try:
-            metas = results.get("metadatas", [[]])[0] or []
             notes = []
             seen = set()
             for m in metas:

@@ -43,15 +43,24 @@ from typing import Any, Callable, Optional
 from albedo import agent_tools
 from albedo import providers
 
-MAX_ITERATIONS = 8  # hard cap on plan->act->observe cycles per user message
+MAX_ITERATIONS = 4  # hard cap on plan->act->observe cycles per user message
+                    # (low — the name-based loop-breaker ends repeats sooner;
+                    #  bounds worst-case latency for the interactive chat)
 
 _DEFAULT_SYSTEM = (
-    "You are Albedo, a Spartan-class AI assistant with real control over the "
-    "user's Windows PC through tools. When the user asks you to do something or "
-    "asks about live system state, USE the provided tools rather than guessing. "
-    "Call tools with explicit arguments. After tools return, give a concise, "
-    "direct answer in plain prose. Do not narrate your tool use or explain your "
-    "reasoning step by step — just act, then answer."
+    "You are Albedo, a Windows PC assistant with real tools. Rules:\n"
+    "1. Questions / advice ('how can I…', 'should I…', 'what is…') → ANSWER with "
+    "options in plain prose. Don't run system-changing tools; if one would help, "
+    "OFFER and ask first.\n"
+    "2. Asks to SEE/LIST/SHOW/CHECK/FIND info ('list installed apps', 'what's "
+    "using space', 'list processes') → immediately CALL the matching read-only "
+    "tool and show results. NEVER ask permission to read; never just say you 'can' "
+    "— actually call it.\n"
+    "3. Tools that delete/clean/kill/install/uninstall/change settings → describe "
+    "and confirm first, even with permission.\n"
+    "4. Follow-ups: if you asked something and the user says 'yes'/'do it'/names an "
+    "item, continue that thread and act — never say you don't know what they mean.\n"
+    "Be concise. Don't narrate tool use."
 )
 
 
@@ -126,6 +135,7 @@ def run_agent(
     model: Optional[str] = None,
     tool_names: Optional[list[str]] = None,
     status_cb: Optional[Callable[[str], None]] = None,
+    on_token: Optional[Callable[[str], None]] = None,
     role: str = "agent",
 ) -> dict:
     """
@@ -177,10 +187,12 @@ def run_agent(
     steps: list[dict] = []
     used_provider = providers.resolve_provider(provider)
     used_model = providers.resolve_model(used_provider, model)
+    _executed: set[str] = set()   # tool NAMES already run this turn
 
     for iteration in range(1, MAX_ITERATIONS + 1):
         _status(f"thinking (iteration {iteration}/{MAX_ITERATIONS}) via {used_provider}:{used_model}")
-        result = _complete_with_retry(messages, tools, provider, model, _status)
+        result = _complete_with_retry(messages, tools, provider, model, _status,
+                                      on_token=on_token)
         used_provider = result.get("provider") or used_provider
         used_model = result.get("model") or used_model
 
@@ -199,6 +211,22 @@ def run_agent(
             _emit("agent.state", role=role, state="done", task=user_message.strip())
             return {"answer": answer, "steps": steps, "provider": used_provider,
                     "model": used_model, "iterations": iteration, "error": None}
+
+        # Loop-breaker: some models (groq) keep re-requesting a tool they already
+        # ran (often with slightly different args) instead of answering. Match on
+        # tool NAME — if every requested call is to an already-run tool, the data
+        # is in hand, so force a FINAL answer with NO tools instead of looping to
+        # the iteration cap (the 150s hang).
+        if tool_calls and all(tc.name in _executed for tc in tool_calls):
+            _status("data already gathered — composing answer")
+            final = _complete_with_retry(messages, [], provider, model, _status)
+            answer = final.get("text", "") or ""
+            steps.append({"type": "final", "text": answer})
+            _emit("agent.state", role=role, state="done", task=user_message.strip())
+            return {"answer": answer, "steps": steps,
+                    "provider": final.get("provider") or used_provider,
+                    "model": final.get("model") or used_model,
+                    "iterations": iteration, "error": None}
 
         # Record the assistant turn (with its tool calls) into history.
         messages.append(_assistant_turn(result))
@@ -223,6 +251,7 @@ def run_agent(
                     continue
 
             output = agent_tools.run_tool(tc.name, tc.arguments)
+            _executed.add(tc.name)
             steps.append({"type": "tool_result", "name": tc.name,
                           "output": output[:500]})
             _emit("tool.result", role=role, name=tc.name,
@@ -250,13 +279,15 @@ def _is_transient(error: str) -> bool:
     return any(m in e for m in _TRANSIENT_MARKERS)
 
 
-def _call_with_timeout(messages, tools, provider, model, secs: int = 50) -> dict:
+def _call_with_timeout(messages, tools, provider, model, secs: int = 75,
+                       on_token=None) -> dict:
     """Run providers.complete_with_tools in a thread; return error dict on timeout."""
     bucket: dict = {}
 
     def _go():
         bucket["v"] = providers.complete_with_tools(
-            messages, tools=tools, provider=provider, model=model
+            messages, tools=tools, provider=provider, model=model,
+            on_token=on_token,
         )
 
     t = threading.Thread(target=_go, daemon=True)
@@ -269,17 +300,22 @@ def _call_with_timeout(messages, tools, provider, model, secs: int = 50) -> dict
 
 
 def _complete_with_retry(messages, tools, provider, model, status,
-                         max_retries: int = 2, call_timeout: int = 50) -> dict:
-    """Call the provider; retry briefly on transient errors with backoff."""
+                         max_retries: int = 1, call_timeout: int = 75,
+                         on_token=None) -> dict:
+    """Call the provider; retry briefly on transient errors with backoff.
+    complete_with_tools already fails over across providers, so one retry is a
+    light backstop — not the 2-3 that compounded into the old 150s hang."""
     delay = 3.0
-    result = _call_with_timeout(messages, tools, provider, model, call_timeout)
+    result = _call_with_timeout(messages, tools, provider, model, call_timeout,
+                                on_token=on_token)
     attempt = 0
     while result.get("error") and _is_transient(result["error"]) and attempt < max_retries:
         attempt += 1
         status(f"transient error ({result['error'][:50]}…) — retry {attempt}/{max_retries} in {delay:.0f}s")
         time.sleep(delay)
         delay *= 2
-        result = _call_with_timeout(messages, tools, provider, model, call_timeout)
+        result = _call_with_timeout(messages, tools, provider, model, call_timeout,
+                                    on_token=on_token)
     return result
 
 

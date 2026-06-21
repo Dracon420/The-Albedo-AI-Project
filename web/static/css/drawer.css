@@ -344,9 +344,11 @@ body.is-pinned .drawer {
   border-left: 1px solid var(--c-cyan-dim);
 }
 body.is-pinned .main,
-body.is-pinned .topbar,
-body.is-pinned .chat-panel {
-  /* push core layout left so the pinned drawer doesn't overlap it */
+body.is-pinned .topbar {
+  /* push core layout left so the pinned drawer doesn't overlap it.
+     Only .main + .topbar need this — .chat-panel lives INSIDE .main and is
+     already pushed by main's padding; adding it here too created a dead
+     500px gap inside the chat panel. */
   padding-right: var(--drawer-w);
   transition: padding-right 0.25s ease;
 }

@@ -246,6 +246,15 @@ def set_swarm_state(agent: str, state: str) -> None:
     with _swarm_lock:
         if agent in _swarm_state:
             _swarm_state[agent] = state
+        any_active = any(s == "active" for s in _swarm_state.values())
+        any_error  = any(s == "error"  for s in _swarm_state.values())
+    # Push the derived orb state immediately so it doesn't lag the 1.5s poll.
+    orb = "ERROR" if any_error else ("ACTIVE" if any_active else "STANDBY")
+    try:
+        import eel as _eel_mod  # noqa: PLC0415
+        _eel_mod._albedo_state_push(orb)
+    except Exception:
+        pass
 
 
 @_expose
@@ -327,6 +336,30 @@ def _detect_neural_links() -> dict:
             link(name, "ready", "READY", "API key configured")
         else:
             link(name, "off", "OFF", "no API key")
+
+    # --- Reasoning-brain providers (agent team + swarm tier 0) ---
+    if os.environ.get("AZURE_OPENAI_KEY", "").strip() and \
+       os.environ.get("AZURE_OPENAI_ENDPOINT", "").strip():
+        link("AZURE", "ready", "READY",
+             os.environ.get("AZURE_OPENAI_DEPLOYMENT", "azure"))
+    else:
+        link("AZURE", "off", "OFF", "no Azure OpenAI key/endpoint")
+
+    if os.environ.get("ANTHROPIC_API_KEY", "").strip():
+        link("ANTHROPIC", "ready", "CLAUDE", "API key configured")
+    else:
+        link("ANTHROPIC", "off", "OFF", "no API key")
+
+    # --- Computation + web-search tools ---
+    if os.environ.get("WOLFRAM_API_KEY", "").strip():
+        link("WOLFRAM", "ready", "READY", "computation interceptor")
+    else:
+        link("WOLFRAM", "off", "OFF", "no WOLFRAM_API_KEY")
+
+    if os.environ.get("TAVILY_API_KEY", "").strip():
+        link("TAVILY", "ready", "READY", "primary web search")
+    else:
+        link("TAVILY", "standby", "DDG", "no key — DuckDuckGo fallback")
 
     # --- Ollama (local LLM runtime) ---
     base = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
@@ -416,6 +449,43 @@ def get_neural_links() -> dict:
     """Snapshot of every tracked subsystem for the centre HUD status grid."""
     try:
         return {"ok": True, "data": _detect_neural_links()}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def get_app_inventory(limit: int = 25) -> dict:
+    """Structured installed-apps list for the app chooser popup."""
+    try:
+        from albedo.app_inventory import list_installed_apps as _li
+        return {"ok": True, "data": _li(limit=min(int(limit or 25), 60))}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def uninstall_apps(names: list) -> dict:
+    """Uninstall a list of apps by name (each gated by the approval modal via the
+    agent tool's safety_catch path is bypassed here — so confirm in the UI first)."""
+    from albedo.app_inventory import uninstall_app as _u
+    results = []
+    for nm in (names or []):
+        try:
+            results.append({"name": nm, "result": _u(str(nm))})
+        except Exception as exc:                                    # noqa: BLE001
+            results.append({"name": nm, "result": f"error: {exc}"})
+    return {"ok": True, "results": results}
+
+
+@_expose
+def get_perf_timings(n: int = 12) -> dict:
+    """
+    Recent per-turn latency breakdowns (newest last) from albedo.perf — used by
+    the Tactical Drawer to show where query time actually goes (rag/web/wiki/llm).
+    """
+    try:
+        from albedo import perf
+        return {"ok": True, "data": perf.get_recent(n)}
     except Exception as exc:                                        # noqa: BLE001
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
@@ -591,12 +661,87 @@ def run_agent_query(text: str, history: list | None = None) -> dict:
 
     t = threading.Thread(target=_run, daemon=True, name="agent-query")
     t.start()
-    t.join(timeout=300)   # agent loops can be long; generous cap
+    # Cooperative wait so eel's gevent hub keeps delivering UI pushes (see the
+    # send_chat direct-path note — a hard join() freezes the hub).
+    try:
+        import gevent as _gvt  # noqa: PLC0415
+        _w = 0.0
+        while t.is_alive() and _w < 300:
+            _gvt.sleep(0.1)
+            _w += 0.1
+    except Exception:
+        t.join(timeout=300)
 
     if t.is_alive():
         set_swarm_state("ALBEDO_CORE", "error")
         return {"ok": False, "error": "agent timeout (300 s)"}
     return out
+
+
+# Server-side conversation memory — authoritative so continuity works even if a
+# frontend forgets to pass history. Last _HISTORY_MAX messages (user+assistant).
+_chat_history: list[dict] = []
+_HISTORY_MAX = 20
+_history_lock = threading.Lock()
+
+# Phase timing → logs/chat_timing.log (console is hidden, so log to a file we
+# can read back to see exactly where a slow turn spent its time).
+import time as _time_mod  # noqa: E402
+
+
+def _tlog(msg: str) -> None:
+    try:
+        from pathlib import Path as _P
+        root = _P(__file__).resolve().parent.parent.parent
+        logd = root / "logs"
+        logd.mkdir(exist_ok=True)
+        with open(logd / "chat_timing.log", "a", encoding="utf-8") as f:
+            f.write(f"{_time_mod.strftime('%H:%M:%S')} {msg}\n")
+    except Exception:
+        pass
+
+
+def _remember(user_msg: str, assistant_msg: str) -> None:
+    if not user_msg or not assistant_msg:
+        return
+    with _history_lock:
+        _chat_history.append({"role": "user", "content": user_msg})
+        _chat_history.append({"role": "assistant", "content": assistant_msg})
+        del _chat_history[:-_HISTORY_MAX]
+
+
+_TOOL_VERBS = {
+    "list_installed_apps": "Checking your installed apps",
+    "uninstall_app":       "Uninstalling",
+    "get_system_telemetry":"Reading system telemetry",
+    "list_top_processes":  "Listing top processes",
+    "kill_process":        "Stopping a process",
+    "disk_cleanup":        "Clearing temporary files",
+    "optimize_system":     "Optimizing the system",
+    "search_web":          "Searching the web",
+    "rag_search":          "Searching your knowledge vault",
+    "list_directory":      "Listing files",
+    "launch_app":          "Launching an app",
+    "download_install":    "Downloading",
+}
+
+
+def _friendly_status(msg: str) -> str | None:
+    """Map a raw agent status line to a short, user-facing progress phrase.
+    Returns None for noise that shouldn't be shown."""
+    m = (msg or "").lower()
+    if m.startswith("thinking"):
+        return "Thinking…"
+    if "tool call:" in m:
+        import re
+        mt = re.search(r"tool call:\s*([a-z_]+)", m)
+        name = mt.group(1) if mt else ""
+        return f"{_TOOL_VERBS.get(name, 'Using ' + (name or 'a tool'))}…"
+    if "awaiting approval" in m:
+        return "Waiting for your approval…"
+    if m.startswith("transient error") or "retry" in m:
+        return "Provider busy — retrying…"
+    return None
 
 
 @_expose
@@ -618,6 +763,13 @@ def send_chat(text: str, history: list | None = None) -> dict:
     if not text or not text.strip():
         return {"ok": False, "error": "empty message"}
 
+    _phase_t0 = _time_mod.perf_counter()
+
+    def _ph(label: str) -> None:
+        _tlog(f"+{(_time_mod.perf_counter() - _phase_t0):6.1f}s {label}  | {text[:40]!r}")
+
+    _ph("send_chat START")
+
     # ── 1. Instant intercept (no LLM) ────────────────────────────────
     try:
         from albedo.pipeline import try_fast_answer
@@ -627,6 +779,24 @@ def send_chat(text: str, history: list | None = None) -> dict:
                     "answer": canned, "error": None}
     except Exception:
         pass
+    _ph("after fast-path")
+
+    # ── 1b. Semantic answer cache — instant near-duplicate knowledge reply ────
+    # Only for non-team knowledge questions; volatile/system queries are never
+    # cached (guarded inside semantic_cache), and only tool-free answers are
+    # ever stored (see the direct path below), so this never serves stale state.
+    try:
+        from albedo.agent_team import _heuristic_classify as _hc  # noqa: PLC0415
+        from albedo import semantic_cache  # noqa: PLC0415
+        if _hc(text.strip()) != "team":
+            _cached = semantic_cache.lookup(text.strip())
+            if _cached:
+                _remember(text.strip(), _cached)
+                return {"ok": True, "mode": "cached", "reason": "semantic-cache",
+                        "answer": _cached, "error": None}
+    except Exception:
+        pass
+    _ph("after semantic-cache lookup")
 
     set_swarm_state("ALBEDO_CORE", "active")
 
@@ -636,62 +806,52 @@ def send_chat(text: str, history: list | None = None) -> dict:
     )
     from albedo import agent as _agent_mod  # noqa: PLC0415
 
-    # ── 2a. Heuristic pre-classifier (zero latency, no LLM) ──────────
-    mode = _heuristic_classify(text.strip()) or ""
-    reason = "keyword-heuristic" if mode else ""
-
-    if not mode:
-        # ── 2b. LLM classify (30s max; defaults to "direct" on timeout) ─
-        _router_bucket: dict = {}
-
-        def _do_classify() -> None:
-            try:
-                res = _agent_mod.run_agent(
-                    text.strip(),
-                    system_prompt=_ROUTER_PROMPT,
-                    tool_names=[],
-                    provider=_role_provider("Orchestrator"),
-                    role="Router",
-                )
-                _router_bucket["res"] = res
-            except Exception as exc:
-                _router_bucket["err"] = str(exc)
-
-        rt = threading.Thread(target=_do_classify, daemon=True, name="chat-classify")
-        rt.start()
-        rt.join(timeout=30)
-
-        res = _router_bucket.get("res") or {}
-        data = _extract_json(res.get("answer", "") or "") or {}
-        mode = str(data.get("mode", "direct")).lower().strip()
-        if mode not in ("direct", "team"):
-            mode = "direct"
-        reason = str(data.get("reason", ""))[:160]
+    # ── 2. Routing — heuristic ONLY (no router LLM call) ─────────────────────
+    # Default to DIRECT unless the zero-latency keyword heuristic clearly detects
+    # a multi-specialist task. The old LLM router added a full round-trip (up to a
+    # 30s timeout) before EVERY answer — pure latency for the common case. The
+    # direct agent is fully tool-capable, so borderline queries still get handled.
+    mode = _heuristic_classify(text.strip()) or "direct"
+    reason = "keyword-heuristic" if mode == "team" else "default-direct"
 
     _team_emit("router.decision", mode=mode, reason=reason, message=text[:200])
 
-    # ── 3b. TEAM — non-blocking ───────────────────────────────────────
+    # ── 3b. TEAM — non-blocking; each specialist's result streams to chat ─────
     if mode == "team":
+        def _chat_push(kind: str, msg: str) -> None:
+            try:
+                import eel as _eel_mod  # noqa: PLC0415
+                _eel_mod._albedo_chat_push(kind, msg)
+            except Exception:
+                pass
+
+        def _on_task_done(result: dict) -> None:
+            role = result.get("role", "?")
+            ans = (result.get("answer") or "").strip()
+            err = result.get("error")
+            if err and not ans:
+                _chat_push("system", f"[{role}] (error: {str(err)[:120]})")
+            elif ans:
+                _chat_push("albedo", f"[{role}] {ans}")
+
         def _bg_team() -> None:
             try:
                 from albedo.agent_team import run_team  # noqa: PLC0415
-                team_res = run_team(text.strip(), require_plan_approval=False)
-                answer = team_res.get("answer", "")
-                if not answer:
-                    rs = team_res.get("results", []) or []
-                    answer = "\n\n".join(
-                        f"[{r['role']}] {(r.get('answer') or '').strip()}"
-                        for r in rs if r.get("answer")
-                    )
-                if not answer:
-                    answer = team_res.get("error") or "Team completed with no output."
+                team_res = run_team(text.strip(), require_plan_approval=False,
+                                    on_task_done=_on_task_done)
+                # Per-agent answers already streamed in; close with the Critic's
+                # verdict rather than re-dumping every result.
+                crit = team_res.get("critique") or {}
+                summary = (crit.get("summary") or "").strip()
+                if team_res.get("error"):
+                    _chat_push("system", f"[TEAM] {team_res['error']}")
+                elif summary:
+                    verdict = "complete" if crit.get("complete") else "incomplete"
+                    _chat_push("albedo", f"[Critic — {verdict}] {summary}")
+                else:
+                    _chat_push("system", "[TEAM] done.")
             except Exception as exc:
-                answer = f"Team error: {exc}"
-            try:
-                import eel as _eel_mod  # noqa: PLC0415
-                _eel_mod._albedo_chat_push("albedo", answer)
-            except Exception:
-                pass
+                _chat_push("system", f"[TEAM] error: {exc}")
             set_swarm_state("ALBEDO_CORE", "standby")
 
         threading.Thread(target=_bg_team, daemon=True, name="team-bg").start()
@@ -703,29 +863,152 @@ def send_chat(text: str, history: list | None = None) -> dict:
             "error": None,
         }
 
-    # ── 3a. DIRECT — 120s timeout ────────────────────────────────────
+    # ── 3a. DIRECT — 150s timeout, streams tokens live as they generate ──────
     _direct_bucket: dict = {}
+    _streamed = {"any": False}
+    import time as _t_mod  # noqa: PLC0415
+    from albedo import perf as _perf  # noqa: PLC0415
+    _turn = _perf.Turn(text.strip())
+    _t_start = _t_mod.perf_counter()
+
+    # Instant "Thinking…" so the user sees activity the moment Albedo starts,
+    # before the first LLM round even returns.
+    try:
+        import eel as _eel_mod  # noqa: PLC0415
+        _eel_mod._albedo_chat_status("Thinking…")
+    except Exception:
+        pass
+
+    def _push_token(tok: str) -> None:
+        if not tok:
+            return
+        _streamed["any"] = True
+        try:
+            import eel as _eel_mod  # noqa: PLC0415
+            _eel_mod._albedo_chat_token(tok)
+        except Exception:
+            pass
+
+    # Light up the provider that's ABOUT to answer (so the NEURAL LINKS bar
+    # shows "active" during processing, not only once the answer lands).
+    try:
+        from albedo import providers as _prov_mod  # noqa: PLC0415
+        _start_prov = _prov_mod.resolve_provider(None).upper()
+        for _llm in ("GEMINI", "GROQ", "TOGETHER", "AZURE", "ANTHROPIC", "OLLAMA"):
+            update_neural_link(_llm, "active" if _llm == _start_prov else "")
+    except Exception:
+        pass
+
+    with _history_lock:
+        _hist_snapshot = list(_chat_history)   # authoritative server-side memory
+
+    def _push_status(msg: str) -> None:
+        friendly = _friendly_status(msg)
+        if not friendly:
+            return
+        try:
+            import eel as _eel_mod  # noqa: PLC0415
+            _eel_mod._albedo_chat_status(friendly)
+        except Exception:
+            pass
 
     def _do_direct() -> None:
+        _ph("agent run START")
         try:
-            r = _agent_mod.run_agent(text.strip(), history=history, role="Albedo")
+            r = _agent_mod.run_agent(text.strip(), history=_hist_snapshot,
+                                     role="Albedo", on_token=_push_token,
+                                     status_cb=_push_status)
             _direct_bucket["r"] = r
+            _ph(f"agent run DONE prov={r.get('provider')} iters={r.get('iterations')} "
+                f"err={(r.get('error') or '')[:40]}")
         except Exception as exc:
             _direct_bucket["r"] = {"answer": "", "error": str(exc)}
+            _ph(f"agent run EXC {exc}")
 
     dt = threading.Thread(target=_do_direct, daemon=True, name="chat-direct")
     dt.start()
-    dt.join(timeout=120)
+    # COOPERATIVE wait — send_chat runs in eel's gevent hub thread. A hard
+    # dt.join() FREEZES that hub for the whole call, so the worker thread's UI
+    # pushes (status/tokens) couldn't be delivered until the 150s timeout — the
+    # agent was effectively deadlocked on its own status update. gevent.sleep()
+    # yields to the hub each tick so pushes flow in real time and we return the
+    # instant the agent finishes (~seconds).
+    try:
+        import gevent as _gvt  # noqa: PLC0415
+        _waited = 0.0
+        while dt.is_alive() and _waited < 150:
+            _gvt.sleep(0.1)
+            _waited += 0.1
+    except Exception:
+        dt.join(timeout=150)
     if dt.is_alive():
+        # Record the (slow) turn so QUERY LATENCY shows it timed out + how long.
+        try:
+            _turn.add("answer", (_t_mod.perf_counter() - _t_start) * 1000.0)
+            _turn.finish("chat:TIMEOUT-150s")
+        except Exception:
+            pass
+        # If the answer is actively streaming to the UI, it's not really stuck —
+        # let it finish in the background and close the line, no scary error.
+        if _streamed["any"]:
+            def _finish_late() -> None:
+                dt.join(120)
+                try:
+                    import eel as _eel_mod  # noqa: PLC0415
+                    _eel_mod._albedo_chat_token_end()
+                except Exception:
+                    pass
+                set_swarm_state("ALBEDO_CORE", "standby")
+            threading.Thread(target=_finish_late, daemon=True, name="chat-late").start()
+            return {"ok": True, "mode": "direct", "reason": reason,
+                    "answer": "", "error": None, "streamed": True}
         set_swarm_state("ALBEDO_CORE", "error")
         return {"ok": False, "mode": "direct", "reason": reason,
-                "answer": "", "error": "direct answer timed out (120 s)"}
+                "answer": "", "error": "direct answer timed out (150 s)",
+                "streamed": _streamed["any"]}
 
     r = _direct_bucket.get("r") or {}
     ok = not bool(r.get("error"))
+    # Record per-turn latency so the QUERY LATENCY panel shows where chat time
+    # goes + which provider answered (diagnoses slowness).
+    try:
+        _turn.add("answer", (_t_mod.perf_counter() - _t_start) * 1000.0)
+        _turn.finish(f"chat:{(r.get('provider') or '?')}")
+    except Exception:
+        pass
     set_swarm_state("ALBEDO_CORE", "standby" if ok else "error")
+    # Reflect which brain actually answered on the NEURAL LINKS bar (so a
+    # failover, e.g. groq→gemini, is visible). Active = the answering provider;
+    # clear overrides on the others so they fall back to their config state.
+    _prov = (r.get("provider") or "").upper()
+    if _prov:
+        for _llm in ("GEMINI", "GROQ", "TOGETHER", "AZURE", "ANTHROPIC", "OLLAMA"):
+            update_neural_link(_llm, "active" if _llm == _prov else "")
+    # Signal end-of-stream so the UI can finalize the live line.
+    if _streamed["any"]:
+        try:
+            import eel as _eel_mod  # noqa: PLC0415
+            _eel_mod._albedo_chat_token_end()
+        except Exception:
+            pass
+    # Remember this exchange so follow-ups ("yes", "do it", "the second one")
+    # keep context on the next turn.
+    if ok and r.get("answer"):
+        _remember(text.strip(), r.get("answer", ""))
+    # Cache the answer for instant near-duplicate replies — but ONLY if it used
+    # no tools (a tool answer reflects live state and must not be cached).
+    if ok and r.get("answer"):
+        steps = r.get("steps") or []
+        used_tools = any((s or {}).get("type") == "tool_call" for s in steps)
+        if not used_tools:
+            try:
+                from albedo import semantic_cache  # noqa: PLC0415
+                semantic_cache.store(text.strip(), r.get("answer", ""))
+            except Exception:
+                pass
     return {"ok": ok, "mode": "direct", "reason": reason,
-            "answer": r.get("answer", ""), "error": r.get("error")}
+            "answer": r.get("answer", ""), "error": r.get("error"),
+            "streamed": _streamed["any"]}
 
 
 @_expose
