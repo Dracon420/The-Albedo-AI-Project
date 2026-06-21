@@ -171,25 +171,48 @@
       (neighbors[e.b.id] = neighbors[e.b.id] || []).push(e.a);
     });
 
-    // ---- relax along wikilink springs so linked notes cluster into lobes ----
-    (function relax() {
-      const REST = R * 0.16, K = 0.08, CENTER = 0.006, STEP = 0.5;
-      const iters = nodes.length > 400 ? 40 : 70;
+    // ---- Fruchterman-Reingold 3D force layout ----
+    // Repulsion spreads every node apart; link attraction pulls connected notes
+    // together; mild gravity + cooling settle it into a SPREAD 3D cloud with
+    // visible clusters (the Brain Atlas look) instead of a collapsed ball.
+    (function layout() {
+      const k = 1.1 * Math.cbrt((R * R * R) / Math.max(1, nodes.length)); // ideal spacing
+      const GRAV = 0.045;
+      let temp = R * 0.30;
+      const iters = nodes.length > 400 ? 120 : 180;
       for (let it = 0; it < iters; it++) {
-        for (const n of nodes) { n._fx = -n.x * CENTER; n._fy = -n.y * CENTER; n._fz = -n.z * CENTER; }
+        for (const a of nodes) { a._dx = 0; a._dy = 0; a._dz = 0; }
+        // repulsion (all pairs, each counted once)
+        for (let i = 0; i < nodes.length; i++) {
+          const a = nodes[i];
+          for (let j = i + 1; j < nodes.length; j++) {
+            const b = nodes[j];
+            let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
+            const f = (k * k) / dist;
+            dx /= dist; dy /= dist; dz /= dist;
+            a._dx += dx * f; a._dy += dy * f; a._dz += dz * f;
+            b._dx -= dx * f; b._dy -= dy * f; b._dz -= dz * f;
+          }
+        }
+        // attraction along wikilinks
         for (const e of edges) {
           const a = e.a, b = e.b;
-          let dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
-          const d = Math.hypot(dx, dy, dz) || 1;
-          const f = K * (d - REST) / d;
-          a._fx += dx * f; a._fy += dy * f; a._fz += dz * f;
-          b._fx -= dx * f; b._fy -= dy * f; b._fz -= dz * f;
+          let dx = a.x - b.x, dy = a.y - b.y, dz = a.z - b.z;
+          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.01;
+          const f = (dist * dist) / k;
+          dx /= dist; dy /= dist; dz /= dist;
+          a._dx -= dx * f; a._dy -= dy * f; a._dz -= dz * f;
+          b._dx += dx * f; b._dy += dy * f; b._dz += dz * f;
         }
-        for (const n of nodes) {
-          n.x += Math.max(-8, Math.min(8, n._fx * STEP));
-          n.y += Math.max(-8, Math.min(8, n._fy * STEP));
-          n.z += Math.max(-8, Math.min(8, n._fz * STEP));
+        // gravity toward origin + temperature-capped integration
+        for (const a of nodes) {
+          a._dx -= a.x * GRAV; a._dy -= a.y * GRAV; a._dz -= a.z * GRAV;
+          const dl = Math.sqrt(a._dx * a._dx + a._dy * a._dy + a._dz * a._dz) || 0.01;
+          const s = Math.min(dl, temp) / dl;
+          a.x += a._dx * s; a.y += a._dy * s; a.z += a._dz * s;
         }
+        temp *= 0.96;   // cool down
       }
     })();
 
@@ -205,21 +228,6 @@
       const z2 = p.y * sx2 + z1 * cx2;
       const scale = (FOCAL * zoom) / (FOCAL + z2);
       return { sx: W / 2 + x1 * scale, sy: H / 2 + y1 * scale, depth: z2, scale };
-    }
-
-    // cached local radial-gradient glow (keyed by color + radius bucket)
-    const gradCache = new Map();
-    function glow(color, r) {
-      const key = color + "|" + (r | 0);
-      let grd = gradCache.get(key);
-      if (!grd) {
-        grd = g.createRadialGradient(0, 0, 0, 0, 0, r);
-        grd.addColorStop(0, "rgba(255,255,255,0.95)");
-        grd.addColorStop(0.35, color);
-        grd.addColorStop(1, "rgba(0,0,0,0)");
-        gradCache.set(key, grd);
-      }
-      return grd;
     }
 
     const sparks = [];   // {a,b,t,dur,color}
@@ -268,23 +276,31 @@
       }
       g.globalAlpha = 1;
 
-      // nodes — far first (painter's algorithm)
+      // nodes — far first (painter's algorithm). Crisp solid sphere look:
+      // small low-alpha halo, a sharp colored core, and a white highlight.
       const order = nodes.slice().sort((a, b) => b._depth - a._depth);
       for (const n of order) {
-        const base = (4 + Math.min(9, n.deg * 0.7)) * n._scale;
-        const fireBoost = n.fire > 0 ? (1 + n.fire * 0.5) : 1;
+        const base = (2 + Math.min(7, n.deg * 0.5)) * n._scale;
+        const fireBoost = n.fire > 0 ? (1 + n.fire * 0.6) : 1;
         const match = q && (n.title || "").toLowerCase().includes(q);
-        const r = (match ? base + 4 : base) * fireBoost;
+        const r = Math.max(1.4, (match ? base + 3 : base) * fireBoost);
         const col = _folderColor(n.folder);
-        // depth alpha: nearer = brighter
-        const da = Math.max(0.35, Math.min(1, 0.7 + n._depth / (R * 6)));
+        const da = Math.max(0.4, Math.min(1, 0.78 + n._depth / (R * 6)));
+        const sx = n._sx, sy = n._sy;
+        // faint halo (small + low alpha so the node itself stays sharp)
+        g.globalAlpha = da * 0.16;
+        g.fillStyle = col;
+        g.beginPath(); g.arc(sx, sy, r * 2.4, 0, Math.PI * 2); g.fill();
+        // crisp colored core (bloom only while firing / matched)
+        if (n.fire > 0 || match) { g.shadowBlur = 14; g.shadowColor = col; }
         g.globalAlpha = da;
-        g.save();
-        g.translate(n._sx, n._sy);
-        if (n.fire > 0 || match) { g.shadowBlur = 16; g.shadowColor = col; }
-        g.fillStyle = glow(col, Math.max(3, r * 1.7));
-        g.beginPath(); g.arc(0, 0, Math.max(3, r * 1.7), 0, Math.PI * 2); g.fill();
-        g.restore();
+        g.fillStyle = col;
+        g.beginPath(); g.arc(sx, sy, r, 0, Math.PI * 2); g.fill();
+        g.shadowBlur = 0;
+        // bright off-centre highlight → reads as a lit sphere
+        g.globalAlpha = da * 0.9;
+        g.fillStyle = "rgba(255,255,255,0.85)";
+        g.beginPath(); g.arc(sx - r * 0.18, sy - r * 0.18, r * 0.42, 0, Math.PI * 2); g.fill();
         if (n.fire > 0) n.fire = Math.max(0, n.fire - 0.012);
       }
       g.globalAlpha = 1; g.shadowBlur = 0;
