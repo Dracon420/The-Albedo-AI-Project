@@ -741,6 +741,31 @@ _chat_history: list[dict] = []
 _HISTORY_MAX = 20
 _history_lock = threading.Lock()
 
+# Short words whose meaning depends ENTIRELY on the previous turn (affirm / deny /
+# acknowledge / proceed). When a conversation is already in progress, these must
+# NEVER be answered by a context-free canned reply or a cached answer — they have
+# to reach the agent WITH history so "no"/"ok"/"sure" are understood as a reply to
+# whatever Albedo just asked.
+_CONTEXT_REPLY_WORDS = frozenset({
+    "yes", "yeah", "yep", "yup", "ya", "sure", "ok", "okay", "k", "kk",
+    "got it", "understood", "fine", "good", "great", "perfect", "please",
+    "do it", "go", "go ahead", "go for it", "proceed", "continue", "yes please",
+    "no", "nope", "nah", "naw", "don't", "dont", "do not", "stop", "cancel",
+    "never mind", "nevermind", "no thanks", "no thank you", "not now", "skip",
+    "maybe", "idk", "i dont know", "i don't know", "both", "neither", "either",
+    "the first", "the second", "first one", "second one", "that one", "this one",
+})
+
+
+def _is_context_reply(text: str) -> bool:
+    """True when `text` is a short reply-word AND a conversation is in progress —
+    i.e. it only makes sense relative to the prior turn, so it must go to the
+    agent with history (not a canned/cached shortcut)."""
+    q = (text or "").lower().strip().rstrip("?!., ")
+    with _history_lock:
+        has_history = bool(_chat_history)
+    return has_history and q in _CONTEXT_REPLY_WORDS
+
 # Phase timing → logs/chat_timing.log (console is hidden, so log to a file we
 # can read back to see exactly where a slow turn spent its time).
 import time as _time_mod  # noqa: E402
@@ -827,15 +852,20 @@ def send_chat(text: str, history: list | None = None) -> dict:
 
     _ph("send_chat START")
 
+    # A short "yes/no/ok/sure…" mid-conversation is a reply to Albedo's last
+    # turn — it must reach the agent WITH history, never a context-free shortcut.
+    _ctx_reply = _is_context_reply(text)
+
     # ── 1. Instant intercept (no LLM) ────────────────────────────────
-    try:
-        from albedo.pipeline import try_fast_answer
-        canned = try_fast_answer(text.strip())
-        if canned:
-            return {"ok": True, "mode": "instant", "reason": "fast-path",
-                    "answer": canned, "error": None}
-    except Exception:
-        pass
+    if not _ctx_reply:
+        try:
+            from albedo.pipeline import try_fast_answer
+            canned = try_fast_answer(text.strip())
+            if canned:
+                return {"ok": True, "mode": "instant", "reason": "fast-path",
+                        "answer": canned, "error": None}
+        except Exception:
+            pass
     _ph("after fast-path")
 
     # ── 1b. Semantic answer cache — instant near-duplicate knowledge reply ────
@@ -845,7 +875,7 @@ def send_chat(text: str, history: list | None = None) -> dict:
     try:
         from albedo.agent_team import _heuristic_classify as _hc  # noqa: PLC0415
         from albedo import semantic_cache  # noqa: PLC0415
-        if _hc(text.strip()) != "team":
+        if _hc(text.strip()) != "team" and not _ctx_reply:
             _cached = semantic_cache.lookup(text.strip())
             if _cached:
                 _remember(text.strip(), _cached)
@@ -1057,7 +1087,10 @@ def send_chat(text: str, history: list | None = None) -> dict:
     if ok and r.get("answer"):
         steps = r.get("steps") or []
         used_tools = any((s or {}).get("type") == "tool_call" for s in steps)
-        if not used_tools:
+        # Never cache an answer keyed on a context-dependent reply-word — its
+        # meaning was tied to the prior turn, so a future match would be wrong.
+        _ack = text.strip().lower().rstrip("?!., ") in _CONTEXT_REPLY_WORDS
+        if not used_tools and not _ack:
             try:
                 from albedo import semantic_cache  # noqa: PLC0415
                 semantic_cache.store(text.strip(), r.get("answer", ""))
