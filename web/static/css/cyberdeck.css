@@ -521,6 +521,7 @@ body.is-pinned .hud           { padding-left: 14px; padding-right: 14px; }
   font-size: 14px; cursor: pointer;
 }
 .apps-row:hover { background: rgba(208, 0, 255, 0.08); }
+.apps-row--locked { opacity: 0.5; cursor: not-allowed; }
 .apps-row input { accent-color: var(--c-cyan); width: 16px; height: 16px; }
 .apps-row__name { color: var(--c-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .apps-row__size { color: var(--c-orange); text-align: right; font-weight: 700; }

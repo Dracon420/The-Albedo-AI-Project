@@ -60,6 +60,9 @@ _DEFAULT_SYSTEM = (
     "and confirm first, even with permission.\n"
     "4. Follow-ups: if you asked something and the user says 'yes'/'do it'/names an "
     "item, continue that thread and act — never say you don't know what they mean.\n"
+    "5. Don't nag: make at most ONE short offer of next steps, and don't repeat the "
+    "same offer turn after turn. If the user declines ('no', 'none', 'no thanks'), "
+    "acknowledge in one line and stop offering.\n"
     "Be concise. Don't narrate tool use."
 )
 

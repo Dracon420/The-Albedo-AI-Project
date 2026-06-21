@@ -9,6 +9,10 @@
   "use strict";
 
   let _modal = null, _listEl = null;
+  // Once the user dismisses the modal, stop auto-popping it on later
+  // list_installed_apps calls — the agent often re-checks apps mid-conversation
+  // and re-opening every time is intrusive. Re-armed only by an explicit request.
+  let _userClosed = false;
 
   function _ensure() {
     if (_modal) return;
@@ -38,7 +42,10 @@
     _modal.addEventListener("click", (e) => { if (e.target === _modal) close(); });
   }
 
-  function close() { if (_modal) _modal.classList.remove("is-open"); }
+  function close() { if (_modal) _modal.classList.remove("is-open"); _userClosed = true; }
+
+  // Auto-open path: respects the user's dismissal so it won't nag.
+  function autoOpen() { if (!_userClosed) open(); }
 
   function _esc(s) {
     return String(s).replace(/[&<>"]/g, (c) =>
@@ -84,14 +91,16 @@
     open();   // refresh the list
   }
 
-  window._albedo_show_apps = function () { open(); };
+  // Explicit user request always opens (and re-arms auto-open).
+  window._albedo_show_apps = function () { _userClosed = false; open(); };
   if (window.eel) { try { eel.expose(_albedo_show_apps, "_albedo_show_apps"); } catch (_) {} }
 
-  // Auto-open whenever the agent finishes a list_installed_apps tool call.
+  // Auto-open the FIRST time the agent lists apps; after the user dismisses it,
+  // later list_installed_apps calls won't re-pop it (autoOpen guards on that).
   (function wire() {
     if (window.EventBus) {
       EventBus.on("tool.result", (e) => {
-        if (e && e.name === "list_installed_apps") open();
+        if (e && e.name === "list_installed_apps") autoOpen();
       });
     } else { setTimeout(wire, 300); }
   })();

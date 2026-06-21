@@ -477,6 +477,63 @@ def uninstall_apps(names: list) -> dict:
     return {"ok": True, "results": results}
 
 
+# Processes whose termination can hang/crash Windows or kill Albedo itself —
+# shown in the popup but not killable.
+_CRITICAL_PROCS = {
+    "system", "system idle process", "registry", "memory compression",
+    "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe", "services.exe",
+    "lsass.exe", "svchost.exe", "fontdrvhost.exe", "dwm.exe", "explorer.exe",
+    "ntoskrnl.exe", "memcompression", "python.exe", "pythonw.exe",  # python.exe = Albedo backend
+}
+
+
+@_expose
+def get_process_list(limit: int = 20) -> dict:
+    """Structured top-processes list for the process chooser popup. Aggregated by
+    image name: total RAM (MB), instance count, summed CPU%. Critical OS/Albedo
+    processes are flagged so the UI can disable terminating them."""
+    try:
+        import psutil
+        agg: dict = {}
+        for p in psutil.process_iter(["name", "memory_info", "cpu_percent"]):
+            try:
+                nm = p.info["name"] or "?"
+                mi = p.info["memory_info"]
+                mb = (mi.rss / (1024 ** 2)) if mi else 0.0
+                cpu = p.info["cpu_percent"] or 0.0
+                a = agg.setdefault(nm, {"name": nm, "ram_mb": 0.0, "cpu": 0.0, "count": 0})
+                a["ram_mb"] += mb
+                a["cpu"] += cpu
+                a["count"] += 1
+            except Exception:
+                pass
+        rows = sorted(agg.values(), key=lambda r: -r["ram_mb"])
+        for r in rows:
+            r["ram_mb"] = round(r["ram_mb"], 1)
+            r["cpu"] = round(r["cpu"], 1)
+            r["critical"] = r["name"].lower() in _CRITICAL_PROCS
+        return {"ok": True, "data": rows[: min(int(limit or 20), 40)]}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def kill_processes(names: list) -> dict:
+    """Terminate processes by image name (from the process popup). Critical
+    OS/Albedo processes are refused. Confirm in the UI before calling."""
+    from albedo.agent_tools import kill_process as _k
+    results = []
+    for nm in (names or []):
+        if str(nm).lower() in _CRITICAL_PROCS:
+            results.append({"name": nm, "result": "protected — not terminated"})
+            continue
+        try:
+            results.append({"name": nm, "result": _k(str(nm))})
+        except Exception as exc:                                    # noqa: BLE001
+            results.append({"name": nm, "result": f"error: {exc}"})
+    return {"ok": True, "results": results}
+
+
 @_expose
 def get_perf_timings(n: int = 12) -> dict:
     """

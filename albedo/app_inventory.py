@@ -31,8 +31,20 @@ except Exception:                                                    # noqa: BLE
 # ---------------------------------------------------------------------------
 
 def _read_userassist() -> dict:
-    """Map lowercased exe/app basename -> {'count': int, 'last': epoch|None}."""
-    usage: dict[str, dict] = {}
+    """Read UserAssist into two maps so apps can be matched by FULL PATH (most
+    reliable) and fall back to basename:
+
+        {
+          "by_path": { r"c:\\program files\\app\\app.exe": {count, last}, ... },
+          "by_name": { "app.exe": {count, last}, ... },
+        }
+
+    UserAssist only records programs launched via Explorer, so absence of a
+    record means "not tracked", never "never used".
+    """
+    by_path: dict[str, dict] = {}
+    by_name: dict[str, dict] = {}
+    usage = {"by_path": by_path, "by_name": by_name}
     if winreg is None:
         return usage
     base = r"Software\Microsoft\Windows\CurrentVersion\Explorer\UserAssist"
@@ -76,12 +88,17 @@ def _read_userassist() -> dict:
                         last = ft / 1e7 - 11644473600
             except Exception:
                 pass
-            key = decoded.replace("/", "\\").rsplit("\\", 1)[-1].lower()
-            if not key:
+            full = decoded.replace("/", "\\").strip().lower()
+            if not full or not full.endswith(".exe"):
                 continue
-            prev = usage.get(key)
+            rec = {"count": count, "last": last}
+            prev = by_path.get(full)
             if prev is None or count > prev["count"]:
-                usage[key] = {"count": count, "last": last}
+                by_path[full] = rec
+            base = full.rsplit("\\", 1)[-1]
+            prevb = by_name.get(base)
+            if prevb is None or count > prevb["count"]:
+                by_name[base] = rec
     return usage
 
 
@@ -139,6 +156,8 @@ def list_installed_apps(limit: int = 40) -> list[dict]:
     if winreg is None:
         return []
     usage = _read_userassist()
+    by_path = usage["by_path"]
+    by_name = usage["by_name"]
     apps: list[dict] = []
     seen = set()
     for sk in _iter_uninstall_entries():
@@ -153,19 +172,29 @@ def list_installed_apps(limit: int = 40) -> list[dict]:
         size_kb = _val(sk, "EstimatedSize") or 0
         uninstall = _val(sk, "QuietUninstallString") or _val(sk, "UninstallString") or ""
         idate = _val(sk, "InstallDate") or ""
-        # Match usage: an exe basename appears as a whole word in the app name,
-        # OR the app's first significant word matches an exe basename.
-        nl = name.lower()
-        nwords = set(w for w in nl.replace("(", " ").replace(")", " ").split() if len(w) > 2)
+        # Resolve usage, strongest signal first:
+        #   1) any UserAssist exe path that lives under this app's install dir
+        #   2) the app's DisplayIcon exe path/basename
+        #   3) fuzzy: exe basename appears as a word in the app name
+        install_dir = (_val(sk, "InstallLocation") or "").strip().strip('"').lower().rstrip("\\")
+        icon_exe = (_val(sk, "DisplayIcon") or "").strip().strip('"').split(",")[0].strip().lower()
         u = None
-        for k, info in usage.items():
-            if not k.endswith(".exe"):
-                continue
-            stem = k[:-4]
-            if len(stem) < 3:
-                continue
-            if stem in nwords or stem in nl.replace(" ", ""):
-                u = info if (u is None or info["count"] > u["count"]) else u
+        if install_dir and len(install_dir) > 3:
+            for path, info in by_path.items():
+                if path.startswith(install_dir + "\\"):
+                    if u is None or info["count"] > u["count"]:
+                        u = info
+        if u is None and icon_exe.endswith(".exe"):
+            u = by_path.get(icon_exe) or by_name.get(icon_exe.rsplit("\\", 1)[-1])
+        if u is None:
+            nl = name.lower()
+            nwords = set(w for w in nl.replace("(", " ").replace(")", " ").split() if len(w) > 2)
+            for base, info in by_name.items():
+                stem = base[:-4]
+                if len(stem) < 3:
+                    continue
+                if stem in nwords or stem in nl.replace(" ", ""):
+                    u = info if (u is None or info["count"] > u["count"]) else u
         last = None
         if u and u.get("last"):
             try:
