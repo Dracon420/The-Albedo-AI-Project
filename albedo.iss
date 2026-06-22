@@ -1,7 +1,22 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.2.7.exe
+; Output: Output\Albedo-Setup-3.3.0.exe
+;
+; What's new in 3.3.0 (major — tools, popups & connections)
+;   - Reusable popup framework (popup_factory.js): new tools get a popup from a
+;     small spec instead of a hand-written modal
+;   - New local power-tools: reminders/timers with Windows notifications,
+;     clipboard read/write, file search (catalog + folders) with a results popup,
+;     create notes into the Obsidian vault, "what's on my screen?" desktop
+;     screenshot + Moondream vision, window management (focus/minimize/list)
+;   - File manager: move / copy / rename / recycle (Recycle Bin), + open/reveal;
+;     browser: open URL / open a web search
+;   - External connections: Email (read/search/send via app password), Calendar
+;     (read upcoming from an ICS feed), Home Assistant (states + control),
+;     Discord/Slack messaging. Keys in Settings; each shows on the neural-links HUD
+;   - Agent tool registry 18 -> 44; all send/modify/delete actions stay gated by
+;     the approval modal; profile + tool-markup-strip fixes carried from 3.2.x
 ;
 ; What's new in 3.2.7 (on top of 3.2.6)
 ;   - Dream cycle can no longer silently crash the backend: its state-log print
@@ -92,7 +107,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.2.7"
+#define AppVersion   "3.3.0"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -120,13 +135,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.2.7
+OutputBaseFilename=Albedo-Setup-3.3.0
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.2.7.0
+VersionInfoVersion=3.3.0.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.2.7.0
+VersionInfoProductVersion=3.3.0.0
 
 ; Compression
 Compression=lzma2/max
@@ -373,15 +388,15 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.2.7.' + #13#10 + #13#10 +
-      'What''s new in 3.2.7:' + #13#10 +
-      '  - Dream cycle no longer silently crashes the backend' + #13#10 +
-      '    (crash-proofed + memory hygiene + diagnostics)' + #13#10 +
-      '  - (3.2.6) Terser, more natural Cortana voice' + #13#10 +
-      '  - (3.2.5) Understands "no"/"ok" in context; Brain auto-fit' + #13#10 + #13#10 +
-      'From 3.2.1-3.2.4:' + #13#10 +
-      '  - Dense 3D Brain Atlas, model dropdown, process popup' + #13#10 +
-      '  - Smarter app-usage tracking; apps popup stops nagging' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v3.3.0.' + #13#10 + #13#10 +
+      'What''s new in 3.3.0 (major):' + #13#10 +
+      '  - Reminders/timers with Windows notifications' + #13#10 +
+      '  - Clipboard, file search, notes to Obsidian, screen vision' + #13#10 +
+      '  - File manager (move/copy/rename/recycle) + browser' + #13#10 +
+      '  - Connections: Email, Calendar, Home Assistant, Discord/Slack' + #13#10 +
+      '  - Agent tools 18 -> 44; reusable popup framework' + #13#10 + #13#10 +
+      'From 3.2.x:' + #13#10 +
+      '  - Dense 3D Brain Atlas, terser voice, dream-cycle crash fix' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +
