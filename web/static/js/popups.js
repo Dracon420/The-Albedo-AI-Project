@@ -28,6 +28,26 @@
         confirm: (sel) => `Cancel ${sel.length} reminder(s)?` },
     ],
   });
+
+  // ── File search ────────────────────────────────────────────
+  AlbedoPopup.register({
+    id: "filesearch",
+    title: "FILE SEARCH",
+    hint: "Matches from your file catalog / folders. Tick to reveal in Explorer.",
+    trigger: "find_files",
+    mode: "list",
+    dataEndpoint: "get_file_search",
+    valueKey: "path",
+    selectable: true,
+    columns: [
+      { key: "name", label: "File", grow: true },
+      { key: "parent", label: "Folder", dim: true },
+    ],
+    emptyText: "No matching files.",
+    footActions: [
+      { label: "REVEAL SELECTED", accent: true, endpoint: "reveal_files" },
+    ],
+  });
 })();
 
 // Surface a fired reminder in the chat log too (in case the OS toast is missed).

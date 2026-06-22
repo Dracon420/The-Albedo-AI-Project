@@ -62,3 +62,4 @@ edge-tts>=6.1.9
 
 # Wake word detection — OpenWakeWord (primary engine, custom cortana model in wakewords/)
 openwakeword>=0.6.0
+pygetwindow

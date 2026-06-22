@@ -516,6 +516,28 @@ def cancel_reminders(ids: list) -> dict:
 
 
 @_expose
+def get_file_search() -> dict:
+    """Last file-search results, for the file-search popup."""
+    try:
+        from albedo import file_search
+        return {"ok": True, "data": file_search.last()}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def reveal_files(paths: list) -> dict:
+    """Reveal the selected files in Explorer (from the popup)."""
+    try:
+        from albedo.desktop_tools import reveal_in_explorer
+        for p in (paths or [])[:10]:
+            reveal_in_explorer(p)
+        return {"ok": True, "revealed": len(paths or [])}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
 def get_app_inventory(limit: int = 25) -> dict:
     """Structured installed-apps list for the app chooser popup."""
     try:

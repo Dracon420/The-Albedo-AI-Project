@@ -635,6 +635,136 @@ _register(ToolSpec(
     destructive=False,
 ))
 
+
+# ── Clipboard / screenshot / windows / files (desktop_tools + file_search) ────
+def _clip_read():
+    from albedo.desktop_tools import read_clipboard
+    return read_clipboard()
+
+
+def _clip_set(text: str):
+    from albedo.desktop_tools import set_clipboard
+    return set_clipboard(text)
+
+
+def _screenshot(question: str = ""):
+    from albedo.desktop_tools import screenshot_describe
+    return screenshot_describe(question)
+
+
+def _focus(name: str):
+    from albedo.desktop_tools import focus_window
+    return focus_window(name)
+
+
+def _minimize(name: str):
+    from albedo.desktop_tools import minimize_window
+    return minimize_window(name)
+
+
+def _list_windows():
+    from albedo.desktop_tools import list_windows
+    return list_windows()
+
+
+def find_files(query: str, limit: int = 20) -> str:
+    """Search the file catalog / common folders for files (opens results popup)."""
+    from albedo import file_search
+    rows = file_search.search(query, limit=min(int(limit or 20), 40))
+    if not rows:
+        return f"No files found matching '{query}'."
+    lines = [f"- {r['name']}  ({r['parent']})" for r in rows[:12]]
+    more = f"\n…and {len(rows) - 12} more" if len(rows) > 12 else ""
+    return f"Found {len(rows)} file(s) matching '{query}':\n" + "\n".join(lines) + more
+
+
+def create_note(title: str, body: str = "", folder: str = "") -> str:
+    """Create a Markdown note in the Obsidian vault."""
+    import os as _os
+    import re as _re
+    vault = _os.environ.get("OBSIDIAN_VAULT_PATH", "").strip()
+    if not vault:
+        return "[tool error] No Obsidian vault configured (set OBSIDIAN_VAULT_PATH in Settings)."
+    from pathlib import Path as _Path
+    base = _Path(vault)
+    safe = _re.sub(r'[\\/:*?"<>|]+', "-", (title or "Untitled").strip())[:80] or "Untitled"
+    d = base / folder.strip().strip("/\\") if folder.strip() else base
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        p = d / (safe + ".md")
+        i = 2
+        while p.exists():
+            p = d / f"{safe} {i}.md"
+            i += 1
+        p.write_text((body or "").strip() + "\n", encoding="utf-8")
+        return f"Note created: {p.relative_to(base)}"
+    except Exception as exc:                                        # noqa: BLE001
+        return f"[tool error] could not create note: {exc}"
+
+
+def _open_path(path: str):
+    from albedo.desktop_tools import open_path
+    return open_path(path)
+
+
+def _reveal(path: str):
+    from albedo.desktop_tools import reveal_in_explorer
+    return reveal_in_explorer(path)
+
+
+_register(ToolSpec(name="read_clipboard", fn=_clip_read, destructive=False,
+    description="Read the current text on the Windows clipboard.",
+    parameters={"properties": {}, "required": []}))
+
+_register(ToolSpec(name="set_clipboard", fn=_clip_set, destructive=False,
+    description="Copy text to the Windows clipboard.",
+    parameters={"properties": {"text": {"type": "string"}}, "required": ["text"]}))
+
+_register(ToolSpec(name="describe_screen", fn=_screenshot, destructive=False,
+    description="Capture the desktop screenshot and describe what's on screen (via "
+                "Moondream vision). Use for 'what's on my screen?' or to read what the "
+                "user is looking at. Optional question focuses the analysis.",
+    parameters={"properties": {"question": {"type": "string",
+        "description": "Optional: what to look for / ask about the screen."}}, "required": []}))
+
+_register(ToolSpec(name="focus_window", fn=_focus, destructive=False,
+    description="Bring a window to the foreground by (partial) title/app name.",
+    parameters={"properties": {"name": {"type": "string"}}, "required": ["name"]}))
+
+_register(ToolSpec(name="minimize_window", fn=_minimize, destructive=False,
+    description="Minimize window(s) matching a (partial) title/app name.",
+    parameters={"properties": {"name": {"type": "string"}}, "required": ["name"]}))
+
+_register(ToolSpec(name="list_windows", fn=_list_windows, destructive=False,
+    description="List currently open/visible window titles.",
+    parameters={"properties": {}, "required": []}))
+
+_register(ToolSpec(name="find_files", fn=find_files, destructive=False,
+    description="Find files by name or topic (e.g. 'my resume', 'invoices', 'STL "
+                "files'). Searches the indexed file catalog with a folder-scan "
+                "fallback, and opens a results popup. READ-ONLY.",
+    parameters={"properties": {
+        "query": {"type": "string", "description": "What to find."},
+        "limit": {"type": "integer", "description": "Max results (default 20)."}
+    }, "required": ["query"]}))
+
+_register(ToolSpec(name="create_note", fn=create_note, destructive=False,
+    description="Create a Markdown note in the user's Obsidian vault (so it joins "
+                "the brain). Use for 'make a note that…', 'jot this down'.",
+    parameters={"properties": {
+        "title": {"type": "string"},
+        "body": {"type": "string", "description": "Note body (Markdown)."},
+        "folder": {"type": "string", "description": "Optional vault subfolder."}
+    }, "required": ["title"]}))
+
+_register(ToolSpec(name="open_path", fn=_open_path, destructive=False,
+    description="Open a file with its default app, or a folder in Explorer.",
+    parameters={"properties": {"path": {"type": "string"}}, "required": ["path"]}))
+
+_register(ToolSpec(name="reveal_in_explorer", fn=_reveal, destructive=False,
+    description="Reveal/select a file or folder in Windows Explorer.",
+    parameters={"properties": {"path": {"type": "string"}}, "required": ["path"]}))
+
 _register(ToolSpec(
     name="uninstall_app",
     description="Uninstall ONE app by its display name. DESTRUCTIVE — only call "
