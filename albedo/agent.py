@@ -35,6 +35,7 @@ Never raises — failures come back in the result dict.
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 import uuid
@@ -73,8 +74,34 @@ _DEFAULT_SYSTEM = (
     "and confirm first, even with permission.\n"
     "4. Follow-ups: 'yes'/'do it'/an item name continues the prior thread and "
     "acts; a decline ends it (see STYLE). Never say you don't know what they mean.\n"
-    "Don't narrate tool use."
+    "Don't narrate tool use. NEVER write tool/function-call syntax in your reply "
+    "(no <function=...>, <tool_call>, or JSON tool blocks) — either call the tool "
+    "for real or just say it in plain words."
 )
+
+
+# Models occasionally emit a tool call as literal TEXT (e.g. Llama's
+# "<function=remember{...}></function>") instead of a structured tool_call, which
+# then leaks into the chat. Strip any such markup from the final answer.
+_TOOL_MARKUP_BLOCK = re.compile(
+    r"<\s*(function|tool_call|invoke|tool_code)\b[^>]*>.*?<\s*/\s*\1\s*>",
+    re.S | re.I,
+)
+_TOOL_MARKUP_TAG = re.compile(
+    r"<\s*/?\s*(function|tool_call|invoke|tool_code)\b[^>]*>",
+    re.I,
+)
+
+
+def _strip_tool_markup(text: str) -> str:
+    if not text or "<" not in text:
+        return text
+    text = _TOOL_MARKUP_BLOCK.sub("", text)
+    text = _TOOL_MARKUP_TAG.sub("", text)
+    # tidy the gaps left behind ("I can  so I can…" -> "I can so I can…")
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    return text.strip()
 
 
 # ---------------------------------------------------------------------------
@@ -219,7 +246,7 @@ def run_agent(
 
         # No tool calls -> final answer.
         if not tool_calls:
-            answer = result.get("text", "") or ""
+            answer = _strip_tool_markup(result.get("text", "") or "")
             steps.append({"type": "final", "text": answer})
             _emit("agent.state", role=role, state="done", task=user_message.strip())
             return {"answer": answer, "steps": steps, "provider": used_provider,
@@ -233,7 +260,7 @@ def run_agent(
         if tool_calls and all(tc.name in _executed for tc in tool_calls):
             _status("data already gathered — composing answer")
             final = _complete_with_retry(messages, [], provider, model, _status)
-            answer = final.get("text", "") or ""
+            answer = _strip_tool_markup(final.get("text", "") or "")
             steps.append({"type": "final", "text": answer})
             _emit("agent.state", role=role, state="done", task=user_message.strip())
             return {"answer": answer, "steps": steps,
