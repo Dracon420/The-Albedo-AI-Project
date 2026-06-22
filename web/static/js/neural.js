@@ -20,6 +20,7 @@ const Neural = (() => {
     "WOLFRAM",  "TAVILY",   "VEC_DB",
     "WEBHOOK",  "STT",      "TTS",
     "WAKE",     "DREAM",
+    "EMAIL",    "CALENDAR", "HOME_ASST", "MESSAGING",
   ];
 
   let _gridEl, _stateEl, _statusEl;

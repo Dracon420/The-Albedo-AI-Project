@@ -876,6 +876,80 @@ _register(ToolSpec(name="web_open", fn=_web_open, destructive=False,
                 "search_web tool which returns snippets to the agent).",
     parameters={"properties": {"query": {"type": "string"}}, "required": ["query"]}))
 
+
+# ── External connections (email / calendar / Home Assistant / messaging) ──────
+def _email_inbox(n: int = 5):
+    from albedo.connections import email_conn
+    return email_conn.read_inbox(n)
+
+
+def _email_search(query: str, n: int = 10):
+    from albedo.connections import email_conn
+    return email_conn.search_email(query, n)
+
+
+def _email_send(to: str, subject: str, body: str):
+    from albedo.connections import email_conn
+    return email_conn.send_email(to, subject, body)
+
+
+def _calendar(days: int = 7):
+    from albedo.connections import calendar_conn
+    return calendar_conn.upcoming(days)
+
+
+def _ha_states(domain: str = ""):
+    from albedo.connections import home_assistant
+    return home_assistant.list_states(domain)
+
+
+def _ha_call(domain: str, service: str, entity_id: str):
+    from albedo.connections import home_assistant
+    return home_assistant.call_service(domain, service, entity_id)
+
+
+def _msg_send(text: str, target: str = ""):
+    from albedo.connections import messaging
+    return messaging.send_message(text, target)
+
+
+_register(ToolSpec(name="read_inbox", fn=_email_inbox, destructive=False,
+    description="Read the latest emails (sender + subject) from the inbox.",
+    parameters={"properties": {"n": {"type": "integer", "description": "How many (default 5)."}},
+                "required": []}))
+
+_register(ToolSpec(name="search_email", fn=_email_search, destructive=False,
+    description="Search email by subject/sender keyword.",
+    parameters={"properties": {"query": {"type": "string"},
+                "n": {"type": "integer"}}, "required": ["query"]}))
+
+_register(ToolSpec(name="send_email", fn=_email_send, destructive=True,
+    description="Send an email. DESTRUCTIVE — confirm recipient/subject/body first.",
+    parameters={"properties": {"to": {"type": "string"}, "subject": {"type": "string"},
+                "body": {"type": "string"}}, "required": ["to", "subject", "body"]}))
+
+_register(ToolSpec(name="calendar_upcoming", fn=_calendar, destructive=False,
+    description="List upcoming calendar events ('what's on my schedule?').",
+    parameters={"properties": {"days": {"type": "integer", "description": "Look-ahead days (default 7)."}},
+                "required": []}))
+
+_register(ToolSpec(name="ha_states", fn=_ha_states, destructive=False,
+    description="List Home Assistant entity states, optionally filtered by domain "
+                "(e.g. 'light', 'switch', 'sensor').",
+    parameters={"properties": {"domain": {"type": "string"}}, "required": []}))
+
+_register(ToolSpec(name="ha_call_service", fn=_ha_call, destructive=True,
+    description="Control Home Assistant: call a service on an entity (e.g. domain "
+                "'light', service 'turn_on', entity_id 'light.kitchen'). DESTRUCTIVE.",
+    parameters={"properties": {"domain": {"type": "string"}, "service": {"type": "string"},
+                "entity_id": {"type": "string"}}, "required": ["domain", "service", "entity_id"]}))
+
+_register(ToolSpec(name="send_message", fn=_msg_send, destructive=True,
+    description="Send a message to Discord/Slack via webhook. DESTRUCTIVE. "
+                "target 'discord' or 'slack' (defaults to whichever is configured).",
+    parameters={"properties": {"text": {"type": "string"}, "target": {"type": "string"}},
+                "required": ["text"]}))
+
 _register(ToolSpec(
     name="uninstall_app",
     description="Uninstall ONE app by its display name. DESTRUCTIVE — only call "

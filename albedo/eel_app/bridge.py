@@ -435,6 +435,14 @@ def _detect_neural_links() -> dict:
     except Exception:
         link("WEBHOOK", "off", "OFF", "module unavailable")
 
+    # --- External connections (email / calendar / HA / messaging) ---
+    try:
+        from albedo import connections as _conns
+        for _name, _st, _lbl, _dt in _conns.links():
+            link(_name, _st, _lbl, _dt)
+    except Exception:
+        pass
+
     # Apply any live overrides pushed via update_neural_link()
     with _live_lock:
         for name, status in _live_states.items():
@@ -1426,6 +1434,14 @@ _API_KEY_SPECS = [
     ("TAVILY_API_KEY",      "Tavily (web search)",       "https://app.tavily.com/home"),
     ("DEEPGRAM_API_KEY",    "Deepgram (STT)",            "https://console.deepgram.com/"),
 ]
+
+# Append external-connection keys (email / calendar / HA / messaging) so they
+# show up in the keys panel automatically — one module per connection.
+try:
+    from albedo import connections as _connections
+    _API_KEY_SPECS += _connections.key_specs()
+except Exception:
+    pass
 
 
 def _env_path():
