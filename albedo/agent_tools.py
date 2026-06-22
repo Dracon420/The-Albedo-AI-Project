@@ -553,6 +553,26 @@ _register(ToolSpec(
     destructive=False,
 ))
 
+
+def open_user_profile() -> str:
+    """Signal the UI to open the user-profile form. The actual popup is opened by
+    the front-end when it sees this tool's result event."""
+    return ("Profile form is open, Chief — fill in your name, age, job, hobbies, "
+            "goals, then hit SAVE and I'll use it to tailor how I help.")
+
+
+_register(ToolSpec(
+    name="open_user_profile",
+    description="Open the profile form so the user can tell Albedo about "
+                "themselves — name, age, job, hobbies, goals. Call this when the "
+                "user wants to set up / edit their profile, says 'learn about "
+                "me', or asks you to personalise to them. READ-ONLY (just opens "
+                "a form; does not change anything).",
+    parameters={"properties": {}, "required": []},
+    fn=open_user_profile,
+    destructive=False,
+))
+
 _register(ToolSpec(
     name="uninstall_app",
     description="Uninstall ONE app by its display name. DESTRUCTIVE — only call "

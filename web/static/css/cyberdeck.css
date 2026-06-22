@@ -515,6 +515,30 @@ body.is-pinned .hud           { padding-left: 14px; padding-right: 14px; }
 .apps-modal__hint { padding: 8px 18px; font-size: 13px; color: var(--c-text-dim); }
 .apps-modal__list { overflow-y: auto; padding: 4px 12px 12px; flex: 1; }
 .apps-modal__loading { padding: 24px; text-align: center; color: var(--c-text-dim); }
+
+/* ── Profile (About You) form ─────────────────────────────────── */
+.profile-grid { display: flex; flex-direction: column; gap: 10px; }
+.profile-row { display: flex; flex-direction: column; gap: 4px; }
+.profile-row__label {
+  font-size: 12px; letter-spacing: 0.06em; color: #c9b6ff; font-weight: 700;
+}
+.profile-field {
+  background: rgba(8, 4, 18, 0.7);
+  border: 1px solid rgba(208, 0, 255, 0.35);
+  border-radius: 6px;
+  color: var(--c-text);
+  font-family: "Courier New", monospace;
+  font-size: 14px;
+  padding: 7px 9px;
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+}
+.profile-field:focus {
+  outline: none;
+  border-color: var(--c-cyan);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.35);
+}
 .apps-row {
   display: grid; grid-template-columns: 22px 1fr 90px 150px; gap: 10px; align-items: center;
   padding: 8px 8px; border-bottom: 1px solid rgba(208,0,255,0.10);

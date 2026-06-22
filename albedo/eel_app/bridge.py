@@ -453,6 +453,44 @@ def get_neural_links() -> dict:
         return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
 
 
+# ── User profile (so Albedo "knows" Chief) ───────────────────────────────────
+# Stored at install-root/user_profile.json. Fed into the agent's system prompt so
+# every reply is personalised. Filled in via the profile popup.
+_PROFILE_FIELDS = ("name", "age", "occupation", "location",
+                   "hobbies", "goals", "about")
+
+
+def _profile_path():
+    from pathlib import Path
+    return Path(__file__).resolve().parent.parent.parent / "user_profile.json"
+
+
+@_expose
+def get_user_profile() -> dict:
+    """Return the saved user profile for the profile popup (empty dict if none)."""
+    try:
+        import json as _json
+        p = _profile_path()
+        data = _json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        return {"ok": True, "profile": {k: str(data.get(k, "")) for k in _PROFILE_FIELDS}}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}", "profile": {}}
+
+
+@_expose
+def save_user_profile(profile: dict) -> dict:
+    """Persist the user profile (only known fields, trimmed). Albedo picks it up
+    on the next message — no restart needed."""
+    try:
+        import json as _json
+        clean = {k: str((profile or {}).get(k, "")).strip() for k in _PROFILE_FIELDS}
+        clean = {k: v for k, v in clean.items() if v}
+        _profile_path().write_text(_json.dumps(clean, indent=2), encoding="utf-8")
+        return {"ok": True, "saved": list(clean.keys())}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
 @_expose
 def get_app_inventory(limit: int = 25) -> dict:
     """Structured installed-apps list for the app chooser popup."""

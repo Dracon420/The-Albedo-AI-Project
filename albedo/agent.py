@@ -93,6 +93,32 @@ _TOOL_MARKUP_TAG = re.compile(
 )
 
 
+_PROFILE_LABELS = {
+    "name": "Name", "age": "Age", "occupation": "Job", "location": "Location",
+    "hobbies": "Hobbies/interests", "goals": "Goals", "about": "About",
+}
+
+
+def _user_profile_block() -> str:
+    """Read install-root/user_profile.json and format it as an 'ABOUT CHIEF'
+    block appended to the system prompt, so Albedo knows the user. Empty when no
+    profile is set. Read fresh each turn so edits take effect immediately."""
+    try:
+        from pathlib import Path
+        p = Path(__file__).resolve().parent.parent / "user_profile.json"
+        if not p.exists():
+            return ""
+        data = json.loads(p.read_text(encoding="utf-8"))
+        lines = [f"- {_PROFILE_LABELS.get(k, k)}: {str(v).strip()}"
+                 for k, v in data.items() if str(v).strip()]
+        if not lines:
+            return ""
+        return ("\n\nABOUT THE USER (Chief) - use this to personalise replies; "
+                "don't recite it back unprompted:\n" + "\n".join(lines))
+    except Exception:
+        return ""
+
+
 def _strip_tool_markup(text: str) -> str:
     if not text or "<" not in text:
         return text
@@ -217,7 +243,8 @@ def run_agent(
     _emit("agent.state", role=role, state="thinking", task=user_message.strip())
 
     # Build initial conversation
-    messages: list[dict] = [{"role": "system", "content": system_prompt or _DEFAULT_SYSTEM}]
+    messages: list[dict] = [{"role": "system",
+                             "content": (system_prompt or _DEFAULT_SYSTEM) + _user_profile_block()}]
     if history:
         for h in history[-10:]:
             if h.get("role") in ("user", "assistant") and h.get("content"):

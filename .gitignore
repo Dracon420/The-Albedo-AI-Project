@@ -123,3 +123,6 @@ scratchpad.json
 albedo/dream/.deep_cycle_counter
 albedo/dream/.reindex_state.json
 .catalog_last_index
+
+# Per-machine user profile (filled via the profile popup)
+user_profile.json
