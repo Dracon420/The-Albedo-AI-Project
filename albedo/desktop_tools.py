@@ -117,3 +117,28 @@ def reveal_in_explorer(path: str) -> str:
         return f"Revealed {path} in Explorer"
     except Exception as exc:                                        # noqa: BLE001
         return f"[tool error] reveal failed: {exc}"
+
+
+# ── Browser ──────────────────────────────────────────────────────────────────
+def open_url(url: str) -> str:
+    try:
+        import webbrowser
+        u = (url or "").strip()
+        if not u:
+            return "[tool error] no url given."
+        if not u.startswith(("http://", "https://")):
+            u = "https://" + u
+        webbrowser.open(u)
+        return f"Opened {u}"
+    except Exception as exc:                                        # noqa: BLE001
+        return f"[tool error] open url failed: {exc}"
+
+
+def web_open(query: str) -> str:
+    try:
+        import webbrowser
+        import urllib.parse
+        webbrowser.open("https://www.google.com/search?q=" + urllib.parse.quote(query or ""))
+        return f"Opened a browser search for '{query}'."
+    except Exception as exc:                                        # noqa: BLE001
+        return f"[tool error] web open failed: {exc}"

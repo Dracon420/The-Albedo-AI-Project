@@ -765,6 +765,117 @@ _register(ToolSpec(name="reveal_in_explorer", fn=_reveal, destructive=False,
     description="Reveal/select a file or folder in Windows Explorer.",
     parameters={"properties": {"path": {"type": "string"}}, "required": ["path"]}))
 
+
+# ── File manager (destructive; gated by the approval modal) ───────────────────
+def move_file(src: str, dst: str) -> str:
+    """Move a file/folder to a new path (or into a destination folder)."""
+    import shutil
+    s, d = Path(src), Path(dst)
+    if not s.exists():
+        return f"[tool error] not found: {src}"
+    if _is_protected(s) or _is_protected(d):
+        return "[tool error] Refused — protected system path."
+    try:
+        if d.is_dir():
+            d = d / s.name
+        d.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(s), str(d))
+        return f"Moved to {d}"
+    except Exception as exc:                                        # noqa: BLE001
+        return f"[tool error] move failed: {exc}"
+
+
+def copy_file(src: str, dst: str) -> str:
+    """Copy a file (or folder) to a new path or destination folder."""
+    import shutil
+    s, d = Path(src), Path(dst)
+    if not s.exists():
+        return f"[tool error] not found: {src}"
+    if _is_protected(d):
+        return "[tool error] Refused — protected system path."
+    try:
+        if d.is_dir():
+            d = d / s.name
+        d.parent.mkdir(parents=True, exist_ok=True)
+        if s.is_dir():
+            shutil.copytree(str(s), str(d))
+        else:
+            shutil.copy2(str(s), str(d))
+        return f"Copied to {d}"
+    except Exception as exc:                                        # noqa: BLE001
+        return f"[tool error] copy failed: {exc}"
+
+
+def rename_file(path: str, new_name: str) -> str:
+    """Rename a file/folder in place (new_name is just the name, not a path)."""
+    p = Path(path)
+    if not p.exists():
+        return f"[tool error] not found: {path}"
+    if _is_protected(p):
+        return "[tool error] Refused — protected system path."
+    try:
+        target = p.parent / new_name
+        p.rename(target)
+        return f"Renamed to {target.name}"
+    except Exception as exc:                                        # noqa: BLE001
+        return f"[tool error] rename failed: {exc}"
+
+
+def recycle_file(path: str) -> str:
+    """Send a file/folder to the Recycle Bin (recoverable)."""
+    p = Path(path)
+    if not p.exists():
+        return f"[tool error] not found: {path}"
+    if _is_protected(p):
+        return "[tool error] Refused — protected system path."
+    try:
+        from send2trash import send2trash
+        send2trash(str(p))
+        return f"Sent to Recycle Bin: {p.name}"
+    except Exception as exc:                                        # noqa: BLE001
+        return f"[tool error] recycle failed: {exc}"
+
+
+def _open_url(url: str):
+    from albedo.desktop_tools import open_url
+    return open_url(url)
+
+
+def _web_open(query: str):
+    from albedo.desktop_tools import web_open
+    return web_open(query)
+
+
+_register(ToolSpec(name="move_file", fn=move_file, destructive=True,
+    description="Move a file/folder to another path or into a folder. DESTRUCTIVE.",
+    parameters={"properties": {"src": {"type": "string"}, "dst": {"type": "string"}},
+                "required": ["src", "dst"]}))
+
+_register(ToolSpec(name="copy_file", fn=copy_file, destructive=True,
+    description="Copy a file/folder to another path or folder. DESTRUCTIVE.",
+    parameters={"properties": {"src": {"type": "string"}, "dst": {"type": "string"}},
+                "required": ["src", "dst"]}))
+
+_register(ToolSpec(name="rename_file", fn=rename_file, destructive=True,
+    description="Rename a file/folder in place. DESTRUCTIVE.",
+    parameters={"properties": {"path": {"type": "string"},
+                "new_name": {"type": "string", "description": "New name only, not a path."}},
+                "required": ["path", "new_name"]}))
+
+_register(ToolSpec(name="recycle_file", fn=recycle_file, destructive=True,
+    description="Send a file/folder to the Recycle Bin (recoverable). DESTRUCTIVE. "
+                "Prefer this over permanent deletion.",
+    parameters={"properties": {"path": {"type": "string"}}, "required": ["path"]}))
+
+_register(ToolSpec(name="open_url", fn=_open_url, destructive=False,
+    description="Open a URL in the default browser (Chrome).",
+    parameters={"properties": {"url": {"type": "string"}}, "required": ["url"]}))
+
+_register(ToolSpec(name="web_open", fn=_web_open, destructive=False,
+    description="Open a web search in the browser for the user to look at (vs the "
+                "search_web tool which returns snippets to the agent).",
+    parameters={"properties": {"query": {"type": "string"}}, "required": ["query"]}))
+
 _register(ToolSpec(
     name="uninstall_app",
     description="Uninstall ONE app by its display name. DESTRUCTIVE — only call "
