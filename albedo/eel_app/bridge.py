@@ -492,6 +492,30 @@ def save_user_profile(profile: dict) -> dict:
 
 
 @_expose
+def get_reminders() -> dict:
+    """Reminders for the reminders popup (active first)."""
+    try:
+        from albedo import reminders
+        data = [{"id": r["id"], "text": r["text"],
+                 "when_human": r.get("when_human", ""), "fired": bool(r.get("fired"))}
+                for r in reminders.all_items()]
+        data.sort(key=lambda d: (d["fired"], d.get("when_human", "")))
+        return {"ok": True, "data": data}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
+def cancel_reminders(ids: list) -> dict:
+    """Cancel reminders by id (from the popup)."""
+    try:
+        from albedo import reminders
+        return {"ok": True, "cancelled": reminders.cancel(ids or [])}
+    except Exception as exc:                                        # noqa: BLE001
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+@_expose
 def get_app_inventory(limit: int = 25) -> dict:
     """Structured installed-apps list for the app chooser popup."""
     try:

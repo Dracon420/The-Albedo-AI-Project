@@ -573,6 +573,68 @@ _register(ToolSpec(
     destructive=False,
 ))
 
+
+# ── Reminders ────────────────────────────────────────────────────────────────
+def set_reminder(text: str, when: str) -> str:
+    """Schedule a reminder that fires a Windows notification."""
+    from albedo import reminders
+    r = reminders.add(text, when)
+    if not r:
+        return ("[tool error] Couldn't read the time. Try 'in 20 minutes', "
+                "'in 2 hours', or 'at 3pm'.")
+    return f"Reminder set for {r['when_human']} - {r['text']}."
+
+
+def list_reminders() -> str:
+    """List active reminders (also opens the reminders popup)."""
+    from albedo import reminders
+    items = reminders.active()
+    if not items:
+        return "No active reminders."
+    return "Active reminders:\n" + "\n".join(
+        f"- {r.get('when_human', '')}: {r['text']}" for r in items)
+
+
+def cancel_reminder(which: str) -> str:
+    """Cancel a reminder by its text or id."""
+    from albedo import reminders
+    n = reminders.cancel([which])
+    return f"Cancelled {n} reminder(s)." if n else f"No reminder matching '{which}'."
+
+
+_register(ToolSpec(
+    name="set_reminder",
+    description="Schedule a reminder/timer that pops a Windows notification. Use "
+                "for 'remind me to X in 20 minutes', 'set a timer for 5 min', "
+                "'remind me at 3pm'. `when` accepts 'in N minutes/hours/seconds/"
+                "days' or 'at H[:MM] [am/pm]' (optionally 'tomorrow').",
+    parameters={"properties": {
+        "text": {"type": "string", "description": "What to remind about."},
+        "when": {"type": "string", "description": "When, e.g. 'in 20 minutes' or 'at 3pm'."},
+    }, "required": ["text", "when"]},
+    fn=set_reminder,
+    destructive=False,
+))
+
+_register(ToolSpec(
+    name="list_reminders",
+    description="Show the user's active reminders/timers. Opens the reminders "
+                "popup. READ-ONLY.",
+    parameters={"properties": {}, "required": []},
+    fn=list_reminders,
+    destructive=False,
+))
+
+_register(ToolSpec(
+    name="cancel_reminder",
+    description="Cancel a reminder by its text or id.",
+    parameters={"properties": {
+        "which": {"type": "string", "description": "Reminder text or id to cancel."}
+    }, "required": ["which"]},
+    fn=cancel_reminder,
+    destructive=False,
+))
+
 _register(ToolSpec(
     name="uninstall_app",
     description="Uninstall ONE app by its display name. DESTRUCTIVE — only call "

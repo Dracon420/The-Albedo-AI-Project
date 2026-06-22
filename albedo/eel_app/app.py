@@ -750,6 +750,14 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
     except Exception as exc:
         print(f"[eel_app] Idle monitor failed to start: {exc}")
 
+    # Reminder scheduler — re-arms any saved reminders and fires due ones.
+    try:
+        from albedo import reminders as _reminders
+        _reminders.start()
+        print("[eel_app] Reminder scheduler started.")
+    except Exception as exc:
+        print(f"[eel_app] Reminder scheduler failed to start (non-fatal): {exc}")
+
     # Prewarm the RAG embedding model in the background. The first vault search
     # otherwise pays a ~44 s cold-start (CPU SentenceTransformer warmup) on the
     # user's first question; doing it here absorbs that before any query lands.

@@ -126,3 +126,7 @@ albedo/dream/.reindex_state.json
 
 # Per-machine user profile (filled via the profile popup)
 user_profile.json
+
+# Per-machine reminders + connection tokens
+reminders.json
+connections_tokens.json
