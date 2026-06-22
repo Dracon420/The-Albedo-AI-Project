@@ -58,11 +58,33 @@ def get_last_report() -> dict:
     return dict(_last_report)
 
 
+def _safe_print(msg: str) -> None:
+    """Print that can NEVER crash the dream thread, and also leaves a breadcrumb
+    in logs/dream.log. Windows cp1252 stdout chokes on non-ASCII (arrows/
+    ellipses) and a windowless (pythonw) launch has no stdout at all — both have
+    silently killed the dream cycle before. The file log also means a *native*
+    crash (OOM/segfault in a deeper phase) leaves a trail: the last line written
+    tells us which phase was running when the backend died."""
+    line = str(msg).encode("ascii", "replace").decode("ascii")
+    try:
+        print(line)
+    except Exception:
+        pass
+    try:
+        from datetime import datetime as _dt
+        log = Path(__file__).resolve().parent.parent.parent / "logs" / "dream.log"
+        log.parent.mkdir(exist_ok=True)
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(f"{_dt.now().isoformat(timespec='seconds')}  {line}\n")
+    except Exception:
+        pass
+
+
 def _set_state(new_state: str, detail: str = "") -> None:
     global _state
     with _state_lock:
         _state = new_state
-    print(f"[dream] State → {new_state}  {detail}")
+    _safe_print(f"[dream] State -> {new_state}  {detail}")
     if _status_cb:
         try:
             _status_cb(new_state, detail)
@@ -253,13 +275,17 @@ def start_dream(status_cb: Optional[Callable[[str, str], None]] = None,
         "forced":      forced,
     }
 
+    import gc as _gc
     try:
-        _run_phase1(report)
-        _run_phase2(report, forced=forced)
-        _run_phase3(report, forced=forced)
-        _run_phase4_brain(report, forced=forced)
+        # gc.collect() between phases releases each phase's embedder/LLM before
+        # the next loads its own — keeps peak memory down on a 16 GB box so the
+        # dream cycle can't OOM-kill the backend mid-run.
+        _run_phase1(report);              _gc.collect()
+        _run_phase2(report, forced=forced); _gc.collect()
+        _run_phase3(report, forced=forced); _gc.collect()
+        _run_phase4_brain(report, forced=forced); _gc.collect()
     except Exception as exc:
-        print(f"[dream] Unhandled error in dream cycle: {exc}")
+        _safe_print(f"[dream] Unhandled error in dream cycle: {exc}")
         report["fatal_error"] = str(exc)
     finally:
         report["ended_at"]    = datetime.now().isoformat(timespec="seconds")

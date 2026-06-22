@@ -731,7 +731,16 @@ def run(port: int = 8088, mode: Optional[str] = None) -> None:
         from albedo.dream import orchestrator as _dream
 
         def _on_idle() -> None:
-            _dream.start_dream(status_cb=bridge._dream_status_push)
+            # Never let the dream cycle take down the backend: catch everything
+            # so a thrown exception can't kill the idle thread (or worse).
+            try:
+                _dream.start_dream(status_cb=bridge._dream_status_push)
+            except Exception as exc:
+                try:
+                    print(("[eel_app] dream cycle crashed (caught): " + str(exc))
+                          .encode("ascii", "replace").decode("ascii"))
+                except Exception:
+                    pass
 
         def _on_return() -> None:
             _dream.interrupt_dream()
