@@ -1,7 +1,13 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.2.6.exe
+; Output: Output\Albedo-Setup-3.2.7.exe
+;
+; What's new in 3.2.7 (on top of 3.2.6)
+;   - Dream cycle can no longer silently crash the backend: its state-log print
+;     (an arrow/ellipsis that choked Windows cp1252 stdout) is now crash-proof,
+;     phases free memory between runs (gc), the idle thread catches everything,
+;     and every phase is breadcrumbed to logs/dream.log for diagnosis
 ;
 ; What's new in 3.2.6 (on top of 3.2.5)
 ;   - Terser, more natural Cortana voice in chat: stops narrating tool output
@@ -86,7 +92,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.2.6"
+#define AppVersion   "3.2.7"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -114,13 +120,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.2.6
+OutputBaseFilename=Albedo-Setup-3.2.7
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.2.6.0
+VersionInfoVersion=3.2.7.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.2.6.0
+VersionInfoProductVersion=3.2.7.0
 
 ; Compression
 Compression=lzma2/max
@@ -367,12 +373,12 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.2.6.' + #13#10 + #13#10 +
-      'What''s new in 3.2.6:' + #13#10 +
-      '  - Terser, more natural Cortana voice: no more narrating' + #13#10 +
-      '    results, shorter replies, takes "no" cleanly' + #13#10 +
-      '  - (3.2.5) Understands "no"/"ok"/"sure" in context;' + #13#10 +
-      '    Brain Atlas auto-fits the window' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v3.2.7.' + #13#10 + #13#10 +
+      'What''s new in 3.2.7:' + #13#10 +
+      '  - Dream cycle no longer silently crashes the backend' + #13#10 +
+      '    (crash-proofed + memory hygiene + diagnostics)' + #13#10 +
+      '  - (3.2.6) Terser, more natural Cortana voice' + #13#10 +
+      '  - (3.2.5) Understands "no"/"ok" in context; Brain auto-fit' + #13#10 + #13#10 +
       'From 3.2.1-3.2.4:' + #13#10 +
       '  - Dense 3D Brain Atlas, model dropdown, process popup' + #13#10 +
       '  - Smarter app-usage tracking; apps popup stops nagging' + #13#10 + #13#10 +
