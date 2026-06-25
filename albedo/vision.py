@@ -41,6 +41,21 @@ def capture_vision(device: int = 0) -> np.ndarray | None:
         return None
 
     try:
+        # Request a higher capture resolution so the vision model gets real
+        # detail (many webcams default to 640x480). Falls back silently if the
+        # camera can't honour it.
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+
+        # Warm-up: the first frames after opening are dark/blurry because
+        # auto-exposure, white-balance and auto-focus haven't settled yet —
+        # grabbing frame 0 is the main reason early scans looked washed out.
+        # Discard ~15 frames (~0.5s) so the sensor stabilises, then capture.
+        frame = None
+        for _ in range(15):
+            ret, frame = cap.read()
+            if not ret:
+                break
         ret, frame = cap.read()
     finally:
         cap.release()
@@ -71,7 +86,7 @@ def vision_query(
     try:
         import cv2
         import httpx
-        from albedo.config import OLLAMA_BASE_URL, VISION_TEMPERATURE
+        from albedo.config import OLLAMA_BASE_URL, VISION_TEMPERATURE, VISION_MODEL
     except Exception as exc:
         return (
             f"[vision] Setup error -- {type(exc).__name__}: {exc}\n"
@@ -93,7 +108,7 @@ def vision_query(
     # ── Phase 2: Ollama request ────────────────────────────────────────────
     temp = temperature if temperature is not None else VISION_TEMPERATURE
     payload = {
-        "model": "moondream",
+        "model": VISION_MODEL,
         "messages": [
             {
                 "role": "user",
@@ -101,7 +116,7 @@ def vision_query(
                 "images": [img_b64],
             }
         ],
-        "options": {"temperature": temp, "num_predict": 100},
+        "options": {"temperature": temp, "num_predict": 320},
         "stream": False,
     }
 

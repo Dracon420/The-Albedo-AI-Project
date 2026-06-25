@@ -100,6 +100,11 @@ WAKE_ACK_PHRASE = os.getenv("WAKE_ACK_PHRASE", "Yes?")
 
 VISION_TEMPERATURE = float(os.getenv("VISION_TEMPERATURE", "0.2"))
 
+# Ollama vision model for SCAN / describe_screen. moondream (1.7 GB) is the
+# fast default that fits any 6 GB GPU; set VISION_MODEL=minicpm-v or llava for
+# noticeably better accuracy if you have the VRAM and have pulled it.
+VISION_MODEL = os.getenv("VISION_MODEL", "moondream")
+
 # --- Keywords that trigger the Verify protocol ---
 # Fault/symptom indicators ONLY — generic component names (gpu, cpu, ram, vram)
 # deliberately excluded. Those appear in conceptual questions ("how does VRAM
