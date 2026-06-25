@@ -325,3 +325,41 @@ def transcribe(audio: np.ndarray) -> str:
 
     # ── Default / Tier 4: Vosk ───────────────────────────────────────────────
     return _transcribe_vosk(audio)
+
+
+def _selected_input_device() -> int | None:
+    """Read audio_input_device from settings.json (None = system default)."""
+    try:
+        import json
+        from pathlib import Path
+        sp = Path(__file__).resolve().parent.parent.parent / "settings.json"
+        if sp.exists():
+            v = json.loads(sp.read_text(encoding="utf-8")).get("audio_input_device")
+            if isinstance(v, int):
+                return v
+    except Exception:
+        pass
+    return None
+
+
+def transcribe_once() -> str:
+    """
+    One-shot push-to-talk capture for the MIC button: open the selected input
+    device, record a single utterance (VAD-bounded), transcribe via the engine
+    AUDIO_STT selects, and return the text. Opens its own short-lived stream so
+    it works whether or not the wake-word listener is running. Never raises —
+    returns "" on any capture/transcription failure.
+    """
+    from albedo.audio.capture import AudioStream, record_utterance
+    stream = AudioStream(device=_selected_input_device())
+    stream.start()
+    try:
+        audio = record_utterance(stream)
+    finally:
+        try:
+            stream.stop()
+        except Exception:
+            pass
+    if audio is None or len(audio) == 0:
+        return ""
+    return transcribe(audio)

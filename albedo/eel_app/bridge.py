@@ -1596,17 +1596,20 @@ def trigger_mic_capture() -> dict:
 @_expose
 def trigger_scan_capture() -> dict:
     """
-    Screenshot + vision analysis for the SCAN button in the Eel UI.
-    Captures the screen and describes it using the configured vision model.
+    Webcam capture + vision analysis for the SCAN button in the Eel UI.
+    Grabs ONE frame from the webcam (the hardware vision bridge — hold an
+    object up to the camera) and describes it via the moondream vision model.
+    NOTE: this is the camera, NOT a screenshot — desktop screen description is
+    the separate describe_screen agent tool.
     """
     try:
-        from PIL import ImageGrab
-        import numpy as np
-        # Capture screen, convert to the RGB ndarray vision_query expects.
-        img = ImageGrab.grab()
-        frame = np.array(img.convert("RGB"))
-        from albedo.vision import vision_query
-        description = vision_query(frame, "Describe what is on this screen.")
+        from albedo.vision import capture_vision, vision_query
+        frame = capture_vision(device=0)
+        if frame is None:
+            return {"ok": False,
+                    "error": "Could not access the webcam. Check it is "
+                             "connected and not in use by another app."}
+        description = vision_query(frame, "Describe what you see.")
         # vision_query returns a "[vision] ..." string on any failure (Ollama
         # down / moondream not pulled) — surface that as an error, not success.
         ok = not description.startswith("[vision]")

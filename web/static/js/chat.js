@@ -356,7 +356,7 @@ const Chat = (() => {
       }
     });
     _scanBtn.addEventListener("click", async () => {
-      appendLine("system", "[SYS] SCAN capturing screen...");
+      appendLine("system", "[SYS] SCAN capturing webcam...");
       try {
         const r = await eel.trigger_scan_capture()();
         if (r && r.ok && r.description) {
