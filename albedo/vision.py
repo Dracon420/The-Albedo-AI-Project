@@ -109,7 +109,9 @@ def vision_query(
         resp = httpx.post(
             f"{OLLAMA_BASE_URL}/api/chat",
             json=payload,
-            timeout=60.0,
+            # Generous: moondream cold-loading onto a 6GB GPU on the first SCAN
+            # can take well over a minute before the first token.
+            timeout=180.0,
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"].strip()

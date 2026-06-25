@@ -63,7 +63,8 @@ const Settings = (() => {
 
     // Audio devices — empty + each detected device
     if (devs && devs.ok) {
-      const fmt = (d) => `${d.index} — ${d.name}` + (d.default ? "  (default)" : "");
+      const fmt = (d) => `${d.name}` + (d.host ? ` [${d.host}]` : "")
+                       + (d.default ? "  (default)" : "");
       _fillSelect(_audioInSel,
         [{value: "", label: "(system default)"}].concat(
           devs.inputs.map(d => ({value: d.index, label: fmt(d)}))),

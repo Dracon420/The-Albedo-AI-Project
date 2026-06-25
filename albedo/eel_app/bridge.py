@@ -1600,24 +1600,18 @@ def trigger_scan_capture() -> dict:
     Captures the screen and describes it using the configured vision model.
     """
     try:
-        import tempfile, os
         from PIL import ImageGrab
-        # Capture screen
+        import numpy as np
+        # Capture screen, convert to the RGB ndarray vision_query expects.
         img = ImageGrab.grab()
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-            tmp_path = f.name
-        img.save(tmp_path)
-        # Route through vision pipeline if available
-        try:
-            from albedo.vision import describe_image
-            description = describe_image(tmp_path)
-        except ImportError:
-            # Fallback: just confirm screenshot was taken
-            description = f"Screenshot captured ({img.width}x{img.height}). Vision model not configured."
-        finally:
-            try: os.unlink(tmp_path)
-            except Exception: pass
-        return {"ok": True, "description": description}
+        frame = np.array(img.convert("RGB"))
+        from albedo.vision import vision_query
+        description = vision_query(frame, "Describe what is on this screen.")
+        # vision_query returns a "[vision] ..." string on any failure (Ollama
+        # down / moondream not pulled) — surface that as an error, not success.
+        ok = not description.startswith("[vision]")
+        return {"ok": ok, "description": description,
+                "error": None if ok else description}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
 
@@ -1883,14 +1877,22 @@ def get_audio_devices() -> dict:
         import sounddevice as sd
         devices = sd.query_devices()
         try:
+            hostapis = sd.query_hostapis()
+        except Exception:
+            hostapis = []
+        try:
             default_in, default_out = sd.default.device
         except Exception:
             default_in = default_out = None
         inputs, outputs = [], []
         for i, d in enumerate(devices):
+            ha_idx = d.get("hostapi", -1)
+            host = (hostapis[ha_idx]["name"]
+                    if 0 <= ha_idx < len(hostapis) else "")
             entry = {
                 "index":    i,
                 "name":     d.get("name", f"device {i}"),
+                "host":     host,   # MME / WASAPI / DirectSound / WDM-KS — disambiguates duplicate names
                 "channels": int(d.get("max_input_channels", 0)
                                 if d.get("max_input_channels", 0) > 0
                                 else d.get("max_output_channels", 0)),
