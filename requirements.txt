@@ -62,4 +62,8 @@ edge-tts>=6.1.9
 
 # Wake word detection — OpenWakeWord (primary engine, custom cortana model in wakewords/)
 openwakeword>=0.6.0
-pygetwindow
+
+# Desktop power-tools (3.3.0) — clipboard, window mgmt, safe recycle-bin delete
+pyperclip>=1.8.2
+pygetwindow>=0.0.9
+send2trash>=1.8.0

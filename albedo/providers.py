@@ -674,7 +674,7 @@ def complete_with_tools(messages: list[dict], tools: list[dict] | None = None,
             return res
         if not _is_failover_error(res["error"]):
             return res
-        print(f"[providers] {prov} unavailable ({res['error'][:70]}…) — failing over")
+        print(f"[providers] {prov} unavailable ({res['error'][:70]}) - failing over")
 
     return last or {"text": "", "tool_calls": [], "raw_assistant_msg": None,
                     "provider": primary, "model": model or "",

@@ -14,7 +14,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Qwen2.5--7B%20%7C%20Custom%20QLoRA-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-v3.3.0-00F0FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-v3.3.1-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice & text command catalog
 
@@ -29,6 +29,17 @@ Albedo is not a chatbot. It is an AI construct — a fully local, offline-capabl
 The system fuses a **Hybrid Retrieval-Augmented Generation (Hybrid RAG)** pipeline with live web search, a multimodal vision cortex, and a dual-persona voice interface — all orchestrated through a stealth-deployed **Eel Cyber-HUD** that runs in a frameless Chrome app window with zero console footprint.
 
 When given a directive, Albedo executes it.
+
+---
+
+## WHAT'S NEW IN v3.3.1
+
+**v3.3.1** is a trust-and-stability patch on top of the 3.3.0 feature drop:
+
+- **No more fabricated actions.** Chat was role-playing tasks it never performed — fake "Gmail organized," made-up network-speed numbers, even an invented "self-training session." A hard **honesty rule** now governs every reply: Albedo never reports a task as done/running/complete, and never states a specific value as fact, without a **real tool result that turn** — and it plainly names what it *cannot* do (it can't self-train or learn between chats, has no internet speed test, and email is read/search/send only — no Gmail organizing/filters/labels). The same guard was added to the 8-agent team specialists.
+- **Out-of-credit failover.** A drained provider tier (e.g. Together returning `402 credit_limit`) now **fails over** to a free provider or local Ollama instead of dumping the raw billing error into chat.
+- **Sharper file search.** A relevance cutoff drops low-confidence catalog hits, so a nonsense query returns *nothing* instead of 20 random files, with exact-name folder search as the fallback.
+- **Packaging fix.** `pyperclip` and `send2trash` are now in requirements, so clipboard and recycle-bin delete work on a clean install.
 
 ---
 
@@ -135,7 +146,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 <div align="center">
 
-### [⬇ Download Albedo-Setup-3.3.0.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.3.0/Albedo-Setup-3.3.0.exe)
+### [⬇ Download Albedo-Setup-3.3.1.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.3.1/Albedo-Setup-3.3.1.exe)
 
 </div>
 
@@ -159,7 +170,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 **Deployment sequence:**
 
-1. **Download** `Albedo-Setup-3.3.0.exe` from the link above
+1. **Download** `Albedo-Setup-3.3.1.exe` from the link above
 2. **Run** the installer — accept the UAC prompt
 3. The **Setup Wizard** launches automatically and executes:
    - System dependency verification (Python 3.12 + Ollama)
@@ -287,7 +298,7 @@ The installer creates a **Start Menu** shortcut and an optional **Desktop** shor
 | Shortcut / Method | Action |
 |---|---|
 | **Albedo Mission Control** shortcut | Starts Ollama silently, then opens Mission Control via pythonw |
-| Re-run `Albedo-Setup-3.3.0.exe` | Upgrades in-place, preserves all user data |
+| Re-run `Albedo-Setup-3.3.1.exe` | Upgrades in-place, preserves all user data |
 | Windows **Add or remove programs** → Albedo | Uninstalls — preserves `.env`, `settings.json`, `chroma_db`, `albedo_memory_db` |
 
 Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.

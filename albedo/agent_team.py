@@ -157,6 +157,17 @@ ROLES: dict[str, RoleSpec] = {
 _VALID_ROLES = set(ROLES.keys())
 _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 
+# Shared anti-fabrication guard prepended to every tool-using specialist's prompt
+# (the Orchestrator/Critic are pure-JSON reasoners and are left untouched). A
+# specialist acts ONLY through its tools — it must never report success it didn't
+# actually get back from a tool result.
+_HONESTY = (
+    "HONESTY (absolute): you act only by calling your tools. Never report a task "
+    "as done, running, or complete, and never state a specific value, unless a "
+    "real tool result this turn shows it. If you lack a tool for the task, say so "
+    "plainly — do not invent results, numbers, or status. "
+)
+
 
 # ---------------------------------------------------------------------------
 # Provider routing per role
@@ -300,7 +311,7 @@ def _run_one_task(i: int, total: int, t: dict, status, on_task_done=None) -> dic
     try:
         res = agent.run_agent(
             task,
-            system_prompt=spec.system_prompt,
+            system_prompt=_HONESTY + spec.system_prompt,
             tool_names=spec.tool_names,
             provider=_role_provider(role),
             status_cb=status,

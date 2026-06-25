@@ -1,7 +1,24 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.3.0.exe
+; Output: Output\Albedo-Setup-3.3.1.exe
+;
+; What's new in 3.3.1 (patch on top of 3.3.0)
+;   - Chat no longer fabricates actions. Albedo was role-playing tasks it never
+;     performed (fake Gmail organizing, made-up speed-test numbers, an invented
+;     "self-training session"). Hard HONESTY rule: it never claims a task is
+;     done/running/complete, or states a value as fact, without a real tool
+;     result that turn - and it names what it CANNOT do (no self-training, no
+;     internet speed test, email is read/search/send only). Same guard added to
+;     the team specialists.
+;   - Provider failover now covers out-of-credit errors (e.g. Together "402
+;     credit_limit") - a drained paid tier falls over to a free provider or local
+;     Ollama instead of dumping the raw billing error into chat.
+;   - File search stops returning irrelevant files: a relevance cutoff drops
+;     low-confidence catalog hits (a nonsense query now returns nothing, not 20
+;     random files), with the exact-name folder search as fallback.
+;   - Packaging: pyperclip + send2trash added to requirements (clipboard and
+;     recycle-bin delete now install on a clean setup).
 ;
 ; What's new in 3.3.0 (major — tools, popups & connections)
 ;   - Reusable popup framework (popup_factory.js): new tools get a popup from a
@@ -107,7 +124,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.3.0"
+#define AppVersion   "3.3.1"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -135,13 +152,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.3.0
+OutputBaseFilename=Albedo-Setup-3.3.1
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.3.0.0
+VersionInfoVersion=3.3.1.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.3.0.0
+VersionInfoProductVersion=3.3.1.0
 
 ; Compression
 Compression=lzma2/max
@@ -388,15 +405,16 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.3.0.' + #13#10 + #13#10 +
-      'What''s new in 3.3.0 (major):' + #13#10 +
-      '  - Reminders/timers with Windows notifications' + #13#10 +
-      '  - Clipboard, file search, notes to Obsidian, screen vision' + #13#10 +
-      '  - File manager (move/copy/rename/recycle) + browser' + #13#10 +
-      '  - Connections: Email, Calendar, Home Assistant, Discord/Slack' + #13#10 +
+      'This installer will upgrade Albedo to v3.3.1.' + #13#10 + #13#10 +
+      'What''s new in 3.3.1 (patch):' + #13#10 +
+      '  - Chat no longer fabricates actions it did not perform' + #13#10 +
+      '  - Honest about what it cannot do (no self-training/speed test)' + #13#10 +
+      '  - Failover handles out-of-credit (402) provider errors' + #13#10 +
+      '  - File search drops irrelevant matches' + #13#10 + #13#10 +
+      'From 3.3.0 (major):' + #13#10 +
+      '  - Reminders, clipboard, file search, notes, screen vision' + #13#10 +
+      '  - File manager + browser; Email/Calendar/HA/messaging' + #13#10 +
       '  - Agent tools 18 -> 44; reusable popup framework' + #13#10 + #13#10 +
-      'From 3.2.x:' + #13#10 +
-      '  - Dense 3D Brain Atlas, terser voice, dream-cycle crash fix' + #13#10 + #13#10 +
       'Your data will be preserved:' + #13#10 +
       '  - API keys and settings (.env)' + #13#10 +
       '  - Persona settings (settings.json)' + #13#10 +

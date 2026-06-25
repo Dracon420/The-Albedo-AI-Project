@@ -9,6 +9,14 @@ from pathlib import Path
 
 _last: list[dict] = []
 
+# Semantic-distance cutoff (L2) for the file catalog. The catalog spans tens of
+# thousands of code/system files, so a bare nearest-neighbour query returns
+# confident-looking junk for ANY string (a nonsense token scored ~1.21). Anything
+# beyond this cutoff is noise — drop it and let the exact-name glob answer instead,
+# so Albedo never presents irrelevant files as "matches". Calibrated: real hits
+# ("python script") land ~0.95-1.05; nonsense lands >1.2.
+_CATALOG_MAX_DIST = 1.15
+
 
 def _from_catalog(query: str, limit: int) -> list[dict]:
     try:
@@ -18,11 +26,17 @@ def _from_catalog(query: str, limit: int) -> list[dict]:
         col = client.get_or_create_collection("file_catalog")
         if col.count() == 0:
             return []
-        res = col.query(query_texts=[query], n_results=min(limit, 40))
+        res = col.query(query_texts=[query], n_results=min(limit, 40),
+                        include=["metadatas", "distances"])
         metas = (res.get("metadatas") or [[]])[0]
+        dists = (res.get("distances") or [[]])[0]
         out = []
-        for m in metas:
+        for i, m in enumerate(metas):
             if not m:
+                continue
+            # Drop low-relevance hits so a bad/odd query returns nothing here
+            # (then the substring glob fallback runs) instead of random files.
+            if i < len(dists) and dists[i] is not None and dists[i] > _CATALOG_MAX_DIST:
                 continue
             out.append({"name": m.get("name", ""), "path": m.get("path", ""),
                         "parent": m.get("parent", ""), "size_kb": m.get("size_kb", 0)})
