@@ -326,7 +326,6 @@ Queries that don't match a local intercept are routed by the autonomous commande
 |---|---|---|
 | `direct` | Gemini | General questions, weather, factual queries, casual conversation |
 | `groq` | Groq API | Python scripts, fast data formatting, code generation |
-| `together` | Together AI | Complex debugging, logic puzzles, multi-step reasoning |
 | `local` | Ollama (Llama 3.2) | Local system tasks, offline operation, fallback |
 | `memory` | Obsidian RAG | Past projects, personal notes, Albedo configs |
 
@@ -402,7 +401,6 @@ Key `.env` values that control command behavior:
 | `OLLAMA_MODEL` | LLM model for local inference | llama3.2:3b |
 | `GEMINI_API_KEY` | Gemini (direct/OC routing) | — |
 | `GROQ_API_KEY` | Groq (script/format routing) | — |
-| `TOGETHER_API_KEY` | Together AI (complex reasoning) | — |
 | `PIPER_VOICE_MODEL` | Active TTS voice path | kristin-medium.onnx |
 
 ---

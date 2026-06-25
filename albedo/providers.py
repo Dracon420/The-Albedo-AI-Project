@@ -52,7 +52,6 @@ DEFAULT_MODELS = {
     "azure":     "",          # uses AZURE_OPENAI_DEPLOYMENT
     "gemini":    "gemini-2.0-flash",
     "groq":      "llama-3.3-70b-versatile",
-    "together":  "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
     "ollama":    "albedo-cortana-8b",
 }
 
@@ -72,10 +71,6 @@ PROVIDER_MODELS = {
         "gemini-1.5-flash",
         "gemini-1.5-pro",
     ],
-    "together": [
-        "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-        "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo-Free",
-    ],
     "ollama": [
         "albedo-cortana-8b",
         "albedo-jarvis-8b",
@@ -93,10 +88,11 @@ PROVIDER_MODELS = {
     "azure": [],   # model is the Azure deployment name — not selectable here
 }
 
-# Order matters for auto-failover: free cloud providers (gemini, groq, together)
-# are tried before slow local ollama. together sits before ollama so a groq
-# rate-limit fails over to fast cloud instead of grinding on the 6GB GPU.
-PROVIDERS = ("anthropic", "openai", "azure", "gemini", "groq", "together", "ollama")
+# Order matters for auto-failover: free cloud providers (gemini, groq) are tried
+# before slow local ollama, so a groq rate-limit fails over to fast cloud instead
+# of grinding on the 6GB GPU. (Together was removed — its free tier ran out of
+# credits and dumped 402s into chat; Gemini + Ollama cover the same fallback.)
+PROVIDERS = ("anthropic", "openai", "azure", "gemini", "groq", "ollama")
 
 # Azure tool-calling needs a recent API version; bump 2024-02-01 default.
 _AZURE_TOOLS_API_VERSION = "2024-08-01-preview"
@@ -139,8 +135,6 @@ def _provider_has_key(provider: str) -> bool:
         return bool(_env("GEMINI_API_KEY"))
     if provider == "groq":
         return bool(_env("GROQ_API_KEY"))
-    if provider == "together":
-        return bool(_env("TOGETHER_API_KEY"))
     if provider == "ollama":
         return True  # local, no key
     return False
@@ -291,10 +285,6 @@ def _openai_client(provider: str):
         from openai import OpenAI
         return OpenAI(api_key=_env("GROQ_API_KEY"),
                       base_url="https://api.groq.com/openai/v1", **common)
-    if provider == "together":
-        from openai import OpenAI
-        return OpenAI(api_key=_env("TOGETHER_API_KEY"),
-                      base_url="https://api.together.xyz/v1", **common)
     if provider == "ollama":
         from openai import OpenAI
         base = (_env("OLLAMA_BASE_URL") or "http://localhost:11434").rstrip("/")
@@ -599,7 +589,7 @@ def _call_provider(prov: str, mdl: str, messages: list[dict],
     import time as _t
     _t0 = _t.perf_counter()
     try:
-        if prov in ("openai", "azure", "groq", "together", "ollama"):
+        if prov in ("openai", "azure", "groq", "ollama"):
             r = _complete_openai(prov, mdl, messages, tools, on_token=on_token)
         elif prov == "anthropic":
             r = _complete_anthropic(mdl, messages, tools)

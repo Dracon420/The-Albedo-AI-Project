@@ -30,7 +30,6 @@ ENV_FILE = ROOT / ".env"
 _HELP_URLS = {
     "gemini":   "https://aistudio.google.com/app/apikey",
     "groq":     "https://console.groq.com/keys",
-    "together": "https://api.together.xyz/settings/api-keys",
     "wolfram":  "https://developer.wolframalpha.com/access",
     "tavily":   "https://app.tavily.com/home",
 }
@@ -126,13 +125,11 @@ class OnboardingWizard(ctk.CTkToplevel):
         # ── API key rows ─────────────────────────────────────────────────
         self._gemini_var   = ctk.StringVar()
         self._groq_var     = ctk.StringVar()
-        self._together_var = ctk.StringVar()
         self._wolfram_var  = ctk.StringVar()
         self._tavily_var   = ctk.StringVar()
 
         self._api_row("GEMINI API KEY",   self._gemini_var,   "gemini")
         self._api_row("GROQ API KEY",     self._groq_var,     "groq")
-        self._api_row("TOGETHER API KEY", self._together_var, "together")
         self._api_row("WOLFRAM ALPHA APP ID  (optional)", self._wolfram_var, "wolfram")
         self._api_row("TAVILY API KEY  (optional)",       self._tavily_var,  "tavily")
 
@@ -284,7 +281,6 @@ class OnboardingWizard(ctk.CTkToplevel):
     def _save_and_close(self) -> None:
         gemini   = self._gemini_var.get().strip()
         groq     = self._groq_var.get().strip()
-        together = self._together_var.get().strip()
         wolfram  = self._wolfram_var.get().strip()
         tavily   = self._tavily_var.get().strip()
         vault    = self._vault_path.strip()
@@ -295,7 +291,7 @@ class OnboardingWizard(ctk.CTkToplevel):
                 text="⚠  GEMINI API KEY is required.", text_color=_RED)
             return
 
-        self._write_env(gemini, groq, together, wolfram, tavily, vault, location)
+        self._write_env(gemini, groq, wolfram, tavily, vault, location)
         self._status.configure(
             text="✔  Core initialized. Booting Albedo...", text_color=_GREEN)
         self._saved = True
@@ -321,7 +317,6 @@ class OnboardingWizard(ctk.CTkToplevel):
         self,
         gemini: str,
         groq: str,
-        together: str,
         wolfram: str,
         tavily: str,
         vault: str,
@@ -331,7 +326,6 @@ class OnboardingWizard(ctk.CTkToplevel):
         updates = {
             "GEMINI_API_KEY":      gemini,
             "GROQ_API_KEY":        groq,
-            "TOGETHER_API_KEY":    together,
             "WOLFRAM_API_KEY":     wolfram,
             "TAVILY_API_KEY":      tavily,
             "OBSIDIAN_VAULT_PATH": vault,

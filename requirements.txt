@@ -55,7 +55,6 @@ langchain-community>=0.2.0
 # Swarm Matrix -- multi-agent cloud LLM APIs
 google-genai>=0.3.0
 groq>=0.9.0
-together>=1.2.0
 
 # TTS — Edge-TTS (primary, cloud) + Piper (fallback, offline)
 edge-tts>=6.1.9

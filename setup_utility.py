@@ -202,7 +202,6 @@ def _download_voice_models() -> list[str]:
 def _write_env(
     gemini_key: str,
     groq_key: str,
-    together_key: str,
     vault_path: str,
     piper_bin: str,
     persona: str,
@@ -225,7 +224,6 @@ def _write_env(
         # ── Swarm Matrix / onboarding keys ──────────────────────────────
         "GEMINI_API_KEY":       gemini_key,
         "GROQ_API_KEY":         groq_key,
-        "TOGETHER_API_KEY":     together_key,
         "WOLFRAM_API_KEY":      wolfram_key,
         "TAVILY_API_KEY":       tavily_key,
         "OBSIDIAN_VAULT_PATH":  vault_path,
@@ -286,7 +284,6 @@ def _write_env(
         for _k, _v in [
             ("GEMINI_API_KEY",      gemini_key),
             ("GROQ_API_KEY",        groq_key),
-            ("TOGETHER_API_KEY",    together_key),
             ("OBSIDIAN_VAULT_PATH", vault_path),
         ]:
             set_key(str(env_path), _k, _v)
@@ -445,7 +442,6 @@ class DirectoryPage(Page):
         super().__init__(parent, wizard)
         self._gemini_var   = tk.StringVar(value="")
         self._groq_var     = tk.StringVar(value="")
-        self._together_var = tk.StringVar(value="")
         self._wolfram_var  = tk.StringVar(value="")
         self._tavily_var   = tk.StringVar(value="")
         self._vault_var    = tk.StringVar(value="")
@@ -470,9 +466,6 @@ class DirectoryPage(Page):
         self._api_row(box, "Groq API Key",
                       self._groq_var,
                       "https://console.groq.com/keys")
-        self._api_row(box, "Together API Key",
-                      self._together_var,
-                      "https://api.together.xyz/settings/api-keys")
         self._api_row(box, "Wolfram Alpha App ID  (optional - math/units)",
                       self._wolfram_var,
                       "https://developer.wolframalpha.com/access")
@@ -594,7 +587,6 @@ class DirectoryPage(Page):
         return {
             "gemini_key":   self._gemini_var.get().strip(),
             "groq_key":     self._groq_var.get().strip(),
-            "together_key": self._together_var.get().strip(),
             "wolfram_key":  self._wolfram_var.get().strip(),
             "tavily_key":   self._tavily_var.get().strip(),
             "vault_path":   self._vault_var.get().strip(),
@@ -875,7 +867,6 @@ class InstallPage(Page):
         _write_env(
             gemini_key=dirs.get("gemini_key", ""),
             groq_key=dirs.get("groq_key", ""),
-            together_key=dirs.get("together_key", ""),
             vault_path=dirs.get("vault_path", ""),
             piper_bin=dirs.get("piper_bin", ""),
             persona=persona,

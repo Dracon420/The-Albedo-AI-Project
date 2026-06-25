@@ -64,7 +64,11 @@ ROLES: dict[str, RoleSpec] = {
         "Designer (UI/architecture design), Math (exact math/units via Wolfram), "
         "FactChecker (verify claims via web + RAG). Respond ONLY with JSON: "
         '{"tasks": [{"role": "SpecialistName", "task": "what to do"}]}. '
-        "Keep it minimal — do not invent work. No prose.",
+        "Keep it minimal — do not invent work. Only plan tasks the specialists can "
+        "actually do with their tools; never plan work for a capability the team "
+        "lacks (e.g. self-training/learning, internet speed tests, reorganising "
+        "Gmail) — if the goal needs something impossible, return an empty task "
+        "list. No prose.",
         tool_names=[],
         default_provider="groq",
     ),

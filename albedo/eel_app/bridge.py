@@ -268,7 +268,7 @@ def get_swarm_status() -> dict:
 # Neural links — status grid in the centre HUD
 #
 # A "neural link" is any backend subsystem the operator might want at-a-glance
-# visibility into: the three swarm LLM clients (Gemini/Groq/Together), the
+# visibility into: the swarm LLM clients (Gemini/Groq), the
 # local Ollama runtime, the ChromaDB vector store, the active STT engine
 # (Vosk or Deepgram or whisper), the active TTS engine (Piper or Kokoro),
 # the wake-word arm state, and the loopback webhook.
@@ -330,8 +330,7 @@ def _detect_neural_links() -> dict:
 
     # --- Swarm LLM clients ---
     for key, name in (("GEMINI_API_KEY", "GEMINI"),
-                      ("GROQ_API_KEY",   "GROQ"),
-                      ("TOGETHER_API_KEY","TOGETHER")):
+                      ("GROQ_API_KEY",   "GROQ")):
         if os.environ.get(key, "").strip():
             link(name, "ready", "READY", "API key configured")
         else:
@@ -1073,7 +1072,7 @@ def send_chat(text: str, history: list | None = None) -> dict:
     try:
         from albedo import providers as _prov_mod  # noqa: PLC0415
         _start_prov = _prov_mod.resolve_provider(None).upper()
-        for _llm in ("GEMINI", "GROQ", "TOGETHER", "AZURE", "ANTHROPIC", "OLLAMA"):
+        for _llm in ("GEMINI", "GROQ", "AZURE", "ANTHROPIC", "OLLAMA"):
             update_neural_link(_llm, "active" if _llm == _start_prov else "")
     except Exception:
         pass
@@ -1161,7 +1160,7 @@ def send_chat(text: str, history: list | None = None) -> dict:
     # clear overrides on the others so they fall back to their config state.
     _prov = (r.get("provider") or "").upper()
     if _prov:
-        for _llm in ("GEMINI", "GROQ", "TOGETHER", "AZURE", "ANTHROPIC", "OLLAMA"):
+        for _llm in ("GEMINI", "GROQ", "AZURE", "ANTHROPIC", "OLLAMA"):
             update_neural_link(_llm, "active" if _llm == _prov else "")
     # Signal end-of-stream so the UI can finalize the live line.
     if _streamed["any"]:
@@ -1426,7 +1425,6 @@ _API_KEY_SPECS = [
     ("OPENAI_API_KEY",      "OpenAI (GPT)",              "https://platform.openai.com/api-keys"),
     ("GEMINI_API_KEY",      "Google Gemini",             "https://aistudio.google.com/app/apikey"),
     ("GROQ_API_KEY",        "Groq",                      "https://console.groq.com/keys"),
-    ("TOGETHER_API_KEY",    "Together AI",               "https://api.together.xyz/settings/api-keys"),
     ("AZURE_OPENAI_KEY",    "Azure OpenAI (key)",        "https://portal.azure.com"),
     ("AZURE_OPENAI_ENDPOINT","Azure OpenAI (endpoint)",  "https://portal.azure.com"),
     ("AZURE_OPENAI_DEPLOYMENT","Azure OpenAI (deployment name)", "https://portal.azure.com"),
@@ -1493,7 +1491,7 @@ def _reload_env_into_process() -> None:
         load_dotenv(_env_path(), override=True)
     except Exception:
         pass
-    # swarm caches Gemini/Groq/Together clients — flush them
+    # swarm caches Gemini/Groq clients — flush them
     try:
         from swarm import reinit_swarm_clients
         reinit_swarm_clients()

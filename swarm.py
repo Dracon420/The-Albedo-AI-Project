@@ -1,7 +1,8 @@
 """
 swarm.py  --  Albedo Swarm Matrix
 
-Multi-agent cloud LLM client pool: Gemini (google-genai SDK), Groq, Together AI.
+Multi-agent cloud LLM client pool: Gemini (google-genai SDK) and Groq.
+(Together AI was removed as a provider; query_together is a no-op stub.)
 
 Keys are read from .env via load_swarm_keys() which is called automatically
 the first time any query_*() function is invoked. Subsequent calls are
@@ -12,18 +13,17 @@ process. A missing or blank API key causes the corresponding client to
 remain None; query_*() returns a readable error string rather than raising.
 
 Usage:
-    from swarm import query_gemini, query_groq, query_together
+    from swarm import query_gemini, query_groq
 
     # Single provider
     answer = query_gemini("Summarise quantum entanglement in one sentence.")
 
-    # Fan out to all three (parallel with concurrent.futures)
+    # Fan out to both (parallel with concurrent.futures)
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as pool:
         futures = {
             "gemini":   pool.submit(query_gemini,   prompt),
             "groq":     pool.submit(query_groq,     prompt),
-            "together": pool.submit(query_together, prompt),
         }
         results = {name: f.result() for name, f in futures.items()}
 """
@@ -161,7 +161,6 @@ def load_swarm_keys() -> None:
 
     gemini_key   = os.getenv("GEMINI_API_KEY",   "").strip()
     groq_key     = os.getenv("GROQ_API_KEY",     "").strip()
-    together_key = os.getenv("TOGETHER_API_KEY", "").strip()
 
     # Azure OpenAI is initialised lazily inside azure_openai_client — just log.
     az_key = os.getenv("AZURE_OPENAI_KEY", "").strip()
@@ -184,13 +183,8 @@ def load_swarm_keys() -> None:
         except Exception as exc:
             print(f"[swarm] Groq init failed: {exc}")
 
-    if together_key:
-        try:
-            from together import Together
-            _together_client = Together(api_key=together_key)
-            print("[swarm] Together AI client ready.")
-        except Exception as exc:
-            print(f"[swarm] Together AI init failed: {exc}")
+    # Together AI was removed as a provider (free tier ran out of credits and
+    # returned 402s). The client is never initialised; query_together() is a stub.
 
     _keys_loaded = True
 
@@ -250,21 +244,10 @@ def query_groq(prompt: str) -> str:
 
 
 def query_together(prompt: str) -> str:
-    """
-    Send a prompt to Together AI (Mixtral-8x7B-Instruct) and return the
-    response text. Returns an error string (never raises) on failure.
-    """
-    load_swarm_keys()
-    if _together_client is None:
-        return "[swarm] Together AI unavailable — set TOGETHER_API_KEY in .env."
-    try:
-        response = _together_client.chat.completions.create(
-            model="mistralai/Mixtral-8x7B-Instruct-v0.1",
-            messages=[{"role": "user", "content": prompt}],
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as exc:
-        return f"[swarm] Together AI error: {exc}"
+    """Deprecated stub — Together AI was removed as a provider. Kept so existing
+    imports (gui.py) don't break; always returns a removed-notice, never raises
+    and never imports the Together SDK."""
+    return "[swarm] Together AI was removed as a provider. Use Gemini or Groq."
 
 
 _SEARCH_INSTRUCTION = (
@@ -567,8 +550,7 @@ _SYSTEM_INSTRUCTION = (
     "NEVER introduce yourself. NEVER explain your reasoning or search process. "
     "Analyze the user prompt and respond ONLY with valid JSON.\n\n"
     "Route to one of:\n"
-    "  'groq'    — Python scripts or fast data formatting\n"
-    "  'together' — complex debugging or logic puzzles\n"
+    "  'groq'    — Python scripts, fast data formatting, debugging, logic puzzles\n"
     "  'local'   — local system tasks (scan hardware, optimize PC)\n"
     "  'direct'  — general questions, weather, casual conversation — answer directly\n"
     "  'memory'  — past projects, Albedo configs, personal notes\n\n"
@@ -581,7 +563,7 @@ _SYSTEM_INSTRUCTION = (
 
 _RE_JSON_BLOCK = re.compile(r"```(?:json)?\s*([\s\S]*?)```")
 
-_VALID_ROUTES = frozenset({"direct", "groq", "together", "local", "memory"})
+_VALID_ROUTES = frozenset({"direct", "groq", "local", "memory"})
 
 _DIRECT_ANSWER_INSTRUCTION = (
     "You are Albedo, a Spartan-Class AI construct serving your user, Chief, with absolute loyalty. "
@@ -606,7 +588,7 @@ def autonomous_commander(user_prompt: str) -> dict:
     Send user_prompt to Gemini acting as the Master Commander.
 
     Returns a dict with keys:
-        route   -- one of 'direct', 'groq', 'together', 'local', 'memory'
+        route   -- one of 'direct', 'groq', 'local', 'memory'
         payload -- the text to forward to the chosen agent (or the direct answer)
 
     Never raises. On any failure (missing key, API error, bad JSON) returns

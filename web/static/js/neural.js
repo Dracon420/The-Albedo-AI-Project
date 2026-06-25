@@ -15,11 +15,11 @@ const Neural = (() => {
   // reasoning brains → local runtime → tools → vector store → IO → audio →
   // wake → dream. Kept in sync with _detect_neural_links() in bridge.py.
   const ORDER = [
-    "GEMINI",   "GROQ",     "TOGETHER",
-    "AZURE",    "ANTHROPIC", "OLLAMA",
-    "WOLFRAM",  "TAVILY",   "VEC_DB",
-    "WEBHOOK",  "STT",      "TTS",
-    "WAKE",     "DREAM",
+    "GEMINI",   "GROQ",     "AZURE",
+    "ANTHROPIC", "OLLAMA",  "WOLFRAM",
+    "TAVILY",   "VEC_DB",   "WEBHOOK",
+    "STT",      "TTS",      "WAKE",
+    "DREAM",
     "EMAIL",    "CALENDAR", "HOME_ASST", "MESSAGING",
   ];
 

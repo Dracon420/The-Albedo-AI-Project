@@ -297,7 +297,6 @@ class SettingsDialog(ctk.CTkToplevel):
 
         self._var_gemini  = self._api_entry(scroll, "Gemini API Key",  "GEMINI_API_KEY")
         self._var_groq    = self._api_entry(scroll, "Groq API Key",    "GROQ_API_KEY")
-        self._var_together= self._api_entry(scroll, "Together API Key","TOGETHER_API_KEY")
 
         # ── Auto-update schedule ───────────────────────────────────────────
         _section("AUTO UPDATE")
@@ -365,7 +364,6 @@ class SettingsDialog(ctk.CTkToplevel):
         _update_env("OBSIDIAN_VAULT_PATH", self._var_vault.get().strip())
         _update_env("GEMINI_API_KEY",      self._var_gemini.get().strip())
         _update_env("GROQ_API_KEY",        self._var_groq.get().strip())
-        _update_env("TOGETHER_API_KEY",    self._var_together.get().strip())
 
         import importlib, albedo.config as _cfg
         importlib.reload(_cfg)
@@ -1915,7 +1913,6 @@ class AlbedoGUI(ctk.CTk):
         set.  The Commander returns a JSON decision:
           'direct'   → Gemini answers directly; skip all local processing.
           'groq'     → forward the refined payload to Groq (fast scripting).
-          'together' → forward to Together AI (complex reasoning / debug).
           'memory'   → semantic search against the Obsidian vault index.
           'local'    → existing Ollama + RAG pipeline (default fallback).
 
@@ -2002,7 +1999,7 @@ class AlbedoGUI(ctk.CTk):
 
         _offline_mode = False
         try:
-            from swarm import autonomous_commander, query_gemini_stream, query_groq, query_together
+            from swarm import autonomous_commander, query_gemini_stream, query_groq
             self._ui(lambda: self._set_gemini_active())
             result       = autonomous_commander(query)
             route        = result["route"]
@@ -2029,11 +2026,6 @@ class AlbedoGUI(ctk.CTk):
                 return result_text
             if route == "groq":
                 response = "[GROQ EXECUTING]\n" + query_groq(payload)
-                log_trace(query, route, success=not response.startswith("[swarm]"))
-                self._ui(lambda: self._set_gemini_standby())
-                return response
-            if route == "together":
-                response = "[TOGETHER EVALUATING]\n" + query_together(payload)
                 log_trace(query, route, success=not response.startswith("[swarm]"))
                 self._ui(lambda: self._set_gemini_standby())
                 return response

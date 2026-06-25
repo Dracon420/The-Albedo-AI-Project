@@ -1,7 +1,17 @@
 ﻿; albedo.iss  --  Inno Setup 6 configuration for Albedo Mission Control
 ;
 ; Compile with Inno Setup 6:  iscc.exe albedo.iss
-; Output: Output\Albedo-Setup-3.3.1.exe
+; Output: Output\Albedo-Setup-3.3.2.exe
+;
+; What's new in 3.3.2 (patch on top of 3.3.1)
+;   - Together AI removed entirely as a provider. Its free tier ran out of
+;     credits and was dumping 402s; it is gone from the failover chain, the
+;     model picker, the Settings keys panel, the neural-links HUD, the setup
+;     wizards, and requirements. Gemini + Groq + local Ollama cover failover.
+;   - Multi-agent honesty: the Orchestrator now refuses to PLAN work the team
+;     can't actually do (no self-training, speed tests, Gmail reorg) - it returns
+;     an empty plan instead - rounding out the anti-fabrication guard the
+;     specialists already carry.
 ;
 ; What's new in 3.3.1 (patch on top of 3.3.0)
 ;   - Chat no longer fabricates actions. Albedo was role-playing tasks it never
@@ -124,7 +134,7 @@
 ; â”€â”€ Build metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 #define AppName      "Albedo"
 #define AppFullName  "Albedo Mission Control"
-#define AppVersion   "3.3.1"
+#define AppVersion   "3.3.2"
 #define AppPublisher "Chaotic 3D Solutions"
 #define AppURL       "https://github.com/Dracon420/The-Albedo-AI-Project"
 #define AppExeName   "Launch-Albedo.ps1"
@@ -152,13 +162,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 
 ; Output
 OutputDir=Output
-OutputBaseFilename=Albedo-Setup-3.3.1
+OutputBaseFilename=Albedo-Setup-3.3.2
 SetupIconFile=albedo_icon.ico
 UninstallDisplayIcon={app}\albedo_icon.ico
-VersionInfoVersion=3.3.1.0
+VersionInfoVersion=3.3.2.0
 VersionInfoCompany={#AppPublisher}
 VersionInfoProductName={#AppFullName}
-VersionInfoProductVersion=3.3.1.0
+VersionInfoProductVersion=3.3.2.0
 
 ; Compression
 Compression=lzma2/max
@@ -405,12 +415,14 @@ begin
   begin
     UpgradeMsg :=
       'An existing Albedo installation was detected.' + #13#10 + #13#10 +
-      'This installer will upgrade Albedo to v3.3.1.' + #13#10 + #13#10 +
-      'What''s new in 3.3.1 (patch):' + #13#10 +
-      '  - Chat no longer fabricates actions it did not perform' + #13#10 +
-      '  - Honest about what it cannot do (no self-training/speed test)' + #13#10 +
-      '  - Failover handles out-of-credit (402) provider errors' + #13#10 +
-      '  - File search drops irrelevant matches' + #13#10 + #13#10 +
+      'This installer will upgrade Albedo to v3.3.2.' + #13#10 + #13#10 +
+      'What''s new in 3.3.2 (patch):' + #13#10 +
+      '  - Together AI removed entirely (its free tier ran out of' + #13#10 +
+      '    credits); Gemini + Groq + Ollama cover failover' + #13#10 +
+      '  - Orchestrator no longer plans tasks the team cannot do' + #13#10 + #13#10 +
+      'From 3.3.1:' + #13#10 +
+      '  - Chat no longer fabricates actions; honest about limits' + #13#10 +
+      '  - Failover handles out-of-credit (402) errors' + #13#10 + #13#10 +
       'From 3.3.0 (major):' + #13#10 +
       '  - Reminders, clipboard, file search, notes, screen vision' + #13#10 +
       '  - File manager + browser; Email/Calendar/HA/messaging' + #13#10 +

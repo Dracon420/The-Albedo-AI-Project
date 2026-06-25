@@ -14,7 +14,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Qwen2.5--7B%20%7C%20Custom%20QLoRA-black?style=flat-square)
 ![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-![Status](https://img.shields.io/badge/Status-v3.3.1-00F0FF?style=flat-square)
+![Status](https://img.shields.io/badge/Status-v3.3.2-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice & text command catalog
 
@@ -29,6 +29,15 @@ Albedo is not a chatbot. It is an AI construct — a fully local, offline-capabl
 The system fuses a **Hybrid Retrieval-Augmented Generation (Hybrid RAG)** pipeline with live web search, a multimodal vision cortex, and a dual-persona voice interface — all orchestrated through a stealth-deployed **Eel Cyber-HUD** that runs in a frameless Chrome app window with zero console footprint.
 
 When given a directive, Albedo executes it.
+
+---
+
+## WHAT'S NEW IN v3.3.2
+
+**v3.3.2** is a focused patch:
+
+- **Together AI removed entirely.** Its free tier ran out of credits and was returning `402`s, so it's been pulled from every surface — the failover chain, the BRAIN model picker, the Settings keys panel, the neural-links HUD, both setup wizards, and `requirements.txt`. **Gemini + Groq + local Ollama** cover failover.
+- **Multi-agent honesty.** The team **Orchestrator** now refuses to *plan* work the team can't actually do (no self-training, speed tests, or Gmail reorganizing) — it returns an empty plan instead — rounding out the anti-fabrication guard the specialists already carry from v3.3.1.
 
 ---
 
@@ -86,7 +95,7 @@ V3 ships two custom-trained Ollama models, each a QLoRA fine-tune of **Qwen2.5-7
 
 The legacy 1.9 GB baselines (`albedo-cortana` / `albedo-jarvis`) remain installed as offline fallbacks. Wake word detection routes to the correct model at runtime, and the persona can be swapped live from the Settings panel without restarting. ChromaDB embeddings run entirely on CPU to preserve every byte of VRAM for LLM inference.
 
-**LLM routing** prefers cloud providers when keys are present and falls back to local Ollama: by default Albedo uses **free** providers (Groq → Gemini → Together) with **Ollama** as the offline floor; paid providers (Azure OpenAI / OpenAI / Anthropic) are opt-in only. Offline-first by design — cloud APIs and web search are additive intelligence, not a dependency.
+**LLM routing** prefers cloud providers when keys are present and falls back to local Ollama: by default Albedo uses **free** providers (Groq → Gemini) with **Ollama** as the offline floor; paid providers (Azure OpenAI / OpenAI / Anthropic) are opt-in only. Offline-first by design — cloud APIs and web search are additive intelligence, not a dependency.
 
 ### Speech-to-Text & Wake Word — Tiered (Vosk offline by default)
 
@@ -104,7 +113,7 @@ The **SCAN** button activates the hardware vision bridge. A live frame is captur
 
 The GUI runs as a **frameless Chrome app window** powered by [Eel](https://github.com/python-eel/Eel) — a Python/JS bridge over a local WebSocket. Launched via `pythonw.exe` with no console footprint. The high-contrast neon HUD features:
 
-- Animated neural-link status grid showing live state of every subsystem (Gemini, Groq, Together, Ollama, ChromaDB, STT, TTS, Wake Word, Dream Cycle, Webhook)
+- Animated neural-link status grid showing live state of every subsystem (Gemini, Groq, Ollama, ChromaDB, STT, TTS, Wake Word, Dream Cycle, Webhook)
 - Real-time telemetry gauges — CPU %, RAM %, GPU %, VRAM used/total, disk I/O, network throughput
 - Swarm agent indicator LEDs (ALBEDO_CORE / WEB_SCRAPER / EXECUTION_OVERRIDE)
 - Off-canvas **Tactical Drawer** — system diagnostics, resource map, settings, background selection, and Dream Cycle controls
@@ -146,7 +155,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 <div align="center">
 
-### [⬇ Download Albedo-Setup-3.3.1.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.3.1/Albedo-Setup-3.3.1.exe)
+### [⬇ Download Albedo-Setup-3.3.2.exe](https://github.com/Dracon420/The-Albedo-AI-Project/releases/download/v3.3.2/Albedo-Setup-3.3.2.exe)
 
 </div>
 
@@ -170,7 +179,7 @@ Web search uses **Tavily** (AI-optimised, when `TAVILY_API_KEY` is set) with **D
 
 **Deployment sequence:**
 
-1. **Download** `Albedo-Setup-3.3.1.exe` from the link above
+1. **Download** `Albedo-Setup-3.3.2.exe` from the link above
 2. **Run** the installer — accept the UAC prompt
 3. The **Setup Wizard** launches automatically and executes:
    - System dependency verification (Python 3.12 + Ollama)
@@ -298,7 +307,7 @@ The installer creates a **Start Menu** shortcut and an optional **Desktop** shor
 | Shortcut / Method | Action |
 |---|---|
 | **Albedo Mission Control** shortcut | Starts Ollama silently, then opens Mission Control via pythonw |
-| Re-run `Albedo-Setup-3.3.1.exe` | Upgrades in-place, preserves all user data |
+| Re-run `Albedo-Setup-3.3.2.exe` | Upgrades in-place, preserves all user data |
 | Windows **Add or remove programs** → Albedo | Uninstalls — preserves `.env`, `settings.json`, `chroma_db`, `albedo_memory_db` |
 
 Python, Ollama, and Piper are **not** touched by the uninstaller. Remove those via **Settings → Apps** if required.
@@ -322,7 +331,7 @@ Edit `.env` and restart to switch tiers. No reinstall required.
 
 | Layer | Technology |
 |---|---|
-| LLM runtime | [Ollama](https://ollama.com) · `albedo-cortana-8b` / `albedo-jarvis-8b` (Qwen2.5-7B-Instruct · QLoRA · Q4_K_M) · cloud swarm (Groq / Gemini / Together) additive |
+| LLM runtime | [Ollama](https://ollama.com) · `albedo-cortana-8b` / `albedo-jarvis-8b` (Qwen2.5-7B-Instruct · QLoRA · Q4_K_M) · cloud swarm (Groq / Gemini) additive |
 | Vision model | [Moondream](https://github.com/vikhyat/moondream) via Ollama |
 | Vector store | [ChromaDB](https://www.trychroma.com) · CPU embeddings (`all-MiniLM-L6-v2`) |
 | Speech-to-text + wake word | [Vosk](https://alphacephei.com/vosk/) · CPU · `vosk-model-small-en-us-0.15` |

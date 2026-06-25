@@ -238,16 +238,14 @@ def test_get_neural_links_returns_all_required_subsystems():
 
 
 def test_neural_links_reflect_env_configuration():
-    """GEMINI/GROQ/TOGETHER report 'ready' when their API key is set, 'off' otherwise."""
-    saved = {k: os.environ.get(k) for k in ("GEMINI_API_KEY", "GROQ_API_KEY", "TOGETHER_API_KEY")}
+    """GEMINI/GROQ report 'ready' when their API key is set, 'off' otherwise."""
+    saved = {k: os.environ.get(k) for k in ("GEMINI_API_KEY", "GROQ_API_KEY")}
     try:
         os.environ["GEMINI_API_KEY"]   = "fake-key"
         os.environ.pop("GROQ_API_KEY",     None)
-        os.environ.pop("TOGETHER_API_KEY", None)
         r = bridge.get_neural_links()
         assert r["data"]["GEMINI"]["status"]   == "ready"
         assert r["data"]["GROQ"]["status"]     == "off"
-        assert r["data"]["TOGETHER"]["status"] == "off"
     finally:
         for k, v in saved.items():
             if v is None:

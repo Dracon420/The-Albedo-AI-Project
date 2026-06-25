@@ -92,7 +92,6 @@ def _key_status() -> str:
     keys = [
         ("GEMINI_API_KEY",        "Gemini"),
         ("GROQ_API_KEY",          "Groq"),
-        ("TOGETHER_API_KEY",      "Together AI"),
         ("TAVILY_API_KEY",        "Tavily search"),
         ("WOLFRAM_API_KEY",       "Wolfram Alpha"),
         ("AZURE_SPEECH_KEY",      "Azure Speech TTS+STT"),
@@ -125,8 +124,6 @@ def _optional_packages() -> str:
          "Vosk STT (`pip install vosk`)"),
         ("kokoro_onnx",
          "Kokoro ONNX (`pip install kokoro-onnx`)"),
-        ("together",
-         "Together AI (`pip install together`)"),
         ("google.genai",
          "Google GenAI (`pip install google-genai`)"),
     ]
