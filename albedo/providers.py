@@ -563,6 +563,10 @@ _FAILOVER_MARKERS = (
     "auth", "api key", "api_key", "unauthorized", "permission",
     "not found", "deployment", "model_not_found", "no api key",
     "no adapter", "has no api key",
+    # billing / out-of-credit (e.g. Together "402 credit_limit") — a dead paid
+    # tier must fall over to a free provider (or local Ollama), not surface the
+    # raw billing error to the user mid-chat.
+    "402", "credit", "credit_limit", "billing", "insufficient", "payment",
 )
 
 
