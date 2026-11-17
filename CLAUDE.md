@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Before touching any code, read these files:
 
 ```
-C:\Users\demon\Desktop\Claudes Brain\Claude_Brain\Albedo\
+%USERPROFILE%\Desktop\Claudes Brain\Claude_Brain\Albedo\
   00_Project_Overview.md          <- identity, file map, git info
   02_Implemented_Features.md      <- everything built (running log)
   03_Known_Issues_and_Gotchas.md  <- CRITICAL: prevents repeating past mistakes

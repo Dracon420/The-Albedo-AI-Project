@@ -13,7 +13,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 ![Platform](https://img.shields.io/badge/Platform-Windows%2011-0078D4?style=flat-square&logo=windows)
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python)
 ![Ollama](https://img.shields.io/badge/LLM-Ollama%20%7C%20Qwen2.5--7B%20%7C%20Custom%20QLoRA-black?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
+![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-orange?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-v3.3.2-00F0FF?style=flat-square)
 
 📖 **[Command Reference](docs/COMMANDS.md)** — full voice & text command catalog
@@ -24,7 +24,7 @@ while natively managing the hardware ecosystems of Chaotic 3D Systems and Exotic
 
 ## OPERATIONAL BRIEFING
 
-Albedo is not a chatbot. It is an AI construct — a fully local, offline-capable intelligence framework engineered for absolute system control. No cloud endpoints. No API subscriptions. No telemetry. Every inference cycle executes on your hardware, under your authority.
+Albedo is not a chatbot. It is an AI construct — an offline-capable intelligence framework engineered for absolute system control. Its own fine-tuned models run on your hardware, under your authority. Cloud providers are optional: they're only used when you add your own keys, and the free tiers are enough. No telemetry.
 
 The system fuses a **Hybrid Retrieval-Augmented Generation (Hybrid RAG)** pipeline with live web search, a multimodal vision cortex, and a dual-persona voice interface — all orchestrated through a stealth-deployed **Eel Cyber-HUD** that runs in a frameless Chrome app window with zero console footprint.
 
@@ -350,8 +350,16 @@ Edit `.env` and restart to switch tiers. No reinstall required.
 <div align="center">
 
 *Albedo is a local system. It does not call home.*
-*No telemetry. No cloud. No compromise.*
+*No telemetry. Cloud optional. No compromise.*
 
 **[ MISSION CONTROL ONLINE ]**
 
 </div>
+
+---
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE.md). You're free to use, study and change it for personal, hobby, educational and other **noncommercial** purposes. **Commercial use, including selling it or running it as a paid service, isn't allowed** without a separate licence from the author; open an issue to ask. Bundled third-party components (Piper, espeak-ng, ONNX Runtime and the wake-word models) keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Versions published before 2026-11-17 showed an MIT badge but shipped no license file.
